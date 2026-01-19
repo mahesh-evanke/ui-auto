@@ -1,0 +1,5 @@
+{
+    "Next" : ["id", "nextBtn"],
+    "Exit" : ["id","exitOnlyBtn"],
+    "ChildrenLink": ["xpath", "//a[. = 'Children']"]
+}

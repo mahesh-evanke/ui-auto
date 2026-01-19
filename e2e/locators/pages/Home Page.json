@@ -1,0 +1,6 @@
+{
+  "Office Code" : ["id", "fnOfficeCode"],
+  "ClaimID" : ["id", "fnClaimId"],
+  "Policy Net": ["linkText","Policy Net"],
+  "Sign Out" : ["linkText", "Sign Out "]
+}

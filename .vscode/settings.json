@@ -1,0 +1,7 @@
+{
+    "cucumberautocomplete.steps": [
+        "e2e/stepDefinitions/*.ts",
+        "e2e/stepDefinitions/appSpecific/*.ts"
+    ],
+    "cucumberautocomplete.strictGherkinCompletion": true
+}

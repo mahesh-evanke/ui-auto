@@ -1,0 +1,7 @@
+*
+!/**/
+!*.*
+/e2e/report/*
+/e2e/reportHtml/*
+package-lock.json
+/node_modules/*

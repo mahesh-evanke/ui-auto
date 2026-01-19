@@ -38,3 +38,4 @@ seleniumBoxToken: ""
 seleniumBoxTestName: ""
 seleniumBoxProjectName: BEN218
 seleniumBoxCredential: ""
+seleniumBoxVideoSw: true

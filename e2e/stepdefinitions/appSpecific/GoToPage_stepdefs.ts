@@ -682,7 +682,7 @@ When('User goes to {string} screen for a new claim with {string} test data crite
             return;
         await TextboxHelper.sendKeyswithElementName('Employee Job Title', 'TO', false);
         await ElementHelper.click(nextButton);
-        browser.pause(2000);
+        await browser.pause(2000);
         await WaitHelper.getInstance().waitForTitle('T2/T18 Determination - Consolidated Claims Experience');
         PageConfigHelper.setCurrentPage("Individual Edits and Alert Messages");
         await browser.pause(2000);
@@ -691,7 +691,7 @@ When('User goes to {string} screen for a new claim with {string} test data crite
         await WaitHelper.getInstance().waitForTitle('T2/T18 Determination - Consolidated Claims Experience');
         PageConfigHelper.setCurrentPage("Adjudicative Results");
         await ElementHelper.click(nextButton);
-        browser.pause(2000);
+        await browser.pause(2000);
         //Claim Determination
         await WaitHelper.getInstance().waitForTitle('T2/T18 Determination - Consolidated Claims Experience');
         PageConfigHelper.setCurrentPage("Determination Confirmation");
@@ -700,7 +700,7 @@ When('User goes to {string} screen for a new claim with {string} test data crite
         const closeConfirmButton: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_Close", false);
         await ElementHelper.clickwithElementName('Radio_ConfirmDeterm');
         await ElementHelper.click(nextButton);
-        browser.pause(2000);
+        await browser.pause(2000);
         await ElementHelper.click(closeConfirmButton);
         await WaitHelper.getInstance().waitForPageTitle('Claim Summary');
         PageConfigHelper.setCurrentPage("Claim Summary");

@@ -3,10 +3,15 @@
         "types": [
             "node",
             "@wdio/globals/types",
-            "@wdio/cucumber-framework",
-            "expect-webdriverio"
+            "@wdio/cucumber-framework"
         ],
-        "target": "ES5",
+        "target": "ES2020",
+        "module": "commonjs",
+        "lib": ["ES2020"],
+        "moduleResolution": "node",
         "resolveJsonModule": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "strict": false
     }
 }

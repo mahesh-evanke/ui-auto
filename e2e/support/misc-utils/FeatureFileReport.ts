@@ -1,6 +1,6 @@
 const glob = require("glob")
 const fs = require('fs');
-const parser = require("gherkin-parse");
+const { parseFeatureFile } = require("./gherkin-parser");
 
 export class FeatureFileReport {
     private addIncludedFile(fileContent: string, tagName: string, fileName: string, includedFile: string[]) {
@@ -29,24 +29,24 @@ export class FeatureFileReport {
         result["fileInfo"][fileNum] = {};
         result["fileInfo"][fileNum]['filePath'] = filePath;
         result["fileInfo"][fileNum]['scenario'] = {};
-        const eachFileJson = parser.convertFeatureFileToJSON(filePath);
-        result["fileInfo"][fileNum]['feature'] = eachFileJson['feature']['name'].trim();
+        const parsed = parseFeatureFile(filePath);
+        result["fileInfo"][fileNum]['feature'] = (parsed.featureName || '').trim();
         result["fileInfo"][fileNum]['tags'] = ''
         let fileTag = [];
-        if (eachFileJson['feature']['tags']) {
-            eachFileJson['feature']['tags'].forEach(eachTag => { fileTag.push(eachTag['name']) });
+        if (parsed.featureTags && parsed.featureTags.length > 0) {
+            parsed.featureTags.forEach((t: string) => fileTag.push(t));
             result["fileInfo"][fileNum]['tags'] = fileTag.join(' ');
             result["fileInfo"][fileNum]['getTagCount'] = this.getTagCount(tagNames, result["fileInfo"][fileNum]['tags']);
         }
         let scenarioNum = 0;
-        eachFileJson['feature']['children'].forEach(eachScenario => {
+        parsed.scenarios.forEach((eachScenario: any) => {
             scenarioNum++;
             result["fileInfo"][fileNum]['scenario'][scenarioNum] = {};
             result["fileInfo"][fileNum]['scenario'][scenarioNum]['scenarioName'] = eachScenario['name'];
-            result["fileInfo"][fileNum]['scenario'][scenarioNum]['scenarioTotalStep'] = eachScenario['steps'].length;
+            result["fileInfo"][fileNum]['scenario'][scenarioNum]['scenarioTotalStep'] = eachScenario['stepCount'];
             let tags = [];
             if (eachScenario['tags']) {
-                eachScenario['tags'].forEach(eachTag => { tags.push(eachTag['name']) });
+                eachScenario['tags'].forEach((t: string) => { tags.push(t) });
                 result["fileInfo"][fileNum]['scenario'][scenarioNum]['scenarioTag'] = tags.join(' ');
                 result["fileInfo"][fileNum]['scenario'][scenarioNum]['getTagCount'] = this.getTagCount(tagNames, result["fileInfo"][fileNum]['scenario'][scenarioNum]['scenarioTag']);
             }

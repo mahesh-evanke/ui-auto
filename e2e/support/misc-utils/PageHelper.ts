@@ -127,7 +127,7 @@ export class PageConfigHelper {
         }
         let display = false;
         let element;
-        for (let elem of elements) {
+        for await (let elem of elements) {
             if (await elem.isDisplayed()) {
                 element = elem;
                 display = true;

@@ -817,7 +817,7 @@ When('user refreshes page', async () => {
 });
 
 Given('select Claims Summary Checkbox', async () => {
-    browser.pause(3000);
+    await browser.pause(3000);
     //await $("//label[contains(@id ,'uef-generated-id')]")).click();
     await $("//label[@class = 'uef-checkbox_label']").click();
 });
@@ -848,7 +848,7 @@ When('User clicks on {string} link on Person Status screen', async (pageName: st
 });
 
 Given('clicks on Claims Summary button', async function () {
-    browser.pause(1000);
+    await browser.pause(1000);
     await $$("//a[contains(@class,'uef-pro-nav-main_link')]").then(function (items) {
         items[1].click();
     })
@@ -864,8 +864,8 @@ When('clicks on {string} link with {string} instance', async (objName: string, i
 });
 
 Given('closes the application', async function () {
-    browser.pause(1000);
-    browser.closeApp();
+    await browser.pause(1000);
+    await browser.closeApp();
 });
 
 When('user fills in birth proof and citizenship information', async function () {
@@ -1297,14 +1297,11 @@ When('verify {string} text is present in popup window', async (txtName: string) 
 When('navigate to GN 00204.010 Protective Filing link on Filing Date screen', async () => {
     await $('=GN 00204.010 Protective Filing').click().then(async function () {
 
-        await browser.getWindowHandles().then(function (handles) {
-            browser.switchToWindow(handles[1]).then(function () {
-                browser.getTitle().then(function (value) {
-                    expect(value).to.equal('GN 00204.010 - Protective Filing');
-                    browser.switchToWindow(handles[0]);
-                });
-            });
-        });
+        const handles = await browser.getWindowHandles();
+        await browser.switchToWindow(handles[1]);
+        const title = await browser.getTitle();
+        expect(title).to.equal('GN 00204.010 - Protective Filing');
+        await browser.switchToWindow(handles[0]);
     });
 });
 

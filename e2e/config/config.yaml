@@ -7,10 +7,10 @@ environment: val
 #ftr or regular
 region: regular
 #any tags from cucumber feature files needs to run
-tags: "@Completed21"
+tags: "@test" #@test
 retryOnFail: '0'
 shardTestFiles: false
-edgedriverpath: ""
+edgedriverpath: "C:\\Program Files\\EdgeDriver\\msedgedriver.exe"
 chromedriverpath: "<path>"
 #this is only for when run in grid or seleniumbox 
 maxInstances: 1
@@ -21,7 +21,7 @@ seleniumBoxAddress:
 allScriptsTimeout: 11000
 getPageTimeout: 40000
 #below is feature file location. when developing, point to only one feature file.
-features: "./e2e/features/**/*.feature"
+features: "./e2e/features/**/*.feature"   #./e2e/features/**/*.feature
 # if run on stand alone mode update below url based on your url
 standaloneUrl: http://localhost:4042/mdrclm-ui(mdrclmui:DISABILITY)
 valUrl: https://ssoesef.addev.com/bencmn?group=2

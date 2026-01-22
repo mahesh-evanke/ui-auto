@@ -1,6 +1,6 @@
 Feature: Verify functionality on home page
 
-@WebUI @page-test @homepage @Completed  @exec-cas
+@WebUI @page-test @homepage @Completed  @exec-cas @test
 #HOMEPAGE01
 Scenario Outline:  Verify edits on CCE home page with <Scenario_Title>
     Given User navigates to "Home Page" screen to Establish New Medicare claim

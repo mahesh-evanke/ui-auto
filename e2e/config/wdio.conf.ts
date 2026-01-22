@@ -3,17 +3,22 @@ import { PageConfigHelper } from "../support/misc-utils/PageHelper";
 import { generate } from 'multiple-cucumber-html-reporter';
 import { removeSync } from 'fs-extra';
 import cucumberJson from 'wdio-cucumberjs-json-reporter';
-import * as  moment from 'moment';
+import moment from 'moment';
 import * as  fs from 'fs';
 import * as  glob from 'glob';
 import * as yamlReader from 'js-yaml';
+import { parseFeatureFile } from '../support/misc-utils/gherkin-parser';
 
 const e2eConfig = yamlReader.load(fs.readFileSync('e2e/config/config.yaml', 'utf8'));
 const executionMode = e2eConfig.executionMode.toUpperCase();
 const environment = e2eConfig.environment.toUpperCase();
 const reportFolder = e2eConfig.reportFolder;
 
-let runServices = [];
+// WDIO v9 has built-in driver management. Legacy driver service packages like
+// `wdio-chromedriver-service` / `wdio-edgedriver-service` are not compatible with v9.
+// We keep services empty by default and rely on local driver binaries (if provided)
+// via capabilities to avoid downloads.
+let runServices: string[] = [];
 let baseUrl = null;
 let browserName = e2eConfig.browserName.toUpperCase();
 
@@ -34,23 +39,20 @@ if (browserName == 'IE') {
     browserName = 'internet explorer';
 } else if (browserName == 'CHROME') {
     browserName = 'chrome';
-    runServices = ['chromedriver'];
-    if(e2eConfig.chromedriverpath != '<path>' || e2eConfig.chromedriverpath != '')
+    if(e2eConfig.chromedriverpath != '<path>' && e2eConfig.chromedriverpath != '')
         process.env['CHROMEDRIVER_FILEPATH'] = e2eConfig.chromedriverpath;
 } else if (browserName == 'EDGE') {
     browserName = 'MicrosoftEdge';
-    runServices = ['edgedriver'];
-    if(e2eConfig.edgedriverpath != '<path>' || e2eConfig.edgedriverpath != '')
+    if(e2eConfig.edgedriverpath != '<path>' && e2eConfig.edgedriverpath != '')
         process.env['EDGEDRIVER_PATH'] = e2eConfig.edgedriverpath;
 }
 
 let port, protocol, seleniumAddressVal;
 
-if (executionMode === 'LOCAL') {
-    port=4444;
-    protocol = 'http';
-    seleniumAddressVal = e2eConfig.seleniumLocalAddress;
-} else if (executionMode == 'GRID') {
+// In LOCAL mode we run a direct local session (no Selenium server), relying on
+// WDIO's driver manager and/or local driver binaries configured in capabilities.
+// In GRID/SELENIUMBOX we connect to a remote Selenium endpoint.
+if (executionMode == 'GRID') {
     seleniumAddressVal = e2eConfig.seleniumAddress;
     runServices = [];
 } else if (executionMode == 'SELENIUMBOX') {
@@ -61,39 +63,60 @@ if (executionMode === 'LOCAL') {
 }
 
 const paths = glob.sync(e2eConfig.features);
-const parser = require("gherkin-parse");
 const tags = e2eConfig.tags.split(/[, ]+/);
 
 var features = [];
 pathloop: for (let path of paths) {
-    let eachFileJson;
     try {
-        eachFileJson = parser.convertFeatureFileToJSON(path);
-    } catch (error) {
-        eachFileJson = {};
-    }
-    if (eachFileJson.feature && eachFileJson.feature.tags) {
-        for (let tag of eachFileJson.feature.tags) {
-            if (tags.includes(tag.name)) {
-                features.push(path.replace('e2e\\','..\\'));
+        const parsed = parseFeatureFile(path);
+        for (const tag of parsed.featureTags) {
+            if (tags.includes(tag)) {
+                features.push(path.replace('e2e\\', '..\\'));
                 continue pathloop;
             }
         }
-        for (let scenario of eachFileJson.feature.children) {
-            for (let tag of scenario.tags) {
-                if (tags.includes(tag.name)) {
-                    features.push(path.replace('e2e\\','..\\'));
+        for (const scenario of parsed.scenarios) {
+            for (const tag of scenario.tags) {
+                if (tags.includes(tag)) {
+                    features.push(path.replace('e2e\\', '..\\'));
                     continue pathloop;
                 }
             }
         }
+    } catch (error) {
+        // ignore malformed/unparseable feature files
     }
 }
 let featuresFiles = Array.from(new Set(features));
 let startTime;
 let endTime;
 
-export const config: Options.Testrunner = {
+// WDIO capability objects can include vendor-specific keys (e.g. `wdio:*`).
+// The `@wdio/types` TypeScript types don't always model these keys, so we keep
+// the capability object loosely typed to avoid blocking valid config.
+const baseCapability: any = {
+    // maxInstances can get overwritten per capability. So if you have an in-house Selenium
+    // grid with only 5 firefox instances available you can make sure that not more than
+    // 5 instances get started at a time.
+    maxInstances: e2eConfig.maxInstances,
+    browserName: browserName,
+    // If a local driver binary path is provided, force WebdriverIO to use it.
+    // This prevents auto-downloading a driver in environments where downloads are restricted.
+    ...(browserName === 'MicrosoftEdge' && e2eConfig.edgedriverpath && e2eConfig.edgedriverpath !== '<path>' ? {
+        'wdio:edgedriverOptions': { binary: e2eConfig.edgedriverpath }
+    } : {}),
+    ...(browserName === 'chrome' && e2eConfig.chromedriverpath && e2eConfig.chromedriverpath !== '<path>' ? {
+        'wdio:chromedriverOptions': { binary: e2eConfig.chromedriverpath }
+    } : {}),
+    'e34:l_testName': e2eConfig.seleniumBoxTestName,
+    'e34:video': e2eConfig.seleniumBoxVideoSw,
+    'e34:userId': e2eConfig.seleniumBoxId,
+    'e34:token': e2eConfig.seleniumBoxToken,
+    'e34:projectId': e2eConfig.seleniumBoxProjectName,
+    'e34:credential': e2eConfig.seleniumBoxCredential,
+};
+
+export const config: any = {
     services: runServices,
     //
     // ====================
@@ -143,29 +166,7 @@ export const config: Options.Testrunner = {
     // Sauce Labs platform configurator - a great tool to configure your capabilities:
     // https://saucelabs.com/platform/platform-configurator
     //
-    capabilities: [{
-
-        // maxInstances can get overwritten per capability. So if you have an in-house Selenium
-        // grid with only 5 firefox instances available you can make sure that not more than
-        // 5 instances get started at a time.
-        maxInstances: e2eConfig.maxInstances,
-        //
-        browserName: browserName,
-        //acceptInsecureCerts: true,
-        //'goog:chromeOptions': {
-        //    excludeSwitches: ['enable-logging']
-        //},
-        'e34:l_testName': e2eConfig.seleniumBoxTestName,
-        'e34:video': e2eConfig.seleniumBoxVideoSw,
-        'e34:userId': e2eConfig.seleniumBoxId,
-        'e34:token': e2eConfig.seleniumBoxToken,
-        'e34:projectId': e2eConfig.seleniumBoxProjectName,
-        'e34:credential': e2eConfig.seleniumBoxCredential,
-        // If outputDir is provided WebdriverIO can capture driver session logs
-        // it is possible to configure which logTypes to include/exclude.
-        // excludeDriverLogs: ['*'], // pass '*' to exclude all driver session logs
-        // excludeDriverLogs: ['bugreport', 'server'],
-    }],
+    capabilities: [baseCapability],
     //
     // ===================
     // Test Configurations
@@ -213,10 +214,12 @@ export const config: Options.Testrunner = {
     // Services take over a specific job you don't want to take care of. They enhance
     // your test setup with almost no effort. Unlike plugins, they don't add new
     // commands. Instead, they hook themselves up into the test process.
-    hostname: seleniumAddressVal,
-    port: port,
-    path: '/wd/hub/',
-    protocol: protocol,
+    ...(executionMode === 'LOCAL' ? {} : {
+        hostname: seleniumAddressVal,
+        port: port,
+        path: '/wd/hub/',
+        protocol: protocol,
+    }),
     // Framework you want to run your specs with.
     // The following are supported: Mocha, Jasmine, and Cucumber
     // see also: https://webdriver.io/docs/frameworks
@@ -287,6 +290,7 @@ export const config: Options.Testrunner = {
      */
     onPrepare: function (config, capabilities) {
         removeSync(reportFolder);
+        startTime = new Date();
     },
     /**
      * Gets executed before a worker process is spawned and can be used to initialise specific service
@@ -340,7 +344,7 @@ export const config: Options.Testrunner = {
      * @param {ITestCaseHookParameter} world    world object containing information on pickle and test step
      * @param {Object}                 context  Cucumber World object
      */
-    beforeScenario: function (world, context) {
+    beforeScenario: async function (world, context) {
         global.environment = environment;
         global.browseName = browserName;
         PageConfigHelper.sameScenarioSwitch = false;
@@ -350,7 +354,7 @@ export const config: Options.Testrunner = {
         }
         else {
             PageConfigHelper.sameScenarioSwitch = false;
-            browser.deleteAllCookies();
+            await browser.deleteAllCookies();
         }
         PageConfigHelper.setScenarioName(scenarioName.trim());
     },
@@ -388,14 +392,14 @@ export const config: Options.Testrunner = {
      */
     afterScenario: async function (world, result, context) {
         if (!result.passed) {
-            let scrollHeight = parseInt(await browser.execute("return document.body.scrollHeight"));
-            let clientHeight = parseInt(await browser.execute("return document.body.clientHeight"));
+            const scrollHeight = parseInt(await browser.execute("return document.body.scrollHeight") as unknown as string);
+            const clientHeight = parseInt(await browser.execute("return document.body.clientHeight") as unknown as string);
             const num = Math.ceil(scrollHeight / clientHeight);
             for (let i = 0; i < num; i++) {
                 let height = i * clientHeight;
                 await browser.execute("window.scrollTo(0," + height + ");");
                 await takeScreenshot(i);
-                cucumberJson.attach(await browser.takeScreenshot(), 'image/png');
+                cucumberJson.attach(await browser.takeScreenshot() as unknown as string, 'image/png');
             }
         }
         async function takeScreenshot(num: number) {

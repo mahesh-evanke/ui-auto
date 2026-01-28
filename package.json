@@ -47,6 +47,7 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.12",
     "typescript": "~5.9.2",
+    "ui-auto-sdk": "file:../ui-auto/ui-auto-sdk-0.1.0.tgz",
     "vitest": "^4.0.8"
   }
 }

@@ -1,0 +1,12 @@
+executionMode: local
+browserName: chrome
+environment: val
+tags: "@smoke"
+maxInstances: 1
+reportFolder: ./reports/integrationTests
+allScriptsTimeout: 11000
+getPageTimeout: 40000
+features: "./e2e/features/**/*.feature"
+valUrl: http://localhost:4200/
+devUrl: http://localhost:4200/
+standaloneUrl: http://localhost:4200/

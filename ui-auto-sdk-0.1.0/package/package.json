@@ -1,0 +1,53 @@
+{
+    "name": "ui-auto-sdk",
+    "version": "0.1.0",
+    "private": true,
+    "main": "dist/src/index.js",
+    "types": "dist/src/index.d.ts",
+    "bin": {
+        "ui-auto": "dist/src/cli.js"
+    },
+    "files": [
+        "dist/src",
+        "README.md",
+        "GHERKIN_STEP_DEFINITIONS.md"
+    ],
+    "dependencies": {
+        "webdriverio": "9.23.2",
+        "@wdio/cli": "9.23.2",
+        "@wdio/cucumber-framework": "9.23.2",
+        "@wdio/local-runner": "9.23.2",
+        "@wdio/globals": "9.23.0",
+        "@wdio/types": "9.23.2",
+        "chai": "^4.5.0",
+        "chai-as-promised": "^7.1.1",
+        "fs-extra": "^11.3.0",
+        "glob": "^11.0.1",
+        "@cucumber/gherkin": "^37.0.1",
+        "@cucumber/messages": "^31.2.0",
+        "@cucumber/cucumber": "^11.0.1",
+        "js-yaml": "^4.1.0",
+        "moment": "^2.30.1",
+        "multiple-cucumber-html-reporter": "^1.18.3",
+        "papaparse": "^5.5.2",
+        "pdf-extraction": "^1.0.2",
+        "underscore": "^1.13.7",
+        "wdio-cucumberjs-json-reporter": "^6.0.1",
+        "wdio-wait-for": "^2.2.6",
+        "edgedriver": "^6.1.1"
+    },
+    "devDependencies": {
+        "ts-node": "^10.9.2",
+        "typescript": "^5.0.0"
+    },
+    "scripts": {
+        "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"var fs=require('fs');var d='dist/src/init';fs.mkdirSync(d,{recursive:true});fs.copyFileSync('GHERKIN_STEP_DEFINITIONS.md',d+'/GHERKIN_STEP_DEFINITIONS.md');\"",
+        "pack:sdk": "npm run build && npm pack",
+        "postinstall": "node -e \"var fs=require('fs'),p='dist/src/init/postinstall.js';if(fs.existsSync(p))require('child_process').spawnSync('node',[p],{stdio:'inherit'});\"",
+        "wdio": "wdio run ./e2e/config/wdio.conf.ts",
+        "sdk:run": "npm run build && node dist/src/cli.js run",
+        "checkNum": "ts-node e2e/support/misc-utils/FeatureFileReport.ts",
+        "test": "ts-node ./e2e/config/test.ts",
+        "repl": "npx wdio repl chrome"
+    }
+}

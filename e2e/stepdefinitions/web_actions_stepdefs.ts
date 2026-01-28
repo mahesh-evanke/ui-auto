@@ -15,8 +15,9 @@ import { PSCHelper } from '../support/misc-utils/PSCHelper';
 import * as  fs from 'fs';
 import { StringManipulationHelper } from "../support/misc-utils/string-manipulation-helper";
 import moment = require("moment");
+import { loadFrameworkConfig } from '../../src/config/loadConfig';
 
-const e2eConfig = require('js-yaml').load(fs.readFileSync('e2e/config/config.yaml', 'utf8'));
+const e2eConfig = loadFrameworkConfig();
 const chai = require('chai').use(require('chai-as-promised'));
 const expect = chai.expect;
 const assert = chai.assert;
@@ -800,6 +801,15 @@ Given('User inputs information on {string} screen with following parameters', as
         }
         else if (objTagName == "select")
             await DropDownHelper.selectOptionByText(pgelement, objValue);
+    }
+});
+
+Given('User navigates to {string} URL', async (url: string) => {
+    await browser.url(url);
+    await browser.pause(1000);
+    // Set page context for SauceDemo login page
+    if (url.includes('saucedemo.com')) {
+        PageConfigHelper.setCurrentPage('Login Page');
     }
 });
 

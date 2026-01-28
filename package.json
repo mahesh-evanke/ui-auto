@@ -28,6 +28,7 @@
         "edgedriver": "^6.1.1"
     },
     "scripts": {
+        "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"var fs=require('fs');var d='dist/src/init';fs.mkdirSync(d,{recursive:true});fs.copyFileSync('LEGACY_GHERKIN_STEP_DEFINITIONS.md',d+'/GHERKIN_STEP_DEFINITIONS.md');\"",
         "wdio": "wdio run ./e2e/config/wdio.conf.ts",
         "checkNum": "ts-node e2e/support/misc-utils/FeatureFileReport.ts",
         "test": "ts-node ./e2e/config/test.ts",

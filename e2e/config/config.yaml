@@ -1,41 +1,12 @@
-#grid,local,seleniumbox. if grid, the selenium grid in machine s2470D3 registered, and hubs aslo registered
 executionMode: local
-#chrome
-browserName: edge
-#environment is val or dev or standalone
+browserName: chrome
 environment: val
-#ftr or regular
-region: regular
-#any tags from cucumber feature files needs to run
-tags: "@test" #@test
-retryOnFail: '0'
-shardTestFiles: false
-edgedriverpath: "C:\\Program Files\\EdgeDriver\\msedgedriver.exe"
-chromedriverpath: "<path>"
-#this is only for when run in grid or seleniumbox 
+tags: "@smoke"
 maxInstances: 1
-reportFolder: './reports/integrationTests'
-seleniumLocalAddress: 127.0.0.1
-seleniumAddress: 
-seleniumBoxAddress: 
+reportFolder: ./reports/integrationTests
 allScriptsTimeout: 11000
 getPageTimeout: 40000
-#below is feature file location. when developing, point to only one feature file.
-features: "./e2e/features/**/*.feature"   #./e2e/features/**/*.feature
-# if run on stand alone mode update below url based on your url
-standaloneUrl: http://localhost:4042/mdrclm-ui(mdrclmui:DISABILITY)
-valUrl: https://ssoesef.addev.com/bencmn?group=2
-devUrl: https://ssolabs.addev.com/bencmn?group=2
-SMIBaseRate: '170.10'
-testDataDir: "./e2e/testData/"
-valDB: DSGV1
-devDB: DSGD0
-databases: "T2BC2/CBUIB2"
-COMDate: 12-2021
-appName: update
-seleniumBoxId: ""
-seleniumBoxToken: ""
-seleniumBoxTestName: ""
-seleniumBoxProjectName: BEN218
-seleniumBoxCredential: ""
-seleniumBoxVideoSw: true
+features: "./e2e/features/**/*.feature"
+valUrl: http://localhost:4200/
+devUrl: http://localhost:4200/
+standaloneUrl: http://localhost:4200/

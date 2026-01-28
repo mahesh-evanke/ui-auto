@@ -61,6 +61,3 @@ export function parseFeatureFile(filePath: string): ParsedFeatureFile {
 
     return { featureName, featureTags, scenarios }
 }
-
-
-

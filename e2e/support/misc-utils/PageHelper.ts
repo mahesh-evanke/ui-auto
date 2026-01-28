@@ -6,6 +6,7 @@ import { TextboxHelper } from '../html-helpers/textbox-helper';
 import { WaitHelper } from '../html-helpers/wait-helper';
 import { JsonHelper } from '../misc-utils/json-helper';
 import { TimeChanger } from './TimeChanger';
+import { getElementLocator, getPageUrlByName, getPageMetadata } from '../../../src/locators/locatorProvider';
 var EC = require("wdio-wait-for");
 
 export class PageConfigHelper {
@@ -29,21 +30,12 @@ export class PageConfigHelper {
         return this.scenario_name;
     }
     static async locator(elementStr: string, commonPageObj: boolean) {
-        let dirPath = path.resolve('e2e/locators');
-        let pageFilePath: string;
-        if (commonPageObj == true)
-            pageFilePath = path.join(dirPath, "common.json");
-        else {
-            let pageToInspect = PageConfigHelper.current_page + '.json';
-            dirPath = path.resolve('e2e/locators/pages/');
-            pageFilePath = path.join(dirPath, pageToInspect);
-        }
-        const elementtoFound = JsonHelper.getElement(pageFilePath, elementStr);
-        if (elementtoFound) {
-            return elementtoFound;
-        }
-        else
-            throw new Error('Element with name:' + elementStr + ' not found in JSON');
+        const elementtoFound = getElementLocator(elementStr, {
+            common: commonPageObj,
+            pageName: PageConfigHelper.current_page,
+        });
+        if (elementtoFound) return elementtoFound as any;
+        throw new Error('Element with name:' + elementStr + ' not found in JSON');
     }
 
     static async locationPath(elementStr: string, commonPageObj: boolean) {
@@ -92,20 +84,14 @@ export class PageConfigHelper {
     }
 
     static async findTitle(screenName: string) {
-        let dirPath = path.resolve('e2e/locators');
-        let pageFilePath: string;
-        pageFilePath = path.join(dirPath, "pages.json");
-        const elementtoFound = JsonHelper.getElement(pageFilePath, screenName);
-        if (elementtoFound)
-            return elementtoFound[0];
-        else
-            return 'Element not found in JSON';
+        const meta = getPageMetadata(screenName);
+        if (!meta) return 'Element not found in JSON';
+        return meta;
     }
 
     static navigateToUrl(pageName: string) {
         this.current_page = pageName;
-        const pagePath = path.resolve('e2e/locators/pages.json');
-        pageName = JsonHelper.getPage(pagePath, pageName);
+        pageName = getPageUrlByName(pageName);
         //browser.navigate().to(pageName);
 
     }
@@ -121,7 +107,7 @@ export class PageConfigHelper {
             return;
         }
         const elements = await PageConfigHelper.findElements(key, false);
-        if (elements.length == 0) {
+            if (await elements.length == 0) {
             console.log("-----------------element not exist "+ key)
             return;
         }
@@ -194,7 +180,7 @@ export class PageConfigHelper {
             await ElementHelper.click(elem);
 
         } else if (objTagName == "button") {
-            if (elements.length != 1 && Number.isInteger(Number(objValue)) && Number(objValue) > 0) {
+            if (await elements.length != 1 && Number.isInteger(Number(objValue)) && Number(objValue) > 0) {
                 const order = parseInt(objValue);
                 await ElementHelper.click(elements[order - 1]);
             } else if (objValue.toLocaleLowerCase() == 'yes') {

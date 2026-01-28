@@ -1,0 +1,1 @@
+{"version":3,"file":"injectAutomationOverlay.d.ts","sourceRoot":"","sources":["../../../src/injection/injectAutomationOverlay.ts"],"names":[],"mappings":"AAAA;;;;;GAKG;AAEH,MAAM,WAAW,YAAY;IAC3B,YAAY,CAAC,EAAE,MAAM,CAAC;IACtB,MAAM,CAAC,EAAE,MAAM,CAAC;CACjB;AAED,wBAAsB,uBAAuB,CAAC,KAAK,GAAE,YAAiB,GAAG,OAAO,CAAC,IAAI,CAAC,CAiErF"}

@@ -1,0 +1,11 @@
+node_modules/
+*.log
+.env
+.env.*
+.DS_Store
+coverage/
+.nyc_output/
+allure-results/
+allure-report/
+wdio-*.log
+*.tsbuildinfo

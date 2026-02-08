@@ -18,7 +18,12 @@ import cucumberJson from 'wdio-cucumberjs-json-reporter';
 import moment from 'moment';
 import * as fs from 'fs';
 import * as glob from 'glob';
+import * as pathModule from 'path';
 import * as yamlReader from 'js-yaml';
+
+// Resolve step definition files so all are loaded (avoids Windows glob + file URL issues in @wdio/cucumber-framework).
+const stepDefGlob = pathModule.join(process.cwd(), 'e2e', 'stepdefinitions', '**', '*.ts');
+const stepDefFiles = glob.sync(stepDefGlob);
 
 const e2eConfig = yamlReader.load(fs.readFileSync('e2e/config/config.yaml', 'utf8')) as Record<string, unknown>;
 const executionMode = String(e2eConfig.executionMode).toUpperCase();
@@ -257,10 +262,8 @@ export const config: WebdriverIO.Config = {
     // If you are using Cucumber you need to specify the location of your step definitions.
     cucumberOpts: {
         retry: 0,
-        // <string[]> (file/dir) require files before executing features
-        require: [
-            './e2e/stepdefinitions/**/*.ts'
-        ],
+        // <string[]> (file/dir) require files before executing features (pre-resolved so appSpecific and all subdirs load on all platforms)
+        require: stepDefFiles.length > 0 ? stepDefFiles : ['./e2e/stepdefinitions/**/*.ts'],
         // <boolean> show full backtrace for errors
         backtrace: false,
         // Load TypeScript step definitions (required when require points to .ts files)

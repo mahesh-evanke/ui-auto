@@ -33,8 +33,8 @@ When('Verify field {string} text is {string}', async (filedName: string, expecte
     await PageConfigHelper.changeFrame();
     const element = await PageConfigHelper.findElement(filedName, false);
     let actualText: string = await element.getText();
-    actualText = StringManipulationHelper.removeSepecial(actualText);
-    expectedText = StringManipulationHelper.removeSepecial(expectedText);
+    actualText = StringManipulationHelper.removeSepecial(actualText) ?? actualText;
+    expectedText = StringManipulationHelper.removeSepecial(expectedText) ?? expectedText;
     assert.equal(actualText, expectedText, "Filed " + filedName + " is not expected.");
     await browser.switchToParentFrame();
 });
@@ -404,8 +404,8 @@ Given('User is on {string} screen', async (screenName: string) => {
     } else if (screenName == "Pre-Adjudicative Results") {
         let temfldate = new Date(enrollCalc.filingDate);
         if (String(temfldate.getFullYear()) == "NaN") {
-            let dobArray = await browser.execute("tableref = document.getElementById('PersonInfo').getElementsByTagName('tr').item(3).getElementsByTagName('td');var hdrRow=[];for (i = 0; i < tableref.length; i++) {hdrRow[i]=tableref[i].innerText.trim();} return hdrRow;");
-            enrollCalc.dob = dobArray[1];
+            let dobArray = await browser.execute("tableref = document.getElementById('PersonInfo').getElementsByTagName('tr').item(3).getElementsByTagName('td');var hdrRow=[];for (i = 0; i < tableref.length; i++) {hdrRow[i]=tableref[i].innerText.trim();} return hdrRow;") as string[];
+            enrollCalc.dob = dobArray[1] as string;
             let filinfdtTxt = <String>await browser.execute("return document.getElementsByClassName('uef-grid_unit_inner').item(11).innerText");
             let txtSplit = filinfdtTxt.split('\n');
             enrollCalc.filingDate = new Date(txtSplit[1]);
@@ -1029,10 +1029,10 @@ Then('verify data from {string} webtable dates', async (objName: string, table: 
     }
     let rows = await browser.execute("return document.getElementById('" + objName + "').getElementsByTagName('tr').length");
     let expRows = table.raw().length;
-    let actArray: any[];
+    let actArray: any[] = [];
     if (rows == expRows) {
         for (var i = 1; (i < (rows as number)); i++) {
-            actArray = await browser.execute("tableref = document.getElementById('" + objName + "').getElementsByTagName('tr').item(" + i + ").getElementsByTagName('td');var hdrRow=[];for (i = 0; i < tableref.length; i++) {hdrRow[i]=tableref[i].innerText.trim();} return hdrRow;");
+            actArray = await browser.execute("tableref = document.getElementById('" + objName + "').getElementsByTagName('tr').item(" + i + ").getElementsByTagName('td');var hdrRow=[];for (i = 0; i < tableref.length; i++) {hdrRow[i]=tableref[i].innerText.trim();} return hdrRow;") as string[];
         }
     }
     console.log(JSON.stringify(table.raw()[1]));
@@ -1165,7 +1165,7 @@ Then('Verify {string} PDF data generated from CCM', async (fileName: string) => 
     pdfManager.setMailAddres(pageVariables.getMailAddress);
     pdfManager.setPhoneNumber(pageVariables.getPhoneNumber);
     pdfManager.setBirthPlace(pageVariables.getBirthPlace);
-    let addArr = pageVariables.getResidentAddress.split(",");
+    let addArr = String(pageVariables.getResidentAddress).split(",");
     pdfManager.setStreet(addArr[0]);
     pdfManager.setCity(addArr[1] + " " + addArr[2]);
     pdfManager.setMedicalEnrolment(enrollCalc.smiRefusalInd);
@@ -1514,7 +1514,7 @@ Then('enters {string} date in {string} textbox', async (textVal: string, objName
     let dateVal: any;
     let currentPage: any;
 
-    textValueArray = textVal.toUpperCase().split(" ");
+    textValueArray = String(textVal).toUpperCase().split(" ");
     arrayLength = textValueArray.length;
     const currentDate = textValueArray[0];
     const opr = textValueArray[1];

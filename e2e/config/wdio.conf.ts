@@ -3,6 +3,10 @@
  * Supports Chrome and Edge with optional custom driver exe paths (no auto-download for Edge when path set).
  * Screenshot on scenario failure is written to report folder and attached to Cucumber JSON.
  */
+// Skip ts-node type-check when Cucumber loads step defs (avoids TS2554/TS2695/TS2339 in large step files). Run `npx tsc --noEmit` for type-check.
+if (process.env.TS_NODE_TRANSPILE_ONLY === undefined) {
+    process.env.TS_NODE_TRANSPILE_ONLY = 'true';
+}
 /// <reference types="@wdio/globals/types" />
 import type { Options } from '@wdio/types';
 // Browser is injected at runtime by WDIO; declare for type-checking in config hooks.

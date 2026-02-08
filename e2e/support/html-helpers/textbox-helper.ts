@@ -1,3 +1,4 @@
+import type { ElementLike } from './element-helper';
 import { WaitHelper } from './wait-helper';
 import { PageConfigHelper } from "../misc-utils/PageHelper";
 
@@ -7,7 +8,7 @@ export class TextboxHelper {
   * get input value
   * @param {ElementFinder} locator
   */
-    public static async getValue(locator: WebdriverIO.Element): Promise<string> {
+    public static async getValue(locator: ElementLike): Promise<string> {
         await WaitHelper.getInstance().waitForElementToBeDisplayed(locator);
         return await locator.getValue();
     }
@@ -16,7 +17,7 @@ export class TextboxHelper {
      * Clears the existing text from an input elements
      * @param {ElementFinder} locator
      */
-    public static async clearText(locator: WebdriverIO.Element) {
+    public static async clearText(locator: ElementLike) {
         await locator.clearValue();
     }
 
@@ -31,7 +32,7 @@ export class TextboxHelper {
      * @param {string} value to be sent
      * @param {boolean} sendEnter for sending an enter key
      */
-    public static async sendKeys(locator: WebdriverIO.Element,
+    public static async sendKeys(locator: ElementLike,
         value: string,
         sendEnter = false) {
         await WaitHelper.getInstance().waitForElementToBeDisplayed(locator);

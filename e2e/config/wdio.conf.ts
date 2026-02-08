@@ -403,7 +403,7 @@ export const config: WebdriverIO.Config = {
             try {
                 const scrollHeight = parseInt(await browser.execute("return document.body.scrollHeight") as string, 10);
                 const clientHeight = parseInt(await browser.execute("return document.body.clientHeight") as string, 10);
-                const num = Math.ceil(scrollHeight / clientHeight) || 1;
+                const numViewports = Math.ceil(scrollHeight / clientHeight) || 1;
                 const timestamp = moment(new Date()).format("yyyy_MM_DD__HH_mm_ss_SSS");
                 const scenarioName = (world as { pickle?: { name?: string } }).pickle?.name ?? 'scenario';
                 const safeName = scenarioName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 50);
@@ -411,9 +411,10 @@ export const config: WebdriverIO.Config = {
                 if (!fs.existsSync(dir)) {
                     fs.mkdirSync(dir, { recursive: true });
                 }
-                for (let i = 0; i < num; i++) {
-                    const height = i * clientHeight;
-                    await browser.execute("window.scrollTo(0," + height + ");");
+                for (let i = 0; i < numViewports; i++) {
+                    if (i > 0) {
+                        await browser.execute("window.scrollTo(0," + (i * clientHeight) + ");");
+                    }
                     const png = await browser.takeScreenshot();
                     const filepath = `${dir}/failure_${timestamp}_${safeName}_${i}.png`;
                     await fs.promises.writeFile(filepath, Buffer.from(png, 'base64'));
@@ -424,16 +425,7 @@ export const config: WebdriverIO.Config = {
                     }
                 }
             } catch (err) {
-                try {
-                    const png = await browser.takeScreenshot();
-                    const dir = reportFolder + '/screenshot';
-                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-                    const filepath = dir + '/failure_fallback_' + moment(new Date()).format("yyyy_MM_DD__HH_mm_ss_SSS") + '.png';
-                    await fs.promises.writeFile(filepath, Buffer.from(png, 'base64'));
-                    cucumberJson.attach(png, 'image/png');
-                } catch (fallbackErr) {
-                    console.warn('Screenshot on failure could not be taken:', (fallbackErr as Error).message);
-                }
+                console.warn('Screenshot on failure could not be taken:', (err as Error).message);
             }
         }
     },

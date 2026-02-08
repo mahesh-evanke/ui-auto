@@ -1,9 +1,9 @@
-
+import type { ElementLike } from './element-helper';
 import { Constants } from '../misc-utils/constants';
 import { WaitHelper } from './wait-helper';
 
 export class CheckboxHelper {
-    static async markCheckbox(elementt: WebdriverIO.Element, markChecked: boolean) {
+    static async markCheckbox(elementt: ElementLike, markChecked: boolean) {
         //await WaitHelper.getInstance().waitForElementToBeClickable(elementt);
         let attempts = 0;
         while (attempts++ < Constants.MAX_RETRY_ATTEMPTS) {
@@ -15,7 +15,7 @@ export class CheckboxHelper {
         return;
     }
 
-    static async markCheckboxWithWaitDisplay(elementt: WebdriverIO.Element, markChecked: boolean) {
+    static async markCheckboxWithWaitDisplay(elementt: ElementLike, markChecked: boolean) {
         await WaitHelper.getInstance().waitForElementToBeDisplayed(elementt);
         let attempts = 0
         while (attempts++ < Constants.MAX_RETRY_ATTEMPTS) {

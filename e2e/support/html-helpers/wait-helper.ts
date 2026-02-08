@@ -168,7 +168,7 @@ export class WaitHelper {
         });
     }
 
-    public async waitForElementToHaveText(targetElement: WebdriverIO.Element, timeout = PageHelper.DEFAULT_TIMEOUT, message = '') {
+    public async waitForElementToHaveText(targetElement: import('./element-helper').ElementLike, timeout = PageHelper.DEFAULT_TIMEOUT, message = '') {
         return this.waitForElementToResolve(() => targetElement.getText(), (text: string) => text.length > 0, timeout, message);
     }
 
@@ -217,7 +217,7 @@ export class WaitHelper {
     }
 
     public async waitForPageLabel(textWait: string, timeout = PageHelper.DEFAULT_TIMEOUT, attempts = PageHelper.WAIT_POLL_ATTEMPTS) {
-        await browser.waitUntil(EC.visibilityOf("//*[text()[contains(.,'" + textWait + "')]]"), { timeout: timeout, timeoutMsg: 'Failed, after waiting for element: ' + textWait });
+        await browser.waitUntil(ExpectedConditions.visibilityOf("//*[text()[contains(.,'" + textWait + "')]]"), { timeout: timeout, timeoutMsg: 'Failed, after waiting for element: ' + textWait });
         return true;
     }
 
@@ -237,7 +237,7 @@ export class WaitHelper {
                 await browser.switchToParentFrame();
                 await WaitHelper.getInstance().waitForElement($(frame));
                 await browser.switchToFrame(await $(frame));
-                let isDisplayed = browser.waitUntil(EC.visibilityOf($("//*[text()[contains(.,'" + targetElementText + "')]]")), {
+                let isDisplayed = await browser.waitUntil(ExpectedConditions.visibilityOf($("//*[text()[contains(.,'" + targetElementText + "')]]")), {
                     timeout: timeout
                 }).then(() => true, () => false);
                 await browser.switchToParentFrame();

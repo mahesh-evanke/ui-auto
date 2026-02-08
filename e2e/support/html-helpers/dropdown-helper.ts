@@ -1,6 +1,7 @@
+import type { ElementLike } from './element-helper';
 
 export class DropDownHelper {
-    static selectOptionByVal(locator: WebdriverIO.Element, optionVal: string) {
+    static selectOptionByVal(locator: ElementLike, optionVal: string) {
 
         locator.$(this.getCssForOptionValue(optionVal)).click();
 
@@ -14,11 +15,11 @@ export class DropDownHelper {
         return `option[value="${optionVal}"]`;
     }
 
-    static async selectOptionByText(locator: WebdriverIO.Element, optionVal: string) {
+    static async selectOptionByText(locator: ElementLike, optionVal: string) {
         await locator.selectByVisibleText(optionVal);
     }
 
-    static selectDropdownByNumber(element: WebdriverIO.Element, index: number) {
+    static selectDropdownByNumber(element: ElementLike, index: number) {
 
         element.$('<option />')
             .then(function (options) {
@@ -26,7 +27,7 @@ export class DropDownHelper {
             });
     }
 
-    static selectOption(element: WebdriverIO.Element, item: string) {
+    static selectOption(element: ElementLike, item: string) {
         var desiredOption;
         element.click();
         element.$$('<option />')

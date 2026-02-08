@@ -1,7 +1,10 @@
+import type { ChainablePromiseElement } from 'webdriverio';
 import { WaitHelper } from './wait-helper';
 import { PageHelper } from './page-helper';
 import { PageConfigHelper } from '../misc-utils/PageHelper';
 import * as ExpectedConditions from 'wdio-wait-for';
+
+export type ElementLike = WebdriverIO.Element | ChainablePromiseElement;
 
 export class ElementHelper {
 
@@ -9,7 +12,7 @@ export class ElementHelper {
         return global.browserName;
     }
 
-    static async actionMouseMove(item: WebdriverIO.Element) {
+    static async actionMouseMove(item: ElementLike) {
         await WaitHelper.getInstance().waitForElementToBeDisplayed(item);
         return await browser.touchAction({
             action: 'moveTo',
@@ -17,7 +20,7 @@ export class ElementHelper {
         });
     }
 
-    static async actionMouseDown(item: WebdriverIO.Element) {
+    static async actionMouseDown(item: ElementLike) {
         await WaitHelper.getInstance().waitForElementToBeDisplayed(item);
         return await browser.touchAction({
             action: 'press',
@@ -25,11 +28,11 @@ export class ElementHelper {
         });
     }
 
-    static async actionDragAndDrop(source: WebdriverIO.Element, destination: WebdriverIO.Element) {
+    static async actionDragAndDrop(source: ElementLike, destination: ElementLike) {
         return await source.dragAndDrop(destination);
     }
 
-    static async actionDoubleClick(optElementOrButton?: WebdriverIO.Element, optButton?: WebdriverIO.Element) {
+    static async actionDoubleClick(optElementOrButton?: ElementLike, optButton?: ElementLike) {
         if (optElementOrButton) {
             return await optElementOrButton.doubleClick()
         }
@@ -38,7 +41,7 @@ export class ElementHelper {
         }
     }
 
-    static async actionClick(optElementOrButton?: WebdriverIO.Element, optButton?: WebdriverIO.Element) {
+    static async actionClick(optElementOrButton?: ElementLike, optButton?: ElementLike) {
         if (optElementOrButton) {
             return await browser.touchAction({
                 action: 'tap',
@@ -53,14 +56,14 @@ export class ElementHelper {
         }
     }
 
-    static async actionHoverOver(locator: WebdriverIO.Element) {
+    static async actionHoverOver(locator: ElementLike) {
         return await browser.touchAction({
             action: 'moveTo',
             element: locator
         });
     }
 
-    static async actionHoverOverAndClick(hoverOverLocator: WebdriverIO.Element, clickLocator: WebdriverIO.Element) {
+    static async actionHoverOverAndClick(hoverOverLocator: ElementLike, clickLocator: ElementLike) {
         return await browser.touchAction([
             { action: 'moveTo', element: hoverOverLocator },
             { action: 'press', element: clickLocator },
@@ -68,7 +71,7 @@ export class ElementHelper {
         ]);
     }
 
-    static async hasOption(select: WebdriverIO.Element, option: string) {
+    static async hasOption(select: ElementLike, option: string) {
         return await select.$('option=' + option).isDisplayed();
     }
 
@@ -81,7 +84,7 @@ export class ElementHelper {
         return await $(selector);
     }
 
-    static async getSelectedOption(select: WebdriverIO.Element) {
+    static async getSelectedOption(select: ElementLike) {
         return await select.$("option[selected]");
     }
 
@@ -98,7 +101,7 @@ export class ElementHelper {
     }
 
     static async notInDom(locator) {
-        return this.EC.stalenessOf(locator);
+        return ExpectedConditions.stalenessOf(locator);
     }
 
     static async isClickable(locator) {
@@ -106,36 +109,36 @@ export class ElementHelper {
     }
 
     static async hasText(locator, text: string) {
-        return this.EC.textToBePresentInElement(locator, text);
+        return ExpectedConditions.textToBePresentInElement(locator, text);
     }
 
     static async titleIs(title: string) {
         return ExpectedConditions.titleIs(title);
     }
 
-    static async hasClass(locator: WebdriverIO.Element, klass: string) {
+    static async hasClass(locator: ElementLike, klass: string) {
         return locator.getAttribute('class').then((classes: string) => {
             return classes && classes.split(' ').indexOf(klass) !== -1;
         });
     }
 
-    static async hasClassRegex(locator: WebdriverIO.Element, klass: string) {
+    static async hasClassRegex(locator: ElementLike, klass: string) {
         const classAttribute = await locator.getAttribute('class');
         const pattern = new RegExp('(^|\\s)' + klass + '(\\s|$)');
         return pattern.test(classAttribute);
     }
 
     static async clickwithElementName(targetElement: string) {
-        const elementObj: WebdriverIO.Element = await PageConfigHelper.findElement(targetElement, false);
+        const elementObj: ElementLike = await PageConfigHelper.findElement(targetElement, false);
         return this.click(elementObj);
     }
 
-    static async click(targetElement: WebdriverIO.Element) {
+    static async click(targetElement: ElementLike) {
         await WaitHelper.getInstance().waitForElementToBeClickable(targetElement);
         return targetElement.click();
     }
 
-    static async clickIfPresent(targetElement: WebdriverIO.Element) {
+    static async clickIfPresent(targetElement: ElementLike) {
         const isPresent = await targetElement.isDisplayed();
         if (isPresent) {
             return this.click(targetElement);
@@ -143,16 +146,16 @@ export class ElementHelper {
         return;
     }
 
-    static async clickUsingJs(targetElement: WebdriverIO.Element) {
+    static async clickUsingJs(targetElement: ElementLike) {
         await WaitHelper.getInstance().waitForElementToBeClickable(targetElement);
         return this.clickUsingJsNoWait(targetElement);
     }
 
-    static async clickUsingJsNoWait(targetElement: WebdriverIO.Element) {
+    static async clickUsingJsNoWait(targetElement: ElementLike) {
         return browser.execute('arguments[0].click();', targetElement);
     }
 
-    static async waitForElementToHaveClass(targetElement: WebdriverIO.Element,
+    static async waitForElementToHaveClass(targetElement: ElementLike,
         kClass: string,
         timeout = PageHelper.DEFAULT_TIMEOUT,
         message = '') {
@@ -161,7 +164,7 @@ export class ElementHelper {
             (result: any) => result, timeout, message);
     }
 
-    static async selectDropdownByIndex(elementt: WebdriverIO.Element, optionNum: number) {
+    static async selectDropdownByIndex(elementt: ElementLike, optionNum: number) {
         if (optionNum) {
             await elementt.$('< option />').then(function (options) {
                 options[optionNum].click();
@@ -169,91 +172,91 @@ export class ElementHelper {
         }
     }
 
-    static async scrollToElement(elementt: WebdriverIO.Element) {
+    static async scrollToElement(elementt: ElementLike) {
        await browser.execute('arguments[0].scrollIntoView();', elementt);
     }
 
-    static async scrollElementToMiddle(elementt: WebdriverIO.Element) {
+    static async scrollElementToMiddle(elementt: ElementLike) {
         await browser.execute("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", elementt);
      }
 
-    static async getAttributeValue(elem: WebdriverIO.Element, attribute: string) {
+    static async getAttributeValue(elem: ElementLike, attribute: string) {
         return elem.getAttribute(attribute)
             .then(function (text) {
                 return text.trim();
             });
     }
 
-    static async getText(elem: WebdriverIO.Element) {
+    static async getText(elem: ElementLike) {
         return elem.getText()
             .then(function (text) {
                 return text.trim();
             });
     }
 
-    static async isElementPresent(webElement: WebdriverIO.Element): Promise<boolean> {
+    static async isElementPresent(webElement: ElementLike): Promise<boolean> {
         return webElement != null && await webElement.isDisplayed();
     }
 
-    static async isElementEnabled(webElement: WebdriverIO.Element): Promise<boolean> {
+    static async isElementEnabled(webElement: ElementLike): Promise<boolean> {
         return webElement != null && await webElement.isEnabled();
     }
-    static async isElementTextPresent(webElement: WebdriverIO.Element, attributeType: string, attribute: string): Promise<boolean> {
+    static async isElementTextPresent(webElement: ElementLike, attributeType: string, attribute: string): Promise<boolean> {
         if (webElement == null) {
             return false;
         }
         const attributes = await webElement.getAttribute(attributeType);
         return await attributes.indexOf(attribute) !== -1;
     }
-    static async countElements(elements: WebdriverIO.Element[]): Promise<number> {
+    static async countElements(elements: ElementLike[]): Promise<number> {
         return await elements.length;
     }
 
-    static async isAnyElementPresent(webElements: WebdriverIO.Element[]): Promise<boolean> {
+    static async isAnyElementPresent(webElements: ElementLike[]): Promise<boolean> {
         let presencePromises = webElements.map(element => this.isElementPresent(element));
         let presences: boolean[] = await Promise.all(presencePromises);
         return presences.some(presence => presence === true);
     }
 
-    static async areAllElementPresent(webElements: WebdriverIO.Element[]): Promise<boolean> {
+    static async areAllElementPresent(webElements: ElementLike[]): Promise<boolean> {
         let presencePromises = webElements.map(element => this.isElementPresent(element));
         let presences: boolean[] = await Promise.all(presencePromises);
         return presences.every(presence => presence === true);
     }
 
-    static async isElementDisplayed(webElement: WebdriverIO.Element): Promise<boolean> {
+    static async isElementDisplayed(webElement: ElementLike): Promise<boolean> {
         return webElement != null && await webElement.isDisplayed();
     }
 
-    static async areNElementDisplayed(webElements: WebdriverIO.Element[], expectedCount: number, exactCount: boolean = false): Promise<boolean> {
+    static async areNElementDisplayed(webElements: ElementLike[], expectedCount: number, exactCount: boolean = false): Promise<boolean> {
         let displayPromises = webElements.map(element => this.isElementDisplayed(element));
         let displays: boolean[] = await Promise.all(displayPromises);
         const visibleElements = displays.filter(display => display === true);
         return exactCount ? visibleElements.length >= expectedCount : visibleElements.length === expectedCount;
     }
 
-    static async areAllElementDisplayed(webElements: WebdriverIO.Element[]): Promise<boolean> {
+    static async areAllElementDisplayed(webElements: ElementLike[]): Promise<boolean> {
         let displayPromises = webElements.map(element => this.isElementDisplayed(element));
         let displays: boolean[] = await Promise.all(displayPromises);
         return displays.every(display => display === true);
     }
 
-    static async isElementSelected(webElement: WebdriverIO.Element): Promise<boolean> {
+    static async isElementSelected(webElement: ElementLike): Promise<boolean> {
         return webElement != null && await webElement.isSelected();
     }
 
-    static async getAttribute(webElement: WebdriverIO.Element, attributeName: string): Promise<string> {
+    static async getAttribute(webElement: ElementLike, attributeName: string): Promise<string> {
         return webElement != null && await webElement.getAttribute(attributeName);
     }
 
-    static async clearElement(webElement: WebdriverIO.Element): Promise<void> {
+    static async clearElement(webElement: ElementLike): Promise<void> {
         await webElement.clearValue();
     }
     //https://stackoverflow.com/questions/39399477/protractor-scroll-into-view-not-working
-    static async scrollElementToView(element: WebdriverIO.Element): Promise<void> {
+    static async scrollElementToView(element: ElementLike): Promise<void> {
         await element.scrollIntoView();
     }
-    static async getElementText(webElement: WebdriverIO.Element): Promise<string> {
+    static async getElementText(webElement: ElementLike): Promise<string> {
         //await this.browserWait.waitElementToBeVisible(webElement);
         return await webElement.getText();
     }

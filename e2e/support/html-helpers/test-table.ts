@@ -1,8 +1,10 @@
+import type { ElementLike } from './element-helper';
+
 export class TableHelper {
     // webtable
-    private static webTable: WebdriverIO.Element;
+    private static webTable: ElementLike;
     //constructor  accepts dropdown as element
-    public static async setwebtableElement(webTableElement: WebdriverIO.Element) {
+    public static async setwebtableElement(webTableElement: ElementLike) {
         this.webTable = webTableElement;
     }
 
@@ -62,15 +64,9 @@ export class TableHelper {
 
     // verify presence of the text/data
     public static async presenceOfData(data: string) {
-        // verify the data by getting the size of the element matches based on the text/data passed
-        return await (this.webTable.$$("//td[normalize-space(text())='" + data + "']")).length.then(function (dataSize: number) {
-            if (dataSize > 0) {
-                return true;
-            }
-            else {
-                return false
-            }
-        })
+        const cells = await this.webTable.$$("//td[normalize-space(text())='" + data + "']");
+        const dataSize = await cells.length;
+        return dataSize > 0;
     }
     // get the data from a specific cell
     public static async getCellData(rowNumber: number, columnNumber: number) {

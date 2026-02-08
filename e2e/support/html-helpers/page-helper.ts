@@ -1,6 +1,7 @@
 /**
  * Page helper for general utility
  */
+import type { ElementLike } from './element-helper';
 import { WaitHelper } from './wait-helper';
 
 export class PageHelper {
@@ -33,7 +34,7 @@ export class PageHelper {
         return await browser.keys(key);
     }
 
-    static async executeInIframe(index: number | WebdriverIO.Element, fn: Function) {
+    static async executeInIframe(index: number | ElementLike, fn: Function) {
         await browser.switchToFrame(index);
         fn();
         await browser.switchToParentFrame();
@@ -43,7 +44,7 @@ export class PageHelper {
         return await browser.keys(key);
     }
 
-    static sendKeysToInputField(elem: WebdriverIO.Element, key: string) {
+    static sendKeysToInputField(elem: ElementLike, key: string) {
         elem.sendKeys([key]);
     }
 
@@ -55,7 +56,7 @@ export class PageHelper {
         //return browser.actions().sendKeys(key).perform();
     }
 
-    static actionMouseUp(location: WebdriverIO.Element) {
+    static actionMouseUp(location: ElementLike) {
         // return browser.actions().mouseUp(location).perform();
     }
 
@@ -135,7 +136,7 @@ export class PageHelper {
      * @param {string} attribute
      * @returns {string} attribute value
      */
-    public static async getAttributeValue(elem: WebdriverIO.Element,
+    public static async getAttributeValue(elem: ElementLike,
         attribute: string) {
         const attributeValue = await elem.getAttribute(attribute);
         return attributeValue.trim();
@@ -143,17 +144,17 @@ export class PageHelper {
 
     /**
      * Click on element
-     * @param {WebdriverIO.Element} targetElement
+     * @param {ElementLike} targetElement
      * @returns {any}
      */
-    public static async click(targetElement: WebdriverIO.Element) {
+    public static async click(targetElement: ElementLike) {
 
         await WaitHelper.getInstance().waitForElementToBeClickable(targetElement);
 
         return targetElement.click();
     }
 
-    public static async clickInFrame(targetElement: WebdriverIO.Element, frame: WebdriverIO.Element) {
+    public static async clickInFrame(targetElement: ElementLike, frame: ElementLike) {
 
         await WaitHelper.getInstance().waitForFrameElementToBeClickable(targetElement, frame);
 
@@ -164,10 +165,10 @@ export class PageHelper {
 
     /**
      * Click on the element and wait for it to get hidden
-     * @param {WebdriverIO.Element} targetElement
+     * @param {ElementLike} targetElement
      * @returns {PromiseLike<boolean> | Promise<boolean> | Q.Promise<any> | promise.Promise<any> | Q.IPromise<any>}
      */
-    public static async clickAndWaitForElementToHide(targetElement: WebdriverIO.Element) {
+    public static async clickAndWaitForElementToHide(targetElement: ElementLike) {
         await WaitHelper.getInstance().waitForElementToBeClickable(targetElement);
         await targetElement.click();
         return WaitHelper.getInstance().waitForElementToBeHidden(targetElement);
@@ -181,7 +182,7 @@ export class PageHelper {
         return browser.getUrl();
     }
 
-    static async getAllTexts(elements: WebdriverIO.Element[]) {
+    static async getAllTexts(elements: ElementLike[]) {
         let text: string[] = [];
         elements.forEach(async element => {
             text.push((await element.getText()).trim());

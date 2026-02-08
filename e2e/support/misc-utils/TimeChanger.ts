@@ -1,5 +1,5 @@
 import { DataTable } from '@cucumber/cucumber';
-import * as moment from 'moment';
+import moment from 'moment';
 export class TimeChanger {
 
     private addYear: number = 0;

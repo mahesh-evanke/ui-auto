@@ -31,7 +31,7 @@ When('User are on scenare title {string}', async (title: string) => {
 
 When('Verify field {string} text is {string}', async (filedName: string, expectedText: string) => {
     await PageConfigHelper.changeFrame();
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(filedName, false);
+    const element = await PageConfigHelper.findElement(filedName, false);
     let actualText: string = await element.getText();
     actualText = StringManipulationHelper.removeSepecial(actualText);
     expectedText = StringManipulationHelper.removeSepecial(expectedText);
@@ -50,7 +50,7 @@ Given('enters {string} text in {string} textbox', async (txtInput: string, eleme
         let time: Date = <Date>enrollCalc.dob;
         txtInput = TimeChanger.getActualTime(txtInput, time);
     }
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(elementName, false);
+    const element = await PageConfigHelper.findElement(elementName, false);
 
     if ((PageConfigHelper.getCurrentPage() == "Person Info") || (PageConfigHelper.getCurrentPage() == "Contact Info")) {
         await browser.switchToFrame(await $('<iframe />'));
@@ -97,8 +97,8 @@ When('click More Info link, and verfiy popup text', async (table: DataTable) => 
     for (let rowNum = 0; rowNum < tableHash.length; rowNum++) {
         const xpath = "(//a[contains(.,'More on order of priority')])[" + tableHash[rowNum].linkNumber + "]" + " | " + "(//a[contains(.,'More Info')])[" + tableHash[rowNum].linkNumber + "]" + " | " + "(//a[contains(.,'More info')])[" + tableHash[rowNum].linkNumber + "]";
         await ElementHelper.click(await $(xpath));
-        let titles: WebdriverIO.ElementArray = await $$("//*[contains(@id,'More_Info')]//uef-modal-header | //*[contains(@id,'MoreInfo')]//uef-modal-header");
-        let texts: WebdriverIO.ElementArray = await $$("//*[contains(@id,'More_Info')]//uef-modal-body  | //*[contains(@id,'MoreInfo')]//uef-modal-body");
+        let titles = await $$("//*[contains(@id,'More_Info')]//uef-modal-header | //*[contains(@id,'MoreInfo')]//uef-modal-header");
+        let texts = await $$("//*[contains(@id,'More_Info')]//uef-modal-body  | //*[contains(@id,'MoreInfo')]//uef-modal-body");
 
         if (PageConfigHelper.getCurrentPage() == "Marriage") {
             await browser.switchToFrame(await $('<iframe />'));
@@ -110,7 +110,8 @@ When('click More Info link, and verfiy popup text', async (table: DataTable) => 
             texts = await $$("//uef-modal-body");
         }
         let actualTitle = ""
-        for (let i = 0; i < titles.length; i++) {
+        const titlesLen = await titles.length;
+        for (let i = 0; i < titlesLen; i++) {
             if (await titles[i].isDisplayed()) {
                 actualTitle = await titles[i].getText();
                 break;
@@ -118,7 +119,7 @@ When('click More Info link, and verfiy popup text', async (table: DataTable) => 
         }
 
         let actualText = ""
-        for (let i = 0; i < texts.length; i++) {
+        for (let i = 0; i < (await texts.length); i++) {
             if (await texts[i].isDisplayed()) {
                 actualText = await texts[i].getText();
                 break;
@@ -127,11 +128,12 @@ When('click More Info link, and verfiy popup text', async (table: DataTable) => 
         await assert.isTrue(StringManipulationHelper.verifyTwoStringIncluded(actualTitle, tableHash[rowNum].expectedTitle), "actual is: " + actualTitle + ", expected is: " + tableHash[rowNum].expectedTitle);
         await assert.isTrue(StringManipulationHelper.verifyTwoStringIncluded(actualText, tableHash[rowNum].expectedText), "actual is: " + actualText + ", expected is: " + tableHash[rowNum].expectedText);
 
-        let closeButtons: WebdriverIO.ElementArray = await $$("//button[.='Close']");
+        let closeButtons = await $$("//button[.='Close']");
         if (PageConfigHelper.getCurrentPage() == "Marriage") {
             closeButtons = await $$("//body/a");
         }
-        for (let i = 0; i < closeButtons.length; i++) {
+        const closeButtonsLen = await closeButtons.length;
+        for (let i = 0; i < closeButtonsLen; i++) {
             if (await closeButtons[i].isDisplayed() && await closeButtons[i].isClickable()) {
                 await ElementHelper.click(closeButtons[i]);
                 break;
@@ -156,7 +158,7 @@ When('click page link and verify new pages opens with title', async (table: Data
 });
 
 When('User selects {string} link on Person Status screen', async (objName: string) => {
-    const element: WebdriverIO.Element = await $("//a[contains(.,'" + objName + "')]");
+    const element = await $("//a[contains(.,'" + objName + "')]");
     await ElementHelper.click(element);
 });
 
@@ -203,7 +205,7 @@ When('User verify information on {string} screen with following params', async (
                 }
 
             } else {
-                let pgelement: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+                let pgelement = await PageConfigHelper.findElement(objName, false);
                 var objType = await pgelement.getAttribute('type');
                 var objTagName = await pgelement.getTagName();
                 if (objType == "text" && objTagName == "input") {
@@ -295,24 +297,24 @@ When('User verifies field entries on the {string} screen in query mode', async (
 
         if ((tableHash[fieldNum].Value).toLowerCase() == "<blank>") continue;
         let locator = "//*[contains(text() , '" + tableHash[fieldNum].Field + "')]/..";
-        let divs: WebdriverIO.ElementArray = await $$(locator);
-        if (divs.length == 0) {
+        let divs = await $$(locator);
+        if ((await divs.length) == 0) {
             let locator = "//*[text()[contains(., '" + tableHash[fieldNum].Field + "')]]/../..";
             divs = await $$(locator);
         }
         let uiText = null;
-        for (let elemNum = 0; elemNum < divs.length; elemNum++) {
+        for (let elemNum = 0; elemNum < (await divs.length); elemNum++) {
             if ((await divs[elemNum].getText()).startsWith("Hide ")) {
                 continue;
             } else {
-                let div: WebdriverIO.Element = divs[elemNum];
+                let div = divs[elemNum];
                 while ((await div.getTagName()) != "div") {
                     div = await div.$("./..");
                 }
-                let texttElem: WebdriverIO.Element;
-                if ((await div.$$(".//span[last()]")).length > 0) {
+                let texttElem;
+                if ((await (await div.$$(".//span[last()]")).length) > 0) {
                     texttElem = await div.$(".//span[last()]");
-                } else if ((await div.$$("./..//em[last()]")).length > 0) {
+                } else if ((await (await div.$$("./..//em[last()]")).length) > 0) {
                     texttElem = await div.$("./..//em[last()]");
                 } else {
                     texttElem = div;
@@ -334,7 +336,7 @@ When('User verifies field entries on the {string} screen in query mode', async (
     await browser.switchToParentFrame();
 });
 When('enters SSN with criteria {string} in {string} textbox', async (criteriaName: string, ObjName: string) => {
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(ObjName, false);
+    const element = await PageConfigHelper.findElement(ObjName, false);
     let ssn = CSVReader.getData(criteriaName);
     await TextboxHelper.sendKeys(element, ssn, false);
     enrollCalc = new EnrollCalcInput();
@@ -348,13 +350,13 @@ When('User clicks on {string} button', async (btnName: string) => {
             enrollCalc.filingDate = flgDtTxt.split("Filing Date")[1];
         }
         else {
-            const element: WebdriverIO.Element = await PageConfigHelper.findElement("ProtectiveFilingDate", false);
+            const element = await PageConfigHelper.findElement("ProtectiveFilingDate", false);
             enrollCalc.filingDate = await element.getAttribute("value");
         }
     } else if (PageConfigHelper.getCurrentPage() == "Health Insurance" && btnName == "Next") {
         await enrollCalc.setVariableValues();
     }
-    const elementRef: WebdriverIO.Element = await PageConfigHelper.findElement(btnName, true);
+    const elementRef = await PageConfigHelper.findElement(btnName, true);
     await ElementHelper.click(elementRef);
     await browser.switchToParentFrame();
 
@@ -416,14 +418,14 @@ When('clicks on {string} button', async (objName: string) => {
     if (objName == "<blank>")
         return;
     await PageConfigHelper.changeFrame();
-    const elementRef: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+    const elementRef = await PageConfigHelper.findElement(objName, false);
     await ElementHelper.click(elementRef);
     await browser.switchToParentFrame();
 });
 
 When('selects {string} text from {string} Drop-down list', async (optionVal: string, objName: string) => {
     await browser.pause(500);
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+    const element = await PageConfigHelper.findElement(objName, false);
     if (optionVal != "<Skip>") {
         if (PageConfigHelper.getCurrentPage() == "Person Info" || PageConfigHelper.getCurrentPage() == "Contact Info") {
             await browser.switchToFrame(await $('<iframe />'));
@@ -441,7 +443,7 @@ When('selects {string} text from {string} Drop-down list', async (optionVal: str
 });
 
 When('selects {string} from {string} Drop-down list', async (optionVal: string, objName: string) => {
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+    const element = await PageConfigHelper.findElement(objName, false);
     if (optionVal != "<Skip>") {
         if ((PageConfigHelper.getCurrentPage() == "Contact Info") || (PageConfigHelper.getCurrentPage() == "Person Info")) {
             await browser.switchToFrame(await $('<iframe />'));
@@ -473,13 +475,13 @@ When('verify {string} text is present on the screen', async (txtName: string) =>
 });
 
 Given('select {string} Checkbox', async (objName: string) => {
-    var element: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false, 'clickable');
+    var element = await PageConfigHelper.findElement(objName, false, 'clickable');
     element=await element.$('..');
     await CheckboxHelper.markCheckbox(element, true);
 });
 
 Given('select {string} Checkbox with Wait', async (objName: string) => {
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false, 'clickable');
+    const element = await PageConfigHelper.findElement(objName, false, 'clickable');
     await CheckboxHelper.markCheckboxWithWaitDisplay(element, true);
 });
 
@@ -487,7 +489,7 @@ When('clicks on {string} Radio button', async (objName: string) => {
     if (PageConfigHelper.getCurrentPage() == "Person Info" || PageConfigHelper.getCurrentPage() == "Contact Info" || PageConfigHelper.getCurrentPage() == "Marriage") {
         await browser.switchToFrame(await $('<iframe />'));
     }
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+    const element = await PageConfigHelper.findElement(objName, false);
     await ElementHelper.click(element);
     await browser.switchToParentFrame();
 });
@@ -508,8 +510,8 @@ When('verify data from {string} web table', async (objName: string, table: DataT
     await ElementHelper.scrollElementToMiddle(rows[0]);
 
     let expRows = table.raw().length;
-    if (rows.length == expRows) {
-        for (var i = 1; i < rows.length; i++) {
+    if ((await rows.length) == expRows) {
+        for (var i = 1; i < (await rows.length); i++) {
             let actArray = $$("//*[@id='" + objName + "']//table//th").map((result) => {
                 return result.getText();
             });
@@ -635,7 +637,7 @@ When('User verify information on {string} screen header with following parameter
 });
 
 Then('verify alerts displayed on the screen', async (table: DataTable) => {
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement("Alerts and Edits", false);
+    const element = await PageConfigHelper.findElement("Alerts and Edits", false);
     let actualtext = await element.getText();
     await ElementHelper.scrollElementToMiddle(element);
     let actTextArr = actualtext.split("Alerts");
@@ -667,14 +669,14 @@ When('verify information from {string} webtable', async (objName: string, table:
     let rows = await $$("//*[@id='" + objName + "']//table//tr");
 
     let expRows = table.raw().length;
-    if (rows.length == expRows) {
-        for (var i = 1; i < table.raw().length; i++) {
+    if ((await rows.length) == expRows) {
+        for (var i = 1; i < (await rows.length); i++) {
             let actArray = await $$("//*[@id='" + objName + "']//table//tr[" + i + "]/td").map((result) => {
                 return result.getText();
             });
 
             let expTableColCount = 0;
-            for (var j = 1; j < colhdrs.length; j++) {
+            for (var j = 1; j < (await colhdrs.length); j++) {
                 let cellText = colhdrtext[j];
                 let k = j + 1;
 
@@ -705,7 +707,7 @@ Then('User switches to SSIWeb application', async () => {
 });
 
 When('clicks on {string} link', async (objName: string) => {
-    var element: WebdriverIO.Element;
+    var element;
     if (objName == "Claims Summary" || objName == "Sign Out")
         element = await PageConfigHelper.findElement(objName, true);
     else
@@ -737,7 +739,7 @@ Given('User inputs information on {string} screen with following params', async 
                 }
 
             } else {
-                let pgelement: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+                let pgelement = await PageConfigHelper.findElement(objName, false);
                 var objType = await pgelement.getAttribute('type');
                 var objTagName = await pgelement.getTagName();
                 if (objType == "text" && objTagName == "input") {
@@ -785,7 +787,7 @@ Given('User inputs information on {string} screen with following parameters', as
     for (var i = 0; i < data.length; i++) {
         var objName = data[i].Field;
         var objValue = data[i].Value;
-        const pgelement: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+        const pgelement = await PageConfigHelper.findElement(objName, false);
         var objType = await pgelement.getAttribute('type');
         var objTagName = await pgelement.getTagName();
         if (objType == "text" && objTagName == "input")
@@ -836,9 +838,9 @@ When('delete Lawful Presence status row data', async () => {
 });
 
 When('save New Lawful Presence Status row data', async () => {
-    await $$('[name="okBtn"]').then(function (items) {
-        items[4].click();
-    })
+    const items = await $$('[name="okBtn"]');
+    const el = await items[4];
+    await el.click();
 });
 
 When('User clicks on {string} link on Person Status screen', async (pageName: string) => {
@@ -849,13 +851,13 @@ When('User clicks on {string} link on Person Status screen', async (pageName: st
 
 Given('clicks on Claims Summary button', async function () {
     browser.pause(1000);
-    await $$("//a[contains(@class,'uef-pro-nav-main_link')]").then(function (items) {
-        items[1].click();
-    })
+    const items = await $$("//a[contains(@class,'uef-pro-nav-main_link')]");
+    const link = await items[1];
+    await link.click();
 });
 
 When('clicks on {string} link with {string} instance', async (objName: string, instStr: string) => {
-    //var element: WebdriverIO.Element;
+    //var element;
 
     let eleLst = $$('.uef-icon-dropdown-btn.uef-dropdown-toggle');
 
@@ -879,8 +881,8 @@ When('user fills in birth proof and citizenship information', async function () 
 
 //Page Chevron Control
 When('clicks on {string} Chevron link', async (objName: string) => {
-    const chevronLinks: WebdriverIO.ElementArray = await $$("//span[@class='uef-toggle_control-text']");
-    for (let i = 0; i < chevronLinks.length; i++) {
+    const chevronLinks = await $$("//span[@class='uef-toggle_control-text']");
+    for (let i = 0; i < (await chevronLinks.length); i++) {
         if ((await chevronLinks[i].getText()).includes(objName)) {
             await chevronLinks[i].click();
             break;
@@ -890,7 +892,7 @@ When('clicks on {string} Chevron link', async (objName: string) => {
 
 When('verifies status of {string} chevron link and {string} text in textbox', async (elementName: string, text: string) => {
     await browser.pause(1000);
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(elementName, false);
+    const element = await PageConfigHelper.findElement(elementName, false);
     const actualShow: boolean = await element.isDisplayed();
     assert.equal(actualShow, true);
     const actual = await element.getValue();
@@ -989,7 +991,7 @@ Then('enters {string} text into textfield', async (inputValue: string) => {
 });
 
 When('select Annuity from Civil Service Annuity Type Drop-down List', async () => {
-    const loc: WebdriverIO.Element = await $("//select[@id = 'civilServiceAnnuityType']");
+    const loc = await $("//select[@id = 'civilServiceAnnuityType']");
     await loc.click();
     await loc.$("//option[@value = 'CSA']").click();
 
@@ -997,7 +999,7 @@ When('select Annuity from Civil Service Annuity Type Drop-down List', async () =
 
 Then('system generates notice messages with description {string}', async (errMsg: string) => {
     //await browser.pause(2000);
-    //const element: WebdriverIO.Element = await PageConfigHelper.findElement("Notice Message", true);
+    //const element = await PageConfigHelper.findElement("Notice Message", true);
     let errorMsgs = errMsg.split(';');
     let expText = '';
     var Objs = await $$('<uef-notice />');
@@ -1184,7 +1186,7 @@ Then('Verify {string} PDF data generated from CCM', async (fileName: string) => 
 //----------------------------------------------------------------------------------------------------------------------------------------------------------
 Then('system generates notice warning message with description {string}', async (errMsg: string) => {
     await browser.pause(2000);
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement("Notice Warning Message", true);
+    const element = await PageConfigHelper.findElement("Notice Warning Message", true);
     var expText = await ElementHelper.getText(element);
     expText = expText.replace("\n", "");
     assert.equal(expText, errMsg);
@@ -1195,7 +1197,7 @@ Then('system generates edit message with description {string}', async (errMsg: s
     await PageConfigHelper.changeFrame();
     let errorMsgs = errMsg.split(';');
     let expText = '';
-    let len = (await $$("//li[starts-with(@id,'uef-input-error-')]")).length;
+    let len = await (await $$("//li[starts-with(@id,'uef-input-error-')]")).length;
     for (var i = 1; i <= len; i++) {
         var tmpText = await $("(//li[starts-with(@id,'uef-input-error-')])[" + i + "]").getText();
         if (i == 1)
@@ -1228,7 +1230,7 @@ Then('system generates error message with description {string} in a frame', asyn
     let actualText = "";
     while (actualText == "") {
         let errorMessageElem = await $$("//a[contains(@id, 'uef-error')]");
-        for (let i = 0; i < errorMessageElem.length; i++) {
+        for (let i = 0; i < (await errorMessageElem.length); i++) {
             actualText = actualText + await errorMessageElem[i].getText() + "; ";
 
         }
@@ -1260,7 +1262,7 @@ Then('system generates error message with description {string} on Contact Info M
         await browser.switchToFrame(await $('<iframe />'));
         await browser.switchToFrame(await $('<iframe />'));
         const screenErrorsArray = await $$("//*[contains(@id, 'uef-error')]");
-        for (let i = 1; i < screenErrorsArray.length; i++) {
+        for (let i = 1; i < (await screenErrorsArray.length); i++) {
             assert.equal(await screenErrorsArray[i].getText(), errorMsgsArray[i - 1].trim());
 
         }
@@ -1268,15 +1270,15 @@ Then('system generates error message with description {string} on Contact Info M
 });
 
 When('clicks on {string} button from {string} popup window', async (objName: string, popupWindowObj: string) => {
-    const popupWinRef: WebdriverIO.Element = await PageConfigHelper.findElement(popupWindowObj, false);
-    //const buttonObj: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+    const popupWinRef = await PageConfigHelper.findElement(popupWindowObj, false);
+    //const buttonObj = await PageConfigHelper.findElement(objName, false);
     await WaitHelper.getInstance().waitForElementToBeDisplayed(popupWinRef);
-    const buttonref: WebdriverIO.Element = await popupWinRef.$('*=' + objName);
+    const buttonref = await popupWinRef.$('*=' + objName);
     await buttonref.click();
 });
 
 When('verify {string} text is present in {string} popup window', async (txtName: string, popupWindowObj: string) => {
-    const popupWinRef: WebdriverIO.Element = await PageConfigHelper.findElement(popupWindowObj, false);
+    const popupWinRef = await PageConfigHelper.findElement(popupWindowObj, false);
     await WaitHelper.getInstance().waitForElementToBeDisplayed(popupWinRef);
     //console.log(await popupWinRef.element(By.cssContainingText('*', txtName)).isDisplayed());
     assert.equal(await popupWinRef.$('*=' + txtName).isDisplayed(), true);
@@ -1318,21 +1320,21 @@ Given('enters {string} text in {string} textbox in a frame', async (txtInput: st
     if (txtInput == "<blank>")
         return;
     await PageConfigHelper.changeFrame();
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(elementName, false);
+    const element = await PageConfigHelper.findElement(elementName, false);
     await TextboxHelper.sendKeys(element, txtInput, false);
     await browser.switchToParentFrame();
 });
 
 When('click on {string} button in a frame', async (objName: string) => {
     await PageConfigHelper.changeFrame();
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+    const element = await PageConfigHelper.findElement(objName, false);
     await ElementHelper.click(element);
     await browser.switchToParentFrame();
 });
 
 When('click on {string} Radio button in a frame', async (objName: string) => {
     await PageConfigHelper.changeFrame();
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+    const element = await PageConfigHelper.findElement(objName, false);
     await ElementHelper.click(element);
     await browser.switchToParentFrame();
 });
@@ -1341,7 +1343,7 @@ When('click on {string} Checkbox in a frame', async (objName: string) => {
     if (objName == "<blank>")
         return;
     await PageConfigHelper.changeFrame();
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+    const element = await PageConfigHelper.findElement(objName, false);
     await CheckboxHelper.markCheckbox(element, true);
     await browser.switchToParentFrame();
 });
@@ -1350,7 +1352,7 @@ When('selects {string} from {string} Drop-down list in a frame', async (optionVa
     if (optionVal == "<blank>" || optionVal == "<Skip>")
         return;
     await PageConfigHelper.changeFrame();
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+    const element = await PageConfigHelper.findElement(objName, false);
     await DropDownHelper.selectOptionByText(element, optionVal);
     await browser.switchToParentFrame();
 });
@@ -1370,7 +1372,7 @@ Then('delete current Citizen Information entry', async function () {
 });
 
 Then('verify {string} label is displayed below date field', async (elementName: string) => {
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(elementName, false);
+    const element = await PageConfigHelper.findElement(elementName, false);
     await ElementHelper.scrollElementToMiddle(element);
     element.getText().then(function (text) {
         let today = new Date();
@@ -1392,7 +1394,7 @@ When('check if {string} text is present on the screen', async (txtName: string) 
 });
 
 When('select {string} from Report of Contact Relationship to Claimant Drop-down', async (optionVal: string) => {
-    const locator: WebdriverIO.Element = await $("//select[@id = 'relationshipToClientType']");
+    const locator = await $("//select[@id = 'relationshipToClientType']");
     await locator.click();
     (await locator.$$('<option />')).forEach(function (item) {
         item.getText().then(function (values) {
@@ -1479,7 +1481,7 @@ Then('system generates notice message with description {string}', async (errMsg:
     let errMsgs = errMsg.split(';');
     await PageConfigHelper.changeFrame();
     const screenMessage = await $$("//*[contains(@class,'uef-notice ')]");
-    for (let i = 0; i < screenMessage.length; i++) {
+    for (let i = 0; i < (await screenMessage.length); i++) {
         const uiText = (await screenMessage[i].getText()).replace("\n", "").replace("\r", "").trim();
         assert.equal(errMsgs[i].trim(), uiText);
     }
@@ -1488,7 +1490,7 @@ Then('system generates notice message with description {string}', async (errMsg:
 
 Then('system generates exclusion message with description {string}', async (errMsg: string) => {
     await browser.pause(1000);
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement("Notice Message", true);
+    const element = await PageConfigHelper.findElement("Notice Message", true);
     var expText = await ElementHelper.getText(element);
     //expect(expText).to.eventually.equal(errMsg);
     assert.equal(expText, errMsg);
@@ -1522,7 +1524,7 @@ Then('enters {string} date in {string} textbox', async (textVal: string, objName
     const daysIntVal = textValueArray[5];
     const daysVal = textValueArray[6];
 
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(objName, false);
+    const element = await PageConfigHelper.findElement(objName, false);
     let currDate: Date = new Date();
     const opts = { day: "2-digit", month: "2-digit", year: "numeric" };
     const opts_short = { month: "2-digit", year: "numeric" };
@@ -1564,7 +1566,7 @@ Then('enters {string} date in {string} textbox', async (textVal: string, objName
 //-----------------------------------------------------------------------------------------------------------------------------------------------------------
 //---Narasimha updates-------
 When('input {string} text in {string} textbox', async (txtInput: string, elementName: string) => {
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(elementName, false);
+    const element = await PageConfigHelper.findElement(elementName, false);
     const today: Date = new Date();
     if (txtInput.search("CURRENT_DATE") > 0) {
         if (txtInput.search("0Y") > 0) {
@@ -1596,7 +1598,7 @@ When('input {string} text in {string} textbox', async (txtInput: string, element
 });
 ///Narasimha Enrollment CheckBox Element and Value
 When('enters {string} for {string}', async (value: string, elementName: string) => {
-    const element: WebdriverIO.Element = await PageConfigHelper.findElement(elementName, false);
+    const element = await PageConfigHelper.findElement(elementName, false);
     if (value == "Yes") await CheckboxHelper.markCheckbox(element, true);
 });
 //-----end of Narsimha updates--------
@@ -1662,7 +1664,7 @@ When('check if Uninsured', async () => {
     const chktxt = "Worked last year or any time this year";
         let txtVal = await $$("//*[text()[contains(.,'" + chktxt + "')]]");
         let checkText = false;
-        for (let i = 0; i < txtVal.length; i++) {
+        for (let i = 0; i < (await txtVal.length); i++) {
             if (await txtVal[i].isDisplayed()) {
                 checkText = true;
                 break;
@@ -1677,18 +1679,18 @@ When('click More Info link, and verify popup text', async (table: DataTable) => 
     for (let rowNum = 0; rowNum < tableHash.length; rowNum++) {
         const xpath = "(//a[contains(.,'More Info')])[" + tableHash[rowNum].linkNumber + "]" + " | " + "(//a[contains(.,'More info')])[" + tableHash[rowNum].linkNumber + "]";
         await ElementHelper.click(await $(xpath));
-        const titles: WebdriverIO.ElementArray = await $$("//*[contains(@id,'More_Info')]//uef-modal-header | //*[contains(@id,'help-modal')]//uef-modal-header");
+        const titles = await $$("//*[contains(@id,'More_Info')]//uef-modal-header | //*[contains(@id,'help-modal')]//uef-modal-header");
         let actualTitle = ""
-        for (let i = 0; i < titles.length; i++) {
+        for (let i = 0; i < (await titles.length); i++) {
             if (await titles[i].isDisplayed()) {
                 actualTitle = await titles[i].getText();
                 break;
             }
         }
 
-        const texts: WebdriverIO.ElementArray = await $$("//*[contains(@id,'More_Info')]//uef-modal-body | //*[contains(@id,'help-modal')]//uef-modal-body");
+        const texts = await $$("//*[contains(@id,'More_Info')]//uef-modal-body | //*[contains(@id,'help-modal')]//uef-modal-body");
         let actualText = ""
-        for (let i = 0; i < texts.length; i++) {
+        for (let i = 0; i < (await texts.length); i++) {
             if (await texts[i].isDisplayed()) {
                 actualText = await texts[i].getText();
                 break;
@@ -1697,8 +1699,8 @@ When('click More Info link, and verify popup text', async (table: DataTable) => 
         await assert.isTrue(StringManipulationHelper.verifyTwoStringIncluded(actualTitle, tableHash[rowNum].expectedTitle), "actual is: " + actualTitle + ", expected is: " + tableHash[rowNum].expectedTitle);
         await assert.isTrue(StringManipulationHelper.verifyTwoStringIncluded(actualText, tableHash[rowNum].expectedText), "actual is: " + actualText + ", expected is: " + tableHash[rowNum].expectedText);
 
-        let closeButtons: WebdriverIO.ElementArray = await $$("//button[.='Close']");
-        for (let i = 0; i < closeButtons.length; i++) {
+        let closeButtons = await $$("//button[.='Close']");
+        for (let i = 0; i < (await closeButtons.length); i++) {
             if (await closeButtons[i].isDisplayed() && await closeButtons[i].isClickable()) {
                 await ElementHelper.click(closeButtons[i]);
                 break;
@@ -1709,7 +1711,7 @@ When('click More Info link, and verify popup text', async (table: DataTable) => 
 
 When('verify {string} is not on {string} screen', async (value: string, screenName: string) => {
     if((value == "Add Tax Withholding Rate button") && (screenName == "Voluntary Tax Withholding")){
-        const AddTaxRate: WebdriverIO.Element = await PageConfigHelper.findElement("Add Tax Withholding Rate button", false);
+        const AddTaxRate = await PageConfigHelper.findElement("Add Tax Withholding Rate button", false);
         const val = await AddTaxRate.isExisting();
         await assert.isFalse(val);
     }

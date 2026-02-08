@@ -22,17 +22,14 @@
     "typescript": "^4.5.2",
     "underscore": "^1.13.7",
     "wdio-cucumberjs-json-reporter": "^6.0.1",
-    "wdio-wait-for": "^2.2.6"
-  },
-  "overrides": {
-    "reflect-metadata": "^0.2.2",
-    "uuid": "^9.0.0",
-    "glob": "^11.0.2"
+"wdio-wait-for": "^2.2.6",
+    "webdriverio": "^9.23.0"
   },
   "scripts": {
     "wdio": "wdio run ./e2e/config/wdio.conf.ts",
     "checkNum": "ts-node e2e/support/misc-utils/FeatureFileReport.ts",
     "test": "ts-node ./e2e/config/test.ts",
+    "remote-edge": "npx tsx e2e/scripts/run-remote-edge.example.ts",
     "repl": "npx wdio repl chrome",
     "cleaninstall": "node -e \"const fs=require('fs');const p=require('path');try{fs.rmSync(p.join(process.cwd(),'node_modules'),{recursive:true});}catch(e){} try{fs.unlinkSync(p.join(process.cwd(),'package-lock.json'));}catch(e){}\" && npm install"
   }

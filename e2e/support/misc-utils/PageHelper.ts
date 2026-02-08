@@ -121,7 +121,7 @@ export class PageConfigHelper {
             return;
         }
         const elements = await PageConfigHelper.findElements(key, false);
-        if (elements.length == 0) {
+        if ((await elements.length) == 0) {
             console.log("-----------------element not exist "+ key)
             return;
         }
@@ -177,9 +177,9 @@ export class PageConfigHelper {
             } else if (objValue.toLowerCase() == "no") {
                 elem = await $("//input[@id='" + locator[1] + "-option-false']/../.. | //input[@id='" + locator[1] + "-option-no']/../..");
             } else {
-                let labels = await element.$$('.//label');
-                for (let i = 0; i < labels.length; i++) {
-                    let mainId = await element.getAttribute("field-name");
+                let labels = await (element as any).$$('.//label');
+                for (let i = 0; i < (await labels.length); i++) {
+                    let mainId = await (element as any).getAttribute("field-name");
                     let labelId = await labels[i].getAttribute("id");
                     let subId = labelId.substring((mainId.length + 8), (labelId.length - 6));
                     let labelText = await labels[i].getText();
@@ -194,9 +194,9 @@ export class PageConfigHelper {
             await ElementHelper.click(elem);
 
         } else if (objTagName == "button") {
-            if (elements.length != 1 && Number.isInteger(Number(objValue)) && Number(objValue) > 0) {
+            if ((await elements.length) != 1 && Number.isInteger(Number(objValue)) && Number(objValue) > 0) {
                 const order = parseInt(objValue);
-                await ElementHelper.click(elements[order - 1]);
+                await ElementHelper.click(await elements[order - 1]);
             } else if (objValue.toLocaleLowerCase() == 'yes') {
                 await ElementHelper.click(element);
             }

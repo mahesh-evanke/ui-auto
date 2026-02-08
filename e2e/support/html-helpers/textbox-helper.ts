@@ -10,7 +10,7 @@ export class TextboxHelper {
   */
     public static async getValue(locator: ElementLike): Promise<string> {
         await WaitHelper.getInstance().waitForElementToBeDisplayed(locator);
-        return await locator.getValue();
+        return await (locator as any).getValue();
     }
 
     /**
@@ -18,11 +18,11 @@ export class TextboxHelper {
      * @param {ElementFinder} locator
      */
     public static async clearText(locator: ElementLike) {
-        await locator.clearValue();
+        await (locator as any).clearValue();
     }
 
     public static async sendKeyswithElementName(locatorName: string, value: string, sendEnter = false) {
-        const textElement: WebdriverIO.Element = await PageConfigHelper.findElement(locatorName, false);
+        const textElement = await PageConfigHelper.findElement(locatorName, false);
         await TextboxHelper.sendKeys(textElement, value, false);
     }
 
@@ -37,9 +37,9 @@ export class TextboxHelper {
         sendEnter = false) {
         await WaitHelper.getInstance().waitForElementToBeDisplayed(locator);
         await this.clearText(locator);
-        await locator.setValue(value);
+        await (locator as any).setValue(value);
         if (sendEnter) {
-            await locator.sendKeys(['ENTER']);
+            await (locator as any).sendKeys(['ENTER']);
         }
     }
 

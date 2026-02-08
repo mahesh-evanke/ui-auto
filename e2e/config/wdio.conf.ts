@@ -259,8 +259,8 @@ export const config: WebdriverIO.Config = {
         ],
         // <boolean> show full backtrace for errors
         backtrace: false,
-        // <string[]> ("extension:module") require files with the given EXTENSION after requiring MODULE (repeatable)
-        requireModule: [],
+        // Load TypeScript step definitions (required when require points to .ts files)
+        requireModule: ['ts-node/register'],
         // <boolean> invoke formatters without executing steps
         dryRun: false,
         // <boolean> abort the run on first failure
@@ -275,7 +275,8 @@ export const config: WebdriverIO.Config = {
         profile: [],
         // <boolean> fail if there are any undefined or pending steps
         strict: false,
-        // <string> (expression) only execute the features or scenarios with tags matching the expression
+        // Tag filter: use 'tags' (standard); tagExpression is deprecated
+        tags: String(e2eConfig.tags ?? ''),
         tagExpression: String(e2eConfig.tags ?? ''),
         // <number> timeout for step definitions
         timeout: Number(e2eConfig.getPageTimeout ?? 40000),
@@ -475,7 +476,7 @@ export const config: WebdriverIO.Config = {
     onComplete: function (exitCode, config, capabilities, results) {
         endTime = new Date();
         let time = moment(startTime).format("YYYY_MM_DD_dddd_HH_mm");
-        let repost = "e2e/reportHtml/" + time;
+        let repost = reportFolder + '/reportHtml/' + time;
         try {
             generate({
                 jsonDir: reportFolder + '/json/',

@@ -51,34 +51,34 @@ export class EnrollCalcInput {
     }
 
     public async setVariableValues() {
-        let smiEnrolment = await (await PageConfigHelper.findElement("SMIEnrollmentOptions", false)).getValue();
+        let smiEnrolment = String(await (await PageConfigHelper.findElement("SMIEnrollmentOptions", false)).getValue());
         if (smiEnrolment.trim() == "Refuse") {
             this.smiRefusalInd = "R";
         }
         else if(smiEnrolment.trim() == "Enroll"){
             let deemedDOBCheckBox: boolean = await (await PageConfigHelper.findElement("check_DeemedEnroll", false)).isSelected();
             if (deemedDOBCheckBox) {
-                let deemedDOBInput = await (await PageConfigHelper.findElement("IEPDate", false)).getValue();
+                let deemedDOBInput = String(await (await PageConfigHelper.findElement("IEPDate", false)).getValue());
                 this.deemedDOB = new Date(deemedDOBInput);
             }
 
             let firstmonthGHPCheckBox = await PageConfigHelper.findElement("GroupHealthPlanYesINput", false);
             if (await firstmonthGHPCheckBox.isSelected()) {
                 this.enrolledinGHP = "Yes";
-                this.GHPPlanType = await (await PageConfigHelper.findElement("plantypeGHP", false)).getText();
-                let firstmonthValue = await (await PageConfigHelper.findElement("firstmonthGHPL", false)).getText();
+                this.GHPPlanType = String(await (await PageConfigHelper.findElement("plantypeGHP", false)).getText());
+                let firstmonthValue = String(await (await PageConfigHelper.findElement("firstmonthGHPL", false)).getText());
                 this.firstmonthGHP = new Date(firstmonthValue.trim().replace("/", "/1/"));
 
-                let lastmonthGHPText = await (await PageConfigHelper.findElement("lastmonthGHP", false)).getText();
+                let lastmonthGHPText = String(await (await PageConfigHelper.findElement("lastmonthGHP", false)).getText());
                 if (lastmonthGHPText.trim() != "Continuing") {
                     this.lastmonthGHP = new Date(lastmonthGHPText.trim().replace("/", "/1/"));
                 }
                 let partBStartMonth = "";
                 let MedicarePartBStart = await (await PageConfigHelper.findElement("MedicarePartBStart", false)).getTagName();
                 if (MedicarePartBStart == 'label') {
-                    partBStartMonth = await (await PageConfigHelper.findElement("SMIStartMonth", false)).getValue();
+                    partBStartMonth = String(await (await PageConfigHelper.findElement("SMIStartMonth", false)).getValue());
                 } else {
-                    partBStartMonth = await (await PageConfigHelper.findElement("SMIStartMonthText", false)).getText();
+                    partBStartMonth = String(await (await PageConfigHelper.findElement("SMIStartMonthText", false)).getText());
                 }
                 this.userChoseSMIStMonth = new Date(partBStartMonth.trim().replace("/", "/1/"));
             }
@@ -90,7 +90,7 @@ export class EnrollCalcInput {
 
             let nonEquReliefStMonthCheckBox: boolean = await (await PageConfigHelper.findElement("check_PossibleMisInfo", false)).isSelected();
             if (nonEquReliefStMonthCheckBox) {
-                let nonEquReliefStMonthInput = await (await PageConfigHelper.findElement("DateofError", false)).getValue();
+                let nonEquReliefStMonthInput = String(await (await PageConfigHelper.findElement("DateofError", false)).getValue());
                 this.nonEquReliefStMonth = new Date(nonEquReliefStMonthInput.trim().replace("/", "/1/"));
 
                 let equitableReliefStCodeBool: boolean = await (await PageConfigHelper.findElement("EquitableReliefGrant", false)).isSelected();

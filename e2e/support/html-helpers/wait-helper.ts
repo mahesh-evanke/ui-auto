@@ -1,3 +1,4 @@
+import type { ElementLike } from './element-helper';
 import { PageHelper } from './page-helper';
 import { CommonPageValidations } from "../misc-utils/common-page.validations";
 import { PageConfigHelper } from '../misc-utils/PageHelper';
@@ -130,7 +131,7 @@ export class WaitHelper {
     }
 
     public async waitForFrameElementToBeClickable(targetElement,
-        frame: WebdriverIO.Element,
+        frame: ElementLike,
         timeout = PageHelper.timeout.xxs,
         attempts = PageHelper.WAIT_POLL_ATTEMPTS,
         message = CommonPageValidations.shouldBeClickable) {
@@ -168,8 +169,8 @@ export class WaitHelper {
         });
     }
 
-    public async waitForElementToHaveText(targetElement: import('./element-helper').ElementLike, timeout = PageHelper.DEFAULT_TIMEOUT, message = '') {
-        return this.waitForElementToResolve(() => targetElement.getText(), (text: string) => text.length > 0, timeout, message);
+    public async waitForElementToHaveText(targetElement: ElementLike, timeout = PageHelper.DEFAULT_TIMEOUT, message = '') {
+        return this.waitForElementToResolve(() => (targetElement as any).getText(), (text: string) => text.length > 0, timeout, message);
     }
 
     public async waitForElementOptionallyPresent(targetElement, timeout = PageHelper.DEFAULT_TIMEOUT) {

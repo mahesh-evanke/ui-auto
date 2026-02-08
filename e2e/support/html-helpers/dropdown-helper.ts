@@ -2,8 +2,8 @@ import type { ElementLike } from './element-helper';
 
 export class DropDownHelper {
     static selectOptionByVal(locator: ElementLike, optionVal: string) {
-
-        locator.$(this.getCssForOptionValue(optionVal)).click();
+        const loc = locator as { $(selector: string): { click(): Promise<void> } };
+        loc.$(DropDownHelper.getCssForOptionValue(optionVal)).click();
 
     }
 
@@ -16,35 +16,29 @@ export class DropDownHelper {
     }
 
     static async selectOptionByText(locator: ElementLike, optionVal: string) {
-        await locator.selectByVisibleText(optionVal);
+        await (locator as { selectByVisibleText(text: string): Promise<void> }).selectByVisibleText(optionVal);
     }
 
-    static selectDropdownByNumber(element: ElementLike, index: number) {
-
-        element.$('<option />')
-            .then(function (options) {
-                options[index].click();
-            });
+    static async selectDropdownByNumber(element: ElementLike, index: number) {
+        const options = await (element as any).$$('<option />');
+        const el = await options[index];
+        if (el) await el.click();
     }
 
-    static selectOption(element: ElementLike, item: string) {
-        var desiredOption;
-        element.click();
-        element.$$('<option />')
-            .then(function findMatchingOption(options) {
-                options.forEach(function (option) {
-                    option.getText().then(function doesOptionMatch(text) {
-                        if (item === text) {
-                            desiredOption = option;
-                            return true;
-                        }
-                    });
-                });
-            })
-            .then(function clickOption() {
-                if (desiredOption) {
-                    desiredOption.click();
-                }
-            });
+    static async selectOption(element: ElementLike, item: string) {
+        const el = element as any;
+        await el.click();
+        const options = await el.$$('<option />');
+        let desiredOption: { click(): Promise<void> } | undefined;
+        const len = await options.length;
+        for (let i = 0; i < len; i++) {
+            const option = await options[i];
+            const text = await option.getText();
+            if (item === text) {
+                desiredOption = option;
+                break;
+            }
+        }
+        if (desiredOption) await desiredOption.click();
     }
 }

@@ -45,7 +45,7 @@ export class PageHelper {
     }
 
     static sendKeysToInputField(elem: ElementLike, key: string) {
-        elem.sendKeys([key]);
+        (elem as any).sendKeys([key]);
     }
 
     static actionKeyUp(key: string) {
@@ -138,7 +138,7 @@ export class PageHelper {
      */
     public static async getAttributeValue(elem: ElementLike,
         attribute: string) {
-        const attributeValue = await elem.getAttribute(attribute);
+        const attributeValue = await (elem as any).getAttribute(attribute);
         return attributeValue.trim();
     }
 
@@ -151,7 +151,7 @@ export class PageHelper {
 
         await WaitHelper.getInstance().waitForElementToBeClickable(targetElement);
 
-        return targetElement.click();
+        return (targetElement as any).click();
     }
 
     public static async clickInFrame(targetElement: ElementLike, frame: ElementLike) {
@@ -159,7 +159,7 @@ export class PageHelper {
         await WaitHelper.getInstance().waitForFrameElementToBeClickable(targetElement, frame);
 
         return this.executeInIframe(frame, async () => {
-            return targetElement.click();
+            return (targetElement as any).click();
         });
     }
 
@@ -170,7 +170,7 @@ export class PageHelper {
      */
     public static async clickAndWaitForElementToHide(targetElement: ElementLike) {
         await WaitHelper.getInstance().waitForElementToBeClickable(targetElement);
-        await targetElement.click();
+        await (targetElement as any).click();
         return WaitHelper.getInstance().waitForElementToBeHidden(targetElement);
     }
 
@@ -185,7 +185,7 @@ export class PageHelper {
     static async getAllTexts(elements: ElementLike[]) {
         let text: string[] = [];
         elements.forEach(async element => {
-            text.push((await element.getText()).trim());
+            text.push((await (element as any).getText()).trim());
         }
         )
     }

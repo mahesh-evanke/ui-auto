@@ -53,16 +53,16 @@ Given('User navigates to T2 RIB {string} screen for an new claim with {string} t
 
         let newEstablesh = await $$("#btnEstablishMedClaim");
         let claimSSN = await $$("//input[contains(@id , 'uef-generated-id')]");
-        if (newEstablesh.length == 0 && claimSSN.length == 1) {
-            const Claim_SSN: WebdriverIO.Element = await PageConfigHelper.findElement("claim ssn", false);
+        if ((await newEstablesh.length) == 0 && (await claimSSN.length) == 1) {
+            const Claim_SSN= await PageConfigHelper.findElement("claim ssn", false);
             await CheckboxHelper.markCheckbox(Claim_SSN, true);
-            const NextButtonElement: WebdriverIO.Element = await PageConfigHelper.findElement("Next", true);
+            const NextButtonElement= await PageConfigHelper.findElement("Next", true);
             await ElementHelper.click(NextButtonElement);
             await WaitHelper.getInstance().waitForPageLoad("Claim Actions");
             PageConfigHelper.setCurrentPage("Claim Actions");
-            const Update: WebdriverIO.Element = await PageConfigHelper.findElement("Update", false);
+            const Update= await PageConfigHelper.findElement("Update", false);
             await ElementHelper.click(Update);
-            const claimDeletion: WebdriverIO.Element = await PageConfigHelper.findElement("Claim Deletion", false);
+            const claimDeletion= await PageConfigHelper.findElement("Claim Deletion", false);
             await ElementHelper.click(claimDeletion);
             await ElementHelper.click(NextButtonElement);
             await WaitHelper.getInstance().waitForPageLabel("Are you sure you want to delete this claim");
@@ -82,14 +82,14 @@ Given('User navigates to T2 RIB {string} screen for an new claim with {string} t
         PageConfigHelper.setCurrentPage("Applicant Information");
         if (pageName == "Applicant Information")
             return;
-        const lst_AppType: WebdriverIO.Element = await PageConfigHelper.findElement("Applicant Type", false);
+        const lst_AppType= await PageConfigHelper.findElement("Applicant Type", false);
         await DropDownHelper.selectOptionByText(lst_AppType, "Claimant");
         await browser.pause(1000);
-        const lst_ContactMethod: WebdriverIO.Element = await PageConfigHelper.findElement("Contact Method", false);
+        const lst_ContactMethod= await PageConfigHelper.findElement("Contact Method", false);
         await DropDownHelper.selectOptionByText(lst_ContactMethod, "IN OFFICE VISIT");
-        const chk_PrivacyAct: WebdriverIO.Element = await PageConfigHelper.findElement("Privacy Act", false);
+        const chk_PrivacyAct= await PageConfigHelper.findElement("Privacy Act", false);
         await CheckboxHelper.markCheckbox(chk_PrivacyAct, true);
-        const nextButton: WebdriverIO.Element = await PageConfigHelper.findElement('Next', true);
+        const nextButton= await PageConfigHelper.findElement('Next', true);
         await ElementHelper.click(nextButton);
         await WaitHelper.getInstance().waitForPageLoad("Protective Filing Date");
         if (pageName == "Filing Date" || pageName == "Protective Filing Date") {
@@ -128,20 +128,20 @@ Given('User navigates to T2 RIB {string} screen for an new claim with {string} t
         const birthText = "Birth Date Proof is required";
         let birthtexts = await $$("//*[text()[contains(.,'" + birthText + "')]]");
         let checkBirthText = false;
-        for (let i = 0; i < birthtexts.length; i++) {
+        for (let i = 0; i < (await birthtexts.length); i++) {
             if (await birthtexts[i].isDisplayed()) {
                 checkBirthText = true;
                 break;
             }
         }
         if (checkBirthText) {
-            const btnIdentityEdit: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_Identity_Button", false);
+            const btnIdentityEdit= await PageConfigHelper.findElement("Edit_Identity_Button", false);
             await ElementHelper.click(btnIdentityEdit);
-            let birthproofCodeLst: WebdriverIO.Element = await PageConfigHelper.findElement("Birth Proof Code List", false);
+            let birthproofCodeLst= await PageConfigHelper.findElement("Birth Proof Code List", false);
             await DropDownHelper.selectOptionByText(birthproofCodeLst, "Preferred Proof (Public or religious record of age established before age 5) (B)");
             birthproofCodeLst = await PageConfigHelper.findElement("Birth Proof Type List", false);
             await DropDownHelper.selectOptionByText(birthproofCodeLst, "Pre-age 5 State, Local or Foreign Public Birth Certificate (P)");
-            const submitButton: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_Accept", false);
+            const submitButton= await PageConfigHelper.findElement("bttn_Accept", false);
             await ElementHelper.click(submitButton);
         }
         var enrollCalc: EnrollCalcInput = new EnrollCalcInput();
@@ -150,66 +150,66 @@ Given('User navigates to T2 RIB {string} screen for an new claim with {string} t
         const citizenText = "Citizenship details are required";
         let Citizentexts = await $$("//*[text()[contains(.,'" + citizenText + "')]]");
         let checkCitizenText = false;
-        for (let i = 0; i < Citizentexts.length; i++) {
+        for (let i = 0; i < (await Citizentexts.length); i++) {
             if (await Citizentexts[i].isDisplayed()) {
                 checkCitizenText = true;
                 break;
             }
         }
         if (checkCitizenText) {
-            const btnIdentityEdit: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_Citizenship_button", false);
+            const btnIdentityEdit= await PageConfigHelper.findElement("Edit_Citizenship_button", false);
             await ElementHelper.click(btnIdentityEdit);
-            const addCitizenshipBtn: WebdriverIO.Element = await PageConfigHelper.findElement("AddCitizen", false);
+            const addCitizenshipBtn= await PageConfigHelper.findElement("AddCitizen", false);
             await ElementHelper.click(addCitizenshipBtn);
             await browser.pause(1000);
             await browser.switchToFrame(await $('<iframe />'));
-            const uscitizenship: WebdriverIO.Element = await PageConfigHelper.findElement("radio_USCitizenYes", false);
+            const uscitizenship= await PageConfigHelper.findElement("radio_USCitizenYes", false);
             await ElementHelper.click(uscitizenship);
-            let birthproofCodeLst: WebdriverIO.Element = await PageConfigHelper.findElement("Listbox_USCitizen", false);
+            let birthproofCodeLst= await PageConfigHelper.findElement("Listbox_USCitizen", false);
             await DropDownHelper.selectOptionByText(birthproofCodeLst, "Birth in U.S.");
-            let citizenProofLst: WebdriverIO.Element = await PageConfigHelper.findElement("Listbox_US_Proof_Code", false);
+            let citizenProofLst= await PageConfigHelper.findElement("Listbox_US_Proof_Code", false);
             await DropDownHelper.selectOptionByText(citizenProofLst, "U.S. Passport");
-            const citizenshipEnded: WebdriverIO.Element = await PageConfigHelper.findElement("CitizenshipEndedNo", false);
+            const citizenshipEnded= await PageConfigHelper.findElement("CitizenshipEndedNo", false);
             await ElementHelper.click(citizenshipEnded);
-            const submitButton: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_OK", false);
+            const submitButton= await PageConfigHelper.findElement("bttn_OK", false);
             await ElementHelper.click(submitButton);
             await browser.switchToParentFrame();
-            const saveCitizenInformation: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_Save_Citizen", false);
+            const saveCitizenInformation= await PageConfigHelper.findElement("bttn_Save_Citizen", false);
             await ElementHelper.click(saveCitizenInformation);
         }
         const addressText = "T18 Residence address is required";
         let texts = await $$("//*[text()[contains(.,'" + addressText + "')]]");
         let checkAddressText = false;
-        for (let i = 0; i < texts.length; i++) {
+        for (let i = 0; i < (await texts.length); i++) {
             if (await texts[i].isDisplayed()) {
                 checkAddressText = true;
                 break;
             }
         }
         if (checkAddressText) {
-            const EditContact: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_Contact", false);
+            const EditContact= await PageConfigHelper.findElement("Edit_Contact", false);
             await ElementHelper.click(EditContact);
-            const addNewAddress: WebdriverIO.Element = await PageConfigHelper.findElement("AddNewAddress", false);
+            const addNewAddress= await PageConfigHelper.findElement("AddNewAddress", false);
             await ElementHelper.click(addNewAddress);
             await browser.switchToFrame(await $('<iframe />'));
             await TextboxHelper.sendKeyswithElementName('Line_1', '6 Charles street', false);
             await TextboxHelper.sendKeyswithElementName('City', 'Baltimore', false);
-            const stateSelect: WebdriverIO.Element = await PageConfigHelper.findElement("State", false);
+            const stateSelect= await PageConfigHelper.findElement("State", false);
             await DropDownHelper.selectOptionByText(stateSelect, "Maryland");
             await TextboxHelper.sendKeyswithElementName('Zip', '21201', false);
             const alladdress = await $("//label[@id = 'uef-checklist0-selectAllLabel']");
             await alladdress.click();
             await TextboxHelper.sendKeyswithElementName('Current T2/T18 Residence Start Date', '02/02/1998', false);
-            const clickOK: WebdriverIO.Element = await PageConfigHelper.findElement("Save", false);
+            const clickOK= await PageConfigHelper.findElement("Save", false);
             await ElementHelper.click(clickOK);
             await browser.pause(1000);
             await ElementHelper.clickwithElementName('Recommended USPS standard format');
-            const clickOKNewAddress: WebdriverIO.Element = await PageConfigHelper.findElement("Add New Address OK", false);
+            const clickOKNewAddress= await PageConfigHelper.findElement("Add New Address OK", false);
             await ElementHelper.click(clickOKNewAddress);
             await browser.switchToParentFrame();
-            const spokenlang: WebdriverIO.Element = await PageConfigHelper.findElement("SpokenLanguagePreference", false);
+            const spokenlang= await PageConfigHelper.findElement("SpokenLanguagePreference", false);
             await DropDownHelper.selectOptionByText(spokenlang, "English");
-            const writtenLang: WebdriverIO.Element = await PageConfigHelper.findElement("WrittenLanguagePreference", false);
+            const writtenLang= await PageConfigHelper.findElement("WrittenLanguagePreference", false);
             await DropDownHelper.selectOptionByText(writtenLang, "Bosnian");
             await ElementHelper.clickwithElementName('Save');
             await browser.switchToParentFrame();
@@ -218,33 +218,33 @@ Given('User navigates to T2 RIB {string} screen for an new claim with {string} t
         const spokenLang = "Spoken Language Preference is required";
         let lang = await $$("//*[text()[contains(.,'" + spokenLang + "')]]");
         let checkspokenLangText = false;
-        for (let i = 0; i < lang.length; i++) {
+        for (let i = 0; i < (await lang.length); i++) {
             if (await lang[i].isDisplayed()) {
                 checkspokenLangText = true;
                 break;
             }
         }
         if (checkspokenLangText) {
-            const EditContact: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_Contact", false);
+            const EditContact= await PageConfigHelper.findElement("Edit_Contact", false);
             await ElementHelper.click(EditContact);
-            const spokenlangchk: WebdriverIO.Element = await PageConfigHelper.findElement("SpokenLanguagePreference", false);
+            const spokenlangchk= await PageConfigHelper.findElement("SpokenLanguagePreference", false);
             await DropDownHelper.selectOptionByText(spokenlangchk, "English");
-            const writtenLang: WebdriverIO.Element = await PageConfigHelper.findElement("WrittenLanguagePreference", false);
+            const writtenLang= await PageConfigHelper.findElement("WrittenLanguagePreference", false);
             await DropDownHelper.selectOptionByText(writtenLang, "Bosnian");
             await ElementHelper.clickwithElementName('Save');
             await browser.switchToParentFrame();
             await browser.switchToFrame(await $('<iframe />'));
         }
-        const SNO_No: WebdriverIO.Element = await PageConfigHelper.findElement("radio_SNONo", false);
+        const SNO_No= await PageConfigHelper.findElement("radio_SNONo", false);
         await ElementHelper.click(SNO_No);
-        const acceptButton: WebdriverIO.Element = await PageConfigHelper.findElement("Accept", false);
+        const acceptButton= await PageConfigHelper.findElement("Accept", false);
         await ElementHelper.click(acceptButton);
         await browser.switchToParentFrame();
         await WaitHelper.getInstance().waitForTitle('T2/T18 Data - Consolidated Claims Experience');
         const chkPage = "Lawful Presence";
         let pageVal = await $$("//*[text()[contains(.,'" + chkPage + "')]]");
         let checkPageText = false;
-        for (let i = 0; i < pageVal.length; i++) {
+        for (let i = 0; i < (await pageVal.length); i++) {
             if (await pageVal[i].isDisplayed()) {
                 checkPageText = true;
                 break;
@@ -252,14 +252,14 @@ Given('User navigates to T2 RIB {string} screen for an new claim with {string} t
         }
         if (checkPageText) {
             PageConfigHelper.setCurrentPage("Lawful Presence");
-            const newLawfulbutton: WebdriverIO.Element = await PageConfigHelper.findElement("AddNew", false);
+            const newLawfulbutton= await PageConfigHelper.findElement("AddNew", false);
             await ElementHelper.click(newLawfulbutton);
-            const statusdropdown: WebdriverIO.Element = await PageConfigHelper.findElement("listbox_LawfulStatus", false);
+            const statusdropdown= await PageConfigHelper.findElement("listbox_LawfulStatus", false);
             await DropDownHelper.selectOptionByText(statusdropdown, "Lawfully Admitted for Permanent Residence (LAPR)");
-            const startDateTextbox: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_StartDt", false);
+            const startDateTextbox= await PageConfigHelper.findElement("Edit_StartDt", false);
             await TextboxHelper.sendKeys(startDateTextbox, "02/02/1998", false);
             await ElementHelper.clickwithElementName('radio_StatusEnded_No');
-            const proofDropdownbox: WebdriverIO.Element = await PageConfigHelper.findElement("List_Proof_Yes", false);
+            const proofDropdownbox= await PageConfigHelper.findElement("List_Proof_Yes", false);
             await DropDownHelper.selectOptionByText(proofDropdownbox, "Proof provided");
             const saveLawfulStatus = await $$("//button[@id = 'okBtn']");
             await saveLawfulStatus[1].click();
@@ -297,9 +297,9 @@ Given('User navigates to T2 RIB {string} screen for an existing claim with {stri
         PageConfigHelper.setCurrentPage("Home Page");
         if (pageName == "Home Page")
             return;
-        const officeCodeElement: WebdriverIO.Element = await PageConfigHelper.findElement("Office Code", false);
-        const SSNElement: WebdriverIO.Element = await PageConfigHelper.findElement("SSN", false);
-        const NextButtonElement: WebdriverIO.Element = await PageConfigHelper.findElement("Next", true);
+        const officeCodeElement= await PageConfigHelper.findElement("Office Code", false);
+        const SSNElement= await PageConfigHelper.findElement("SSN", false);
+        const NextButtonElement= await PageConfigHelper.findElement("Next", true);
         await TextboxHelper.sendKeys(officeCodeElement, "A15", false);
         let ssn = CSVReader.getData(criteria);
         await TextboxHelper.sendKeyswithElementName('SSN', ssn, false);
@@ -308,16 +308,16 @@ Given('User navigates to T2 RIB {string} screen for an existing claim with {stri
         PageConfigHelper.setCurrentPage("Claim Summary");
         if (pageName == "Claim Summary")
             return;
-        const Claim_SSN: WebdriverIO.Element = await PageConfigHelper.findElement("claim ssn", false);
+        const Claim_SSN= await PageConfigHelper.findElement("claim ssn", false);
         await CheckboxHelper.markCheckbox(Claim_SSN, true);
         await ElementHelper.click(NextButtonElement);
         await WaitHelper.getInstance().waitForTitle('Claim Actions - Consolidated Claims Experience');
         PageConfigHelper.setCurrentPage("Claim Actions");
         if (pageName == "Claim Actions")
             return;
-        const Update: WebdriverIO.Element = await PageConfigHelper.findElement("Update", false);
+        const Update= await PageConfigHelper.findElement("Update", false);
         await ElementHelper.click(Update);
-        const claimInfo: WebdriverIO.Element = await PageConfigHelper.findElement("Claim Information", false);
+        const claimInfo= await PageConfigHelper.findElement("Claim Information", false);
         await ElementHelper.click(claimInfo);
         await ElementHelper.click(NextButtonElement);
         await WaitHelper.getInstance().waitForPageTitle("Person Status");
@@ -354,9 +354,9 @@ Given('User navigates to T2 RIB {string} screen for an existing claim in Query M
         PageConfigHelper.setCurrentPage("Home Page");
         if (pageName == "Home Page")
             return;
-        const officeCodeElement: WebdriverIO.Element = await PageConfigHelper.findElement("Office Code", false);
-        const SSNElement: WebdriverIO.Element = await PageConfigHelper.findElement("SSN", false);
-        const NextButtonElement: WebdriverIO.Element = await PageConfigHelper.findElement("Next", true);
+        const officeCodeElement= await PageConfigHelper.findElement("Office Code", false);
+        const SSNElement= await PageConfigHelper.findElement("SSN", false);
+        const NextButtonElement= await PageConfigHelper.findElement("Next", true);
         await TextboxHelper.sendKeys(officeCodeElement, "A15", false);
         let ssn = CSVReader.getData(criteria);
         await TextboxHelper.sendKeyswithElementName('SSN', ssn, false);
@@ -365,16 +365,16 @@ Given('User navigates to T2 RIB {string} screen for an existing claim in Query M
         PageConfigHelper.setCurrentPage("Claim Summary");
         if (pageName == "Claim Summary")
             return;
-        const Claim_SSN: WebdriverIO.Element = await PageConfigHelper.findElement("claim ssn", false);
+        const Claim_SSN= await PageConfigHelper.findElement("claim ssn", false);
         await CheckboxHelper.markCheckbox(Claim_SSN, true);
         await ElementHelper.click(NextButtonElement);
         await WaitHelper.getInstance().waitForTitle('Claim Actions - Consolidated Claims Experience');
         PageConfigHelper.setCurrentPage("Claim Actions");
         if (pageName == "Claim Actions")
             return;
-        const Query: WebdriverIO.Element = await PageConfigHelper.findElement("Query", false);
+        const Query= await PageConfigHelper.findElement("Query", false);
         await ElementHelper.click(Query);
-        const claimInfo: WebdriverIO.Element = await PageConfigHelper.findElement("Claim Information", false);
+        const claimInfo= await PageConfigHelper.findElement("Claim Information", false);
         await ElementHelper.click(claimInfo);
         await ElementHelper.click(NextButtonElement);
         PageConfigHelper.setCurrentPage("Person Status");
@@ -405,14 +405,14 @@ When('User goes to {string} screen for a new claim with {string} test data crite
         PageConfigHelper.setCurrentPage("Applicant Information");
         if (pageName == "Applicant Information")
             return;
-        const lst_AppType: WebdriverIO.Element = await PageConfigHelper.findElement("Applicant Type", false);
+        const lst_AppType= await PageConfigHelper.findElement("Applicant Type", false);
         await DropDownHelper.selectOptionByText(lst_AppType, "Claimant");
-        const lst_ContactMethod: WebdriverIO.Element = await PageConfigHelper.findElement("Contact Method", false);
+        const lst_ContactMethod= await PageConfigHelper.findElement("Contact Method", false);
         await browser.pause(1000);
         await DropDownHelper.selectOptionByText(lst_ContactMethod, "IN OFFICE VISIT");
-        const chk_PrivacyAct: WebdriverIO.Element = await PageConfigHelper.findElement("Privacy Act", false);
+        const chk_PrivacyAct= await PageConfigHelper.findElement("Privacy Act", false);
         await CheckboxHelper.markCheckbox(chk_PrivacyAct, true);
-        const nextButton: WebdriverIO.Element = await PageConfigHelper.findElement('Next', true);
+        const nextButton= await PageConfigHelper.findElement('Next', true);
         await ElementHelper.click(nextButton);
         await WaitHelper.getInstance().waitForPageLoad("Person Info");
         if (pageName == "Person Info")
@@ -421,42 +421,42 @@ When('User goes to {string} screen for a new claim with {string} test data crite
         let birthText = "Birth Date Proof is required";
         let checkBirthText: boolean = await $('*=' + birthText).isDisplayed();
         if (checkBirthText) {
-            const btnIdentityEdit: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_Identity_Button", false);
+            const btnIdentityEdit= await PageConfigHelper.findElement("Edit_Identity_Button", false);
             await ElementHelper.click(btnIdentityEdit);
-            let birthproofCodeLst: WebdriverIO.Element = await PageConfigHelper.findElement("Birth Proof Code List", false);
+            let birthproofCodeLst= await PageConfigHelper.findElement("Birth Proof Code List", false);
             await DropDownHelper.selectOptionByText(birthproofCodeLst, "Preferred Proof (Public or religious record of age established before age 5) (B)");
             birthproofCodeLst = await PageConfigHelper.findElement("Birth Proof Type List", false);
             await DropDownHelper.selectOptionByText(birthproofCodeLst, "Pre-age 5 State, Local or Foreign Public Birth Certificate (P)");
-            const submitButton: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_Accept", false);
+            const submitButton= await PageConfigHelper.findElement("bttn_Accept", false);
             await ElementHelper.click(submitButton);
         }
         let citizenText = "Citizenship details are required";
         let checkCitizenText: boolean = await $('*=' + citizenText).isDisplayed();
         if (checkCitizenText) {
-            const btnIdentityEdit: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_Citizenship_button", false);
+            const btnIdentityEdit= await PageConfigHelper.findElement("Edit_Citizenship_button", false);
             await ElementHelper.click(btnIdentityEdit);
-            const addCitizenshipBtn: WebdriverIO.Element = await PageConfigHelper.findElement("AddCitizen", false);
+            const addCitizenshipBtn= await PageConfigHelper.findElement("AddCitizen", false);
             await ElementHelper.click(addCitizenshipBtn);
             await browser.pause(1000);
             await browser.switchToFrame(await $('<iframe />'));
-            const uscitizenship: WebdriverIO.Element = await PageConfigHelper.findElement("radio_USCitizenYes", false);
+            const uscitizenship= await PageConfigHelper.findElement("radio_USCitizenYes", false);
             await ElementHelper.click(uscitizenship);
-            let birthproofCodeLst: WebdriverIO.Element = await PageConfigHelper.findElement("Listbox_USCitizen", false);
+            let birthproofCodeLst= await PageConfigHelper.findElement("Listbox_USCitizen", false);
             await DropDownHelper.selectOptionByText(birthproofCodeLst, "Birth in U.S.");
-            let citizenProofLst: WebdriverIO.Element = await PageConfigHelper.findElement("Listbox_US_Proof_Code", false);
+            let citizenProofLst= await PageConfigHelper.findElement("Listbox_US_Proof_Code", false);
             await DropDownHelper.selectOptionByText(citizenProofLst, "U.S. Passport");
-            const citizenshipEnded: WebdriverIO.Element = await PageConfigHelper.findElement("CitizenshipEndedNo", false);
+            const citizenshipEnded= await PageConfigHelper.findElement("CitizenshipEndedNo", false);
             await ElementHelper.click(citizenshipEnded);
-            const submitButton: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_OK", false);
+            const submitButton= await PageConfigHelper.findElement("bttn_OK", false);
             await ElementHelper.click(submitButton);
             await browser.switchToParentFrame();
             await browser.switchToFrame(await $('<iframe />'));
-            const saveCitizenInformation: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_Save_Citizen", false);
+            const saveCitizenInformation= await PageConfigHelper.findElement("bttn_Save_Citizen", false);
             await ElementHelper.click(saveCitizenInformation);
         }
-        const SNO_No: WebdriverIO.Element = await PageConfigHelper.findElement("radio_SNONo", false);
+        const SNO_No= await PageConfigHelper.findElement("radio_SNONo", false);
         await ElementHelper.click(SNO_No);
-        const acceptButton: WebdriverIO.Element = await PageConfigHelper.findElement("Accept", false);
+        const acceptButton= await PageConfigHelper.findElement("Accept", false);
         await ElementHelper.click(acceptButton);
         await browser.switchToParentFrame();
         await WaitHelper.getInstance().waitForPageLoad("Filing Date");
@@ -473,13 +473,13 @@ When('User goes to {string} screen for a new claim with {string} test data crite
         await browser.switchToFrame(await $('<iframe />'));
         let checkAddressText: boolean = await $('*=' + addressText).isDisplayed();
         if (checkAddressText) {
-            const addNewAddress: WebdriverIO.Element = await PageConfigHelper.findElement("AddNewAddress", false);
+            const addNewAddress= await PageConfigHelper.findElement("AddNewAddress", false);
             await ElementHelper.click(addNewAddress);
             await browser.switchToFrame(await $('<iframe />'));
-            const allMailcheckBox: WebdriverIO.Element = await PageConfigHelper.findElement("Select All Address Types", false);
-            const clickOKNewAddress: WebdriverIO.Element = await PageConfigHelper.findElement("Add New Address OK", false);
-            const clickOK: WebdriverIO.Element = await PageConfigHelper.findElement("Save", false);
-            const stateSelect: WebdriverIO.Element = await PageConfigHelper.findElement("State", false);
+            const allMailcheckBox= await PageConfigHelper.findElement("Select All Address Types", false);
+            const clickOKNewAddress= await PageConfigHelper.findElement("Add New Address OK", false);
+            const clickOK= await PageConfigHelper.findElement("Save", false);
+            const stateSelect= await PageConfigHelper.findElement("State", false);
             await TextboxHelper.sendKeyswithElementName('Line_1', '6 Charles street', false);
             await TextboxHelper.sendKeyswithElementName('City', 'Baltimore', false);
             await DropDownHelper.selectOptionByText(stateSelect, "Maryland");
@@ -495,8 +495,8 @@ When('User goes to {string} screen for a new claim with {string} test data crite
             await browser.switchToParentFrame();
             await browser.switchToFrame(await $('<iframe />'));
         }
-        const spokenlang: WebdriverIO.Element = await PageConfigHelper.findElement("SpokenLanguagePreference", false);
-        const writtenLang: WebdriverIO.Element = await PageConfigHelper.findElement("WrittenLanguagePreference", false);
+        const spokenlang= await PageConfigHelper.findElement("SpokenLanguagePreference", false);
+        const writtenLang= await PageConfigHelper.findElement("WrittenLanguagePreference", false);
         await DropDownHelper.selectOptionByText(spokenlang, "English");
         await DropDownHelper.selectOptionByText(writtenLang, "Bosnian");
         await ElementHelper.clickwithElementName('Save');
@@ -512,7 +512,7 @@ When('User goes to {string} screen for a new claim with {string} test data crite
         let checkNotinsured: boolean = await $('*=' + txtName).isDisplayed();
         if (checkNotinsured)
             await ElementHelper.clickwithElementName('radio_EarnsWorkdLastThisyrNo');
-        const clickNext: WebdriverIO.Element = await PageConfigHelper.findElement("Next", true);
+        const clickNext= await PageConfigHelper.findElement("Next", true);
         await ElementHelper.click(clickNext);
         await WaitHelper.getInstance().waitForPageTitle("Insured Status");
         PageConfigHelper.setCurrentPage("Insured Status");
@@ -526,10 +526,10 @@ When('User goes to {string} screen for a new claim with {string} test data crite
             PageConfigHelper.setCurrentPage("Lawful Presence");
             if (pageName == "Lawful Presence")
                 return;
-            const newLawfulbutton: WebdriverIO.Element = await PageConfigHelper.findElement("AddNew", false);
-            const statusdropdown: WebdriverIO.Element = await PageConfigHelper.findElement("listbox_LawfulStatus", false);
-            const startDateTextbox: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_StartDt", false);
-            const proofDropdownbox: WebdriverIO.Element = await PageConfigHelper.findElement("List_Proof_Yes", false);
+            const newLawfulbutton= await PageConfigHelper.findElement("AddNew", false);
+            const statusdropdown= await PageConfigHelper.findElement("listbox_LawfulStatus", false);
+            const startDateTextbox= await PageConfigHelper.findElement("Edit_StartDt", false);
+            const proofDropdownbox= await PageConfigHelper.findElement("List_Proof_Yes", false);
             const saveLawfulStatus = await $$("//button[@id = 'okBtn']");
             await ElementHelper.click(newLawfulbutton);
             await DropDownHelper.selectOptionByText(statusdropdown, "Lawfully Admitted for Permanent Residence (LAPR)");
@@ -543,7 +543,7 @@ When('User goes to {string} screen for a new claim with {string} test data crite
         PageConfigHelper.setCurrentPage("Health Insurance");
         if (pageName === "Health Insurance")
             return;
-        const EnrollOptionsDropDown: WebdriverIO.Element = await PageConfigHelper.findElement("SMIEnrollmentOptions", false);
+        const EnrollOptionsDropDown= await PageConfigHelper.findElement("SMIEnrollmentOptions", false);
         await DropDownHelper.selectOptionByText(EnrollOptionsDropDown, "Enroll");
         await ElementHelper.clickwithElementName('ReceivingMedicaidNo');
         await ElementHelper.clickwithElementName('ReceivingAnnuityNo');
@@ -570,11 +570,11 @@ When('User goes to {string} screen for a new claim with {string} test data crite
         PageConfigHelper.setCurrentPage("Attestation and Printing");
         if (pageName == "Attestation and Printing")
             return;
-        const addSigAttestation: WebdriverIO.Element = await PageConfigHelper.findElement("AddSignatureandAttestation", false);
-        const understandCheckbox: WebdriverIO.Element = await PageConfigHelper.findElement("Understand Affirmation", false);
-        const decalreCheckbox: WebdriverIO.Element = await PageConfigHelper.findElement("Declare Affirmation", false);
-        const empAttestationCheckbox: WebdriverIO.Element = await PageConfigHelper.findElement("EmpAttestation", false);
-        const saveAttestationButton: WebdriverIO.Element = await PageConfigHelper.findElement("Save", false);
+        const addSigAttestation= await PageConfigHelper.findElement("AddSignatureandAttestation", false);
+        const understandCheckbox= await PageConfigHelper.findElement("Understand Affirmation", false);
+        const decalreCheckbox= await PageConfigHelper.findElement("Declare Affirmation", false);
+        const empAttestationCheckbox= await PageConfigHelper.findElement("EmpAttestation", false);
+        const saveAttestationButton= await PageConfigHelper.findElement("Save", false);
         await ElementHelper.click(addSigAttestation);
         await ElementHelper.clickwithElementName('radio_SignatureTypeOral');
         await CheckboxHelper.markCheckbox(understandCheckbox, true);
@@ -595,14 +595,14 @@ When('User goes to {string} screen for a new claim with {string} test data crite
         await browser.pause(2000);
         //await WaitHelper.getInstance().waitForPageTitle('Claim Summary');
         PageConfigHelper.setCurrentPage("Claim Summary");
-        const Claim_SSN: WebdriverIO.Element = await PageConfigHelper.findElement("claim ssn", false);
+        const Claim_SSN= await PageConfigHelper.findElement("claim ssn", false);
         await CheckboxHelper.markCheckbox(Claim_SSN, true);
         await ElementHelper.click(await PageConfigHelper.findElement('Next', true));
         await browser.pause(2000);
         //await WaitHelper.getInstance().waitForPageTitle('Claim Actions');
         PageConfigHelper.setCurrentPage("Claim Actions");
-        const Update: WebdriverIO.Element = await PageConfigHelper.findElement("Update", false);
-        const claimInfo: WebdriverIO.Element = await PageConfigHelper.findElement("Claim Information", false);
+        const Update= await PageConfigHelper.findElement("Update", false);
+        const claimInfo= await PageConfigHelper.findElement("Claim Information", false);
         await ElementHelper.click(Update);
         await ElementHelper.click(claimInfo);
         await ElementHelper.click(await PageConfigHelper.findElement('Next', true));
@@ -697,20 +697,20 @@ When('User goes to {string} screen for a new claim with {string} test data crite
         PageConfigHelper.setCurrentPage("Determination Confirmation");
         if (pageName == "Determination Confirmation")
             return;
-        const closeConfirmButton: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_Close", false);
+        const closeConfirmButton= await PageConfigHelper.findElement("bttn_Close", false);
         await ElementHelper.clickwithElementName('Radio_ConfirmDeterm');
         await ElementHelper.click(nextButton);
         browser.pause(2000);
         await ElementHelper.click(closeConfirmButton);
         await WaitHelper.getInstance().waitForPageTitle('Claim Summary');
         PageConfigHelper.setCurrentPage("Claim Summary");
-        const exitButton: WebdriverIO.Element = await PageConfigHelper.findElement("Exit", true);
+        const exitButton= await PageConfigHelper.findElement("Exit", true);
         await ElementHelper.click(exitButton);
         await WaitHelper.getInstance().waitForPageTitle('Exit CCE');
         PageConfigHelper.setCurrentPage("Exit CCE");
         if (pageName == "Exit CCE")
             return;
-        const closeButton: WebdriverIO.Element = await PageConfigHelper.findElement("Close", false);
+        const closeButton= await PageConfigHelper.findElement("Close", false);
         await ElementHelper.click(closeButton);
     }
 });
@@ -726,9 +726,9 @@ Given('User navigates to {string} screen for an existing pending claim with {str
     PageConfigHelper.setCurrentPage("Home Page");
     if (pageName == "Home Page")
         return;
-    const officeCodeElement: WebdriverIO.Element = await PageConfigHelper.findElement("Office Code", false);
-    const SSNElement: WebdriverIO.Element = await PageConfigHelper.findElement("SSN", false);
-    const NextButtonElement: WebdriverIO.Element = await PageConfigHelper.findElement("Next", true);
+    const officeCodeElement= await PageConfigHelper.findElement("Office Code", false);
+    const SSNElement= await PageConfigHelper.findElement("SSN", false);
+    const NextButtonElement= await PageConfigHelper.findElement("Next", true);
     await TextboxHelper.sendKeys(officeCodeElement, "A15", false);
     let ssn = CSVReader.getData(criteria);
     await TextboxHelper.sendKeyswithElementName('SSN', ssn, false);
@@ -738,7 +738,7 @@ Given('User navigates to {string} screen for an existing pending claim with {str
     PageConfigHelper.setCurrentPage("Claim Summary");
     if (pageName == "Claim Summary")
         return;
-    const Claim_SSN: WebdriverIO.Element = await PageConfigHelper.findElement("claim ssn", false);
+    const Claim_SSN= await PageConfigHelper.findElement("claim ssn", false);
     await CheckboxHelper.markCheckbox(Claim_SSN, true);
     await ElementHelper.click(NextButtonElement);
     await WaitHelper.getInstance().waitForTitle('Claim Actions - Consolidated Claims Experience');
@@ -746,8 +746,8 @@ Given('User navigates to {string} screen for an existing pending claim with {str
     PageConfigHelper.setCurrentPage("Claim Actions");
     if (pageName == "Claim Actions")
         return;
-    const Update: WebdriverIO.Element = await PageConfigHelper.findElement("Update", false);
-    const claimInfo: WebdriverIO.Element = await PageConfigHelper.findElement("Claim Information", false);
+    const Update= await PageConfigHelper.findElement("Update", false);
+    const claimInfo= await PageConfigHelper.findElement("Claim Information", false);
     await ElementHelper.click(Update);
     await ElementHelper.click(claimInfo);
     await ElementHelper.click(NextButtonElement);
@@ -810,9 +810,9 @@ When('User goes to {string} screen in Query Mode with {string} test data criteri
     PageConfigHelper.setCurrentPage("Home Page");
     if (pageName == "Home Page")
         return;
-    const officeCodeElement: WebdriverIO.Element = await PageConfigHelper.findElement("Office Code", false);
-    const SSNElement: WebdriverIO.Element = await PageConfigHelper.findElement("SSN", false);
-    const NextButtonElement: WebdriverIO.Element = await PageConfigHelper.findElement("Next", true);
+    const officeCodeElement= await PageConfigHelper.findElement("Office Code", false);
+    const SSNElement= await PageConfigHelper.findElement("SSN", false);
+    const NextButtonElement= await PageConfigHelper.findElement("Next", true);
     await TextboxHelper.sendKeys(officeCodeElement, "A15", false);
     let ssn = CSVReader.getData(criteria);
     await TextboxHelper.sendKeyswithElementName('SSN', ssn, false);
@@ -821,16 +821,16 @@ When('User goes to {string} screen in Query Mode with {string} test data criteri
     PageConfigHelper.setCurrentPage("Claim Summary");
     if (pageName == "Claim Summary")
         return;
-    const Claim_SSN: WebdriverIO.Element = await PageConfigHelper.findElement("claim ssn", false);
+    const Claim_SSN= await PageConfigHelper.findElement("claim ssn", false);
     await CheckboxHelper.markCheckbox(Claim_SSN, true);
     await ElementHelper.click(NextButtonElement);
     await WaitHelper.getInstance().waitForTitle('Claim Actions - Consolidated Claims Experience');
     PageConfigHelper.setCurrentPage("Claim Actions");
     if (pageName == "Claim Actions")
         return;
-    const Query: WebdriverIO.Element = await PageConfigHelper.findElement("Query", false);
+    const Query= await PageConfigHelper.findElement("Query", false);
     await ElementHelper.click(Query);
-    const claimInfo: WebdriverIO.Element = await PageConfigHelper.findElement("Claim Information", false);
+    const claimInfo= await PageConfigHelper.findElement("Claim Information", false);
     await ElementHelper.click(claimInfo);
     await ElementHelper.click(NextButtonElement);
     PageConfigHelper.setCurrentPage("Person Status");
@@ -856,7 +856,7 @@ Given('User navigates to {string} screen for a new claim with {string} test data
         await WaitHelper.getInstance().waitForPageTitle('Home Page');
         if (pageName == 'Home Page')
             return;
-        const NextButtonElement: WebdriverIO.Element = await PageConfigHelper.findElement('Next', true);
+        const NextButtonElement= await PageConfigHelper.findElement('Next', true);
         await TextboxHelper.sendKeyswithElementName('Office Code', 'A15', false);
         let ssn = CSVReader.getData(criteria);
         await TextboxHelper.sendKeyswithElementName('SSN', ssn, false);
@@ -870,9 +870,9 @@ Given('User navigates to {string} screen for a new claim with {string} test data
         PageConfigHelper.setCurrentPage("Applicant Information");
         if (pageName == "Applicant Information")
             return;
-        const lst_AppType: WebdriverIO.Element = await PageConfigHelper.findElement("Applicant Type", false);
-        const lst_ContactMethod: WebdriverIO.Element = await PageConfigHelper.findElement("Contact Method", false);
-        const chk_PrivacyAct: WebdriverIO.Element = await PageConfigHelper.findElement("Privacy Act", false);
+        const lst_AppType= await PageConfigHelper.findElement("Applicant Type", false);
+        const lst_ContactMethod= await PageConfigHelper.findElement("Contact Method", false);
+        const chk_PrivacyAct= await PageConfigHelper.findElement("Privacy Act", false);
         await DropDownHelper.selectOptionByText(lst_AppType, "Claimant");
         await browser.pause(1000);
         await DropDownHelper.selectOptionByText(lst_ContactMethod, "IN OFFICE VISIT");
@@ -888,42 +888,42 @@ Given('User navigates to {string} screen for a new claim with {string} test data
         let birthText = "Birth Date Proof is required";
         let checkBirthText: boolean = await $('*=' + birthText).isDisplayed();
         if (checkBirthText) {
-            const btnIdentityEdit: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_Identity_Button", false);
+            const btnIdentityEdit= await PageConfigHelper.findElement("Edit_Identity_Button", false);
             await ElementHelper.click(btnIdentityEdit);
-            let birthproofCodeLst: WebdriverIO.Element = await PageConfigHelper.findElement("Birth Proof Code List", false);
+            let birthproofCodeLst= await PageConfigHelper.findElement("Birth Proof Code List", false);
             await DropDownHelper.selectOptionByText(birthproofCodeLst, "Preferred Proof (Public or religious record of age established before age 5) (B)");
             birthproofCodeLst = await PageConfigHelper.findElement("Birth Proof Type List", false);
             await DropDownHelper.selectOptionByText(birthproofCodeLst, "Pre-age 5 State, Local or Foreign Public Birth Certificate (P)");
-            const submitButton: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_Accept", false);
+            const submitButton= await PageConfigHelper.findElement("bttn_Accept", false);
             await ElementHelper.click(submitButton);
         }
         let citizenText = "Citizenship details are required";
         let checkCitizenText: boolean = await $('*=' + citizenText).isDisplayed();
         if (checkCitizenText) {
-            const btnIdentityEdit: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_Citizenship_button", false);
+            const btnIdentityEdit= await PageConfigHelper.findElement("Edit_Citizenship_button", false);
             await ElementHelper.click(btnIdentityEdit);
-            const addCitizenshipBtn: WebdriverIO.Element = await PageConfigHelper.findElement("AddCitizen", false);
+            const addCitizenshipBtn= await PageConfigHelper.findElement("AddCitizen", false);
             await ElementHelper.click(addCitizenshipBtn);
             await browser.pause(1000);
             await browser.switchToFrame(await $('<iframe />'));
-            const uscitizenship: WebdriverIO.Element = await PageConfigHelper.findElement("radio_USCitizenYes", false);
+            const uscitizenship= await PageConfigHelper.findElement("radio_USCitizenYes", false);
             await ElementHelper.click(uscitizenship);
-            let birthproofCodeLst: WebdriverIO.Element = await PageConfigHelper.findElement("Listbox_USCitizen", false);
+            let birthproofCodeLst= await PageConfigHelper.findElement("Listbox_USCitizen", false);
             await DropDownHelper.selectOptionByText(birthproofCodeLst, "Birth in U.S.");
-            let citizenProofLst: WebdriverIO.Element = await PageConfigHelper.findElement("Listbox_US_Proof_Code", false);
+            let citizenProofLst= await PageConfigHelper.findElement("Listbox_US_Proof_Code", false);
             await DropDownHelper.selectOptionByText(citizenProofLst, "U.S. Passport");
-            const citizenshipEnded: WebdriverIO.Element = await PageConfigHelper.findElement("CitizenshipEndedNo", false);
+            const citizenshipEnded= await PageConfigHelper.findElement("CitizenshipEndedNo", false);
             await ElementHelper.click(citizenshipEnded);
-            const submitButton: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_OK", false);
+            const submitButton= await PageConfigHelper.findElement("bttn_OK", false);
             await ElementHelper.click(submitButton);
             await browser.switchToParentFrame();
             await browser.switchToFrame(await $('<iframe />'));
-            const saveCitizenInformation: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_Save_Citizen", false);
+            const saveCitizenInformation= await PageConfigHelper.findElement("bttn_Save_Citizen", false);
             await ElementHelper.click(saveCitizenInformation);
         }
-        const SNO_No: WebdriverIO.Element = await PageConfigHelper.findElement("radio_SNONo", false);
+        const SNO_No= await PageConfigHelper.findElement("radio_SNONo", false);
         await ElementHelper.click(SNO_No);
-        const acceptButton: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_Accept", false);
+        const acceptButton= await PageConfigHelper.findElement("bttn_Accept", false);
         await ElementHelper.click(acceptButton);
         await browser.switchToParentFrame();
         //await WaitHelper.getInstance().waitForPageLabel('Protective filing date exists before today');
@@ -943,14 +943,14 @@ Given('User navigates to {string} screen for a new claim with {string} test data
         await browser.switchToFrame(await $('<iframe />'));
         const checkAddressText: boolean = await $('*=' + addressText).isDisplayed();
         if (checkAddressText) {
-            const addNewAddress: WebdriverIO.Element = await PageConfigHelper.findElement("AddNewAddress", false);
+            const addNewAddress= await PageConfigHelper.findElement("AddNewAddress", false);
             await ElementHelper.click(addNewAddress);
             await browser.switchToFrame(await $('<iframe />'));
-            const allMailcheckBox: WebdriverIO.Element = await PageConfigHelper.findElement("AllAddressTypes", false);
-            const mailcheckBox: WebdriverIO.Element = await PageConfigHelper.findElement("mailing", false);
-            const clickOKNewAddress: WebdriverIO.Element = await PageConfigHelper.findElement("Add New Address OK", false);
-            const clickOK: WebdriverIO.Element = await PageConfigHelper.findElement("Save", false);
-            const stateSelect: WebdriverIO.Element = await PageConfigHelper.findElement("State", false);
+            const allMailcheckBox= await PageConfigHelper.findElement("AllAddressTypes", false);
+            const mailcheckBox= await PageConfigHelper.findElement("mailing", false);
+            const clickOKNewAddress= await PageConfigHelper.findElement("Add New Address OK", false);
+            const clickOK= await PageConfigHelper.findElement("Save", false);
+            const stateSelect= await PageConfigHelper.findElement("State", false);
             await TextboxHelper.sendKeyswithElementName('Line_1', '6 Charles street', false);
             await TextboxHelper.sendKeyswithElementName('City', 'Baltimore', false);
             await DropDownHelper.selectOptionByText(stateSelect, "Maryland");
@@ -964,8 +964,8 @@ Given('User navigates to {string} screen for a new claim with {string} test data
             await ElementHelper.click(clickOKNewAddress);
             await browser.switchToParentFrame();
         }
-        const spokenlang: WebdriverIO.Element = await PageConfigHelper.findElement("SpokenLanguagePreference", false);
-        const writtenLang: WebdriverIO.Element = await PageConfigHelper.findElement("WrittenLanguagePreference", false);
+        const spokenlang= await PageConfigHelper.findElement("SpokenLanguagePreference", false);
+        const writtenLang= await PageConfigHelper.findElement("WrittenLanguagePreference", false);
         await spokenlang.sendKeyEvent("English");
         await writtenLang.sendKeyEvent("Bosnian");
         await ElementHelper.clickwithElementName('Save');
@@ -1004,10 +1004,10 @@ Given('User navigates to {string} screen for a new claim with {string} test data
             //PageConfigHelper.setCurrentPage("Lawful Presence");
             if (pageName == "Lawful Presence")
                 return;
-            const newLawfulbutton: WebdriverIO.Element = await PageConfigHelper.findElement("AddNew", false);
-            const statusdropdown: WebdriverIO.Element = await PageConfigHelper.findElement("listbox_LawfulStatus", false);
-            const startDateTextbox: WebdriverIO.Element = await PageConfigHelper.findElement("Edit_StartDt", false);
-            const proofDropdownbox: WebdriverIO.Element = await PageConfigHelper.findElement("List_Proof_Yes", false);
+            const newLawfulbutton= await PageConfigHelper.findElement("AddNew", false);
+            const statusdropdown= await PageConfigHelper.findElement("listbox_LawfulStatus", false);
+            const startDateTextbox= await PageConfigHelper.findElement("Edit_StartDt", false);
+            const proofDropdownbox= await PageConfigHelper.findElement("List_Proof_Yes", false);
             const saveLawfulStatus = await $$("//button[@id = 'okBtn']");
             await ElementHelper.click(newLawfulbutton);
             await DropDownHelper.selectOptionByText(statusdropdown, "Lawfully Admitted for Permanent Residence (LAPR)");
@@ -1024,7 +1024,7 @@ Given('User navigates to {string} screen for a new claim with {string} test data
             //PageConfigHelper.setCurrentPage("Health Insurance");
             if (pageName == "Health Insurance")
                 return;
-            const EnrollOptionsDropDown: WebdriverIO.Element = await PageConfigHelper.findElement("SMIEnrollmentOptions", false);
+            const EnrollOptionsDropDown= await PageConfigHelper.findElement("SMIEnrollmentOptions", false);
             await DropDownHelper.selectOptionByText(EnrollOptionsDropDown, "Enroll");
             await ElementHelper.clickwithElementName('ReceivingMedicaidNo');
             await ElementHelper.clickwithElementName('ReceivingAnnuityNo');
@@ -1038,7 +1038,7 @@ Given('User navigates to {string} screen for a new claim with {string} test data
             PageConfigHelper.setCurrentPage("Health Insurance");
             if (pageName == "Health Insurance")
                 return;
-            const EnrollOptionsDropDown: WebdriverIO.Element = await PageConfigHelper.findElement("SMIEnrollmentOptions", false);
+            const EnrollOptionsDropDown= await PageConfigHelper.findElement("SMIEnrollmentOptions", false);
             await DropDownHelper.selectOptionByText(EnrollOptionsDropDown, "Enroll");
             await ElementHelper.clickwithElementName('ReceivingMedicaidNo');
             await ElementHelper.clickwithElementName('ReceivingAnnuityNo');
@@ -1069,11 +1069,11 @@ Given('User navigates to {string} screen for a new claim with {string} test data
         //PageConfigHelper.setCurrentPage("Attestation and Printing");
         if (pageName == "Attestation and Printing")
             return;
-        const addSigAttestation: WebdriverIO.Element = await PageConfigHelper.findElement("AddSignatureandAttestation", false);
-        const understandCheckbox: WebdriverIO.Element = await PageConfigHelper.findElement("Understand Affirmation", false);
-        const decalreCheckbox: WebdriverIO.Element = await PageConfigHelper.findElement("Declare Affirmation", false);
-        const empAttestationCheckbox: WebdriverIO.Element = await PageConfigHelper.findElement("EmpAttestation", false);
-        const saveAttestationButton: WebdriverIO.Element = await PageConfigHelper.findElement("Save", false);
+        const addSigAttestation= await PageConfigHelper.findElement("AddSignatureandAttestation", false);
+        const understandCheckbox= await PageConfigHelper.findElement("Understand Affirmation", false);
+        const decalreCheckbox= await PageConfigHelper.findElement("Declare Affirmation", false);
+        const empAttestationCheckbox= await PageConfigHelper.findElement("EmpAttestation", false);
+        const saveAttestationButton= await PageConfigHelper.findElement("Save", false);
         await ElementHelper.click(addSigAttestation);
         await ElementHelper.clickwithElementName('radio_SignatureTypeOral');
         await CheckboxHelper.markCheckbox(understandCheckbox, true);
@@ -1084,22 +1084,22 @@ Given('User navigates to {string} screen for a new claim with {string} test data
         await ElementHelper.click(NextButtonElement);
         await WaitHelper.getInstance().waitForPageLabel('Issue');
         PageConfigHelper.setCurrentPage("Development Worksheet");
-        const unitcode: WebdriverIO.Element = await PageConfigHelper.findElement("UnitCode", false);
+        const unitcode= await PageConfigHelper.findElement("UnitCode", false);
         await TextboxHelper.sendKeys(unitcode, '122', false);
         await ElementHelper.click(NextButtonElement);
         await WaitHelper.getInstance().waitForPageLabel('T2/T18 Claims');
         PageConfigHelper.setCurrentPage("Claim Summary");
         if (pageName == "Claim Summary")
             return;
-        const Claim_SSN: WebdriverIO.Element = await PageConfigHelper.findElement("claim ssn", false);
+        const Claim_SSN= await PageConfigHelper.findElement("claim ssn", false);
         await CheckboxHelper.markCheckbox(Claim_SSN, true);
         await ElementHelper.click(NextButtonElement);
         await WaitHelper.getInstance().waitForPageLabel('Actions');
         PageConfigHelper.setCurrentPage("Claim Actions");
         if (pageName == "Claim Actions")
             return;
-        const Update: WebdriverIO.Element = await PageConfigHelper.findElement("Update", false);
-        const claimInfo: WebdriverIO.Element = await PageConfigHelper.findElement("Claim Information", false);
+        const Update= await PageConfigHelper.findElement("Update", false);
+        const claimInfo= await PageConfigHelper.findElement("Claim Information", false);
         await ElementHelper.click(Update);
         await ElementHelper.click(claimInfo);
         await ElementHelper.click(NextButtonElement);
@@ -1136,8 +1136,8 @@ Given('User navigates to {string} screen for an existing pending claim with {str
     PageConfigHelper.setCurrentPage("Home Page");
     if (pageName == "Home Page")
         return;
-    const officeCodeElement: WebdriverIO.Element = await PageConfigHelper.findElement("Office Code", false);
-    const NextButtonElement: WebdriverIO.Element = await PageConfigHelper.findElement("Next", true);
+    const officeCodeElement= await PageConfigHelper.findElement("Office Code", false);
+    const NextButtonElement= await PageConfigHelper.findElement("Next", true);
     await TextboxHelper.sendKeys(officeCodeElement, "A15", false);
     let ssn = CSVReader.getData(criteria, 'N');
     await TextboxHelper.sendKeyswithElementName('SSN', ssn, false);
@@ -1147,7 +1147,7 @@ Given('User navigates to {string} screen for an existing pending claim with {str
     PageConfigHelper.setCurrentPage("Claim Summary");
     if (pageName == "Claim Summary")
         return;
-    const Claim_SSN: WebdriverIO.Element = await PageConfigHelper.findElement("claim ssn", false);
+    const Claim_SSN= await PageConfigHelper.findElement("claim ssn", false);
     await CheckboxHelper.markCheckboxWithWaitDisplay(Claim_SSN, true);
     await ElementHelper.click(NextButtonElement);
     await WaitHelper.getInstance().waitForTitle('Claim Actions - Consolidated Claims Experience');
@@ -1155,9 +1155,9 @@ Given('User navigates to {string} screen for an existing pending claim with {str
     PageConfigHelper.setCurrentPage("Claim Actions");
     if (pageName == "Claim Actions")
         return;
-    const Update: WebdriverIO.Element = await PageConfigHelper.findElement("Update", false);
+    const Update= await PageConfigHelper.findElement("Update", false);
     await ElementHelper.click(Update);
-    const claimInfo: WebdriverIO.Element = await PageConfigHelper.findElement("Claim Information", false);
+    const claimInfo= await PageConfigHelper.findElement("Claim Information", false);
     await ElementHelper.click(claimInfo);
     await ElementHelper.click(NextButtonElement);
     await WaitHelper.getInstance().waitForTitle('Person Status - Consolidated Claims Experience');

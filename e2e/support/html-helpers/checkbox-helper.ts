@@ -7,7 +7,7 @@ export class CheckboxHelper {
         //await WaitHelper.getInstance().waitForElementToBeClickable(elementt);
         let attempts = 0;
         while (attempts++ < Constants.MAX_RETRY_ATTEMPTS) {
-            const isSelected = await elementt.isSelected();
+            const isSelected = await (elementt as { isSelected(): Promise<boolean> }).isSelected();
             if ((isSelected && !markChecked) || (!isSelected && markChecked)) {
                 return await elementt.$('./..').click();
             }
@@ -19,11 +19,11 @@ export class CheckboxHelper {
         await WaitHelper.getInstance().waitForElementToBeDisplayed(elementt);
         let attempts = 0
         while (attempts++ < Constants.MAX_RETRY_ATTEMPTS) {
-            const isSelected = await elementt.isSelected();
+            const isSelected = await (elementt as { isSelected(): Promise<boolean> }).isSelected();
             if ((isSelected && !markChecked) || (!isSelected && markChecked)) {
-                let clickElem = await elementt.$('./..');
+                let clickElem = await (elementt as any).$('./..');
                 await WaitHelper.getInstance().waitForElementToBeClickable(clickElem);
-                await clickElem.click();
+                await (clickElem as any).click();
             }
         }
         return;

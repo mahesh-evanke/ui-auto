@@ -16,7 +16,7 @@ export class ElementHelper {
         await WaitHelper.getInstance().waitForElementToBeDisplayed(item);
         return await browser.touchAction({
             action: 'moveTo',
-            element: item
+            element: item as any
         });
     }
 
@@ -24,20 +24,20 @@ export class ElementHelper {
         await WaitHelper.getInstance().waitForElementToBeDisplayed(item);
         return await browser.touchAction({
             action: 'press',
-            element: item
+            element: item as any
         });
     }
 
     static async actionDragAndDrop(source: ElementLike, destination: ElementLike) {
-        return await source.dragAndDrop(destination);
+        return await (source as any).dragAndDrop(destination);
     }
 
     static async actionDoubleClick(optElementOrButton?: ElementLike, optButton?: ElementLike) {
         if (optElementOrButton) {
-            return await optElementOrButton.doubleClick()
+            return await (optElementOrButton as any).doubleClick();
         }
         if (optButton) {
-            return await optButton.doubleClick()
+            return await (optButton as any).doubleClick();
         }
     }
 
@@ -45,34 +45,31 @@ export class ElementHelper {
         if (optElementOrButton) {
             return await browser.touchAction({
                 action: 'tap',
-                element: optElementOrButton
+                element: optElementOrButton as any
             });
         }
         if (optButton) {
-            return await browser.touchAction({
-                action: 'tap',
-                element: optButton
-            });
+            return await browser.touchAction({ action: 'tap', element: optButton } as any);
         }
     }
 
     static async actionHoverOver(locator: ElementLike) {
         return await browser.touchAction({
             action: 'moveTo',
-            element: locator
+            element: locator as any
         });
     }
 
     static async actionHoverOverAndClick(hoverOverLocator: ElementLike, clickLocator: ElementLike) {
         return await browser.touchAction([
-            { action: 'moveTo', element: hoverOverLocator },
-            { action: 'press', element: clickLocator },
+            { action: 'moveTo', element: hoverOverLocator as any },
+            { action: 'press', element: clickLocator as any },
             'release'
         ]);
     }
 
     static async hasOption(select: ElementLike, option: string) {
-        return await select.$('option=' + option).isDisplayed();
+        return await (select as any).$('option=' + option).isDisplayed();
     }
 
     static async getFocusedElement() {
@@ -85,7 +82,7 @@ export class ElementHelper {
     }
 
     static async getSelectedOption(select: ElementLike) {
-        return await select.$("option[selected]");
+        return await (select as any).$("option[selected]");
     }
 
     static async isVisible(locator) {
@@ -117,13 +114,12 @@ export class ElementHelper {
     }
 
     static async hasClass(locator: ElementLike, klass: string) {
-        return locator.getAttribute('class').then((classes: string) => {
-            return classes && classes.split(' ').indexOf(klass) !== -1;
-        });
+        const classes = await (locator as any).getAttribute('class');
+        return classes && classes.split(' ').indexOf(klass) !== -1;
     }
 
     static async hasClassRegex(locator: ElementLike, klass: string) {
-        const classAttribute = await locator.getAttribute('class');
+        const classAttribute = await (locator as any).getAttribute('class');
         const pattern = new RegExp('(^|\\s)' + klass + '(\\s|$)');
         return pattern.test(classAttribute);
     }
@@ -135,11 +131,11 @@ export class ElementHelper {
 
     static async click(targetElement: ElementLike) {
         await WaitHelper.getInstance().waitForElementToBeClickable(targetElement);
-        return targetElement.click();
+        return (targetElement as any).click();
     }
 
     static async clickIfPresent(targetElement: ElementLike) {
-        const isPresent = await targetElement.isDisplayed();
+        const isPresent = await (targetElement as any).isDisplayed();
         if (isPresent) {
             return this.click(targetElement);
         }
@@ -166,9 +162,9 @@ export class ElementHelper {
 
     static async selectDropdownByIndex(elementt: ElementLike, optionNum: number) {
         if (optionNum) {
-            await elementt.$('< option />').then(function (options) {
-                options[optionNum].click();
-            });
+            const options = await (elementt as any).$$('<option />');
+            const el = await options[optionNum];
+            if (el) await el.click();
         }
     }
 
@@ -181,31 +177,29 @@ export class ElementHelper {
      }
 
     static async getAttributeValue(elem: ElementLike, attribute: string) {
-        return elem.getAttribute(attribute)
-            .then(function (text) {
+        return (elem as any).getAttribute(attribute)
+            .then(function (text: string) {
                 return text.trim();
             });
     }
 
     static async getText(elem: ElementLike) {
-        return elem.getText()
-            .then(function (text) {
-                return text.trim();
-            });
+        const text = await (elem as any).getText();
+        return text.trim();
     }
 
     static async isElementPresent(webElement: ElementLike): Promise<boolean> {
-        return webElement != null && await webElement.isDisplayed();
+        return webElement != null && await (webElement as any).isDisplayed();
     }
 
     static async isElementEnabled(webElement: ElementLike): Promise<boolean> {
-        return webElement != null && await webElement.isEnabled();
+        return webElement != null && await (webElement as any).isEnabled();
     }
     static async isElementTextPresent(webElement: ElementLike, attributeType: string, attribute: string): Promise<boolean> {
         if (webElement == null) {
             return false;
         }
-        const attributes = await webElement.getAttribute(attributeType);
+        const attributes = await (webElement as any).getAttribute(attributeType);
         return await attributes.indexOf(attribute) !== -1;
     }
     static async countElements(elements: ElementLike[]): Promise<number> {
@@ -225,7 +219,7 @@ export class ElementHelper {
     }
 
     static async isElementDisplayed(webElement: ElementLike): Promise<boolean> {
-        return webElement != null && await webElement.isDisplayed();
+        return webElement != null && await (webElement as any).isDisplayed();
     }
 
     static async areNElementDisplayed(webElements: ElementLike[], expectedCount: number, exactCount: boolean = false): Promise<boolean> {
@@ -242,22 +236,21 @@ export class ElementHelper {
     }
 
     static async isElementSelected(webElement: ElementLike): Promise<boolean> {
-        return webElement != null && await webElement.isSelected();
+        return webElement != null && await (webElement as any).isSelected();
     }
 
     static async getAttribute(webElement: ElementLike, attributeName: string): Promise<string> {
-        return webElement != null && await webElement.getAttribute(attributeName);
+        return webElement != null && await (webElement as any).getAttribute(attributeName);
     }
 
     static async clearElement(webElement: ElementLike): Promise<void> {
-        await webElement.clearValue();
+        await (webElement as any).clearValue();
     }
     //https://stackoverflow.com/questions/39399477/protractor-scroll-into-view-not-working
     static async scrollElementToView(element: ElementLike): Promise<void> {
-        await element.scrollIntoView();
+        await (element as any).scrollIntoView();
     }
     static async getElementText(webElement: ElementLike): Promise<string> {
-        //await this.browserWait.waitElementToBeVisible(webElement);
-        return await webElement.getText();
+        return await (webElement as any).getText();
     }
 }

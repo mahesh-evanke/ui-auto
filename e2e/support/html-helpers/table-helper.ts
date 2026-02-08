@@ -24,8 +24,10 @@ export class TableHelper {
 
     // get the number of rows and columns and return it as Map
     public static async getTableSize() {
-        let tr: Number = (await this.webTable.$$('<tr />')).length;
-        let th: Number = (await this.webTable.$$('<th />')).length;
+        const trRows = await this.webTable.$$('<tr />');
+        const thRows = await this.webTable.$$('<th />');
+        const tr = await trRows.length;
+        const th = await thRows.length;
         return { tr, th };
     }
 

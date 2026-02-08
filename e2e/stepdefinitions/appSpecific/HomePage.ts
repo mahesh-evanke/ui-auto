@@ -8,9 +8,9 @@ const expect = chai.expect;
 const assert = chai.assert;
 
 Given('enters inputs with header names {string} from datatable to verify the edit message in {string} column', async (inputs: string, errorMsg: string, table: DataTable) => {
-    const officeCodeElement: WebdriverIO.Element = await PageConfigHelper.findElement("Office Code", false);
-    const SSNElement: WebdriverIO.Element = await PageConfigHelper.findElement("SSN", false);
-    const NextButtonElement: WebdriverIO.Element = await PageConfigHelper.findElement("Next", true);
+    const officeCodeElement = await PageConfigHelper.findElement("Office Code", false);
+    const SSNElement = await PageConfigHelper.findElement("SSN", false);
+    const NextButtonElement = await PageConfigHelper.findElement("Next", true);
     var data = table.hashes();
     for (var i = 0; i < data.length; i++) {
         officeCodeElement

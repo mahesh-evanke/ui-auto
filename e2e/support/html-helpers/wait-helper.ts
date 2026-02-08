@@ -1,16 +1,14 @@
 import { PageHelper } from './page-helper';
 import { CommonPageValidations } from "../misc-utils/common-page.validations";
 import { PageConfigHelper } from '../misc-utils/PageHelper';
-import * as EC from 'wdio-wait-for';
+import * as ExpectedConditions from 'wdio-wait-for';
 import { fail } from 'assert';
 
 const chai = require('chai').use(require('chai-as-promised'));
 const assert = chai.assert;
 
-
 export class WaitHelper {
     private static instance: WaitHelper;
-    private readonly EC = EC;
 
     private constructor() {
     }
@@ -37,7 +35,7 @@ export class WaitHelper {
         message = 'Element should exist') {
         let mess: string = targetElement.toString() + message;
 
-        return await browser.waitUntil(EC.presenceOf(targetElement), {
+        return await browser.waitUntil(ExpectedConditions.presenceOf(targetElement), {
             timeout: timeout,
             timeoutMsg: mess
         });
@@ -54,7 +52,7 @@ export class WaitHelper {
         message = CommonPageValidations.shouldBeVisible) {
         let mess: string = targetElement.toString() + message;
 
-        return await browser.waitUntil(EC.visibilityOf(targetElement), {
+        return await browser.waitUntil(ExpectedConditions.visibilityOf(targetElement), {
             timeout: timeout,
             timeoutMsg: mess
         });
@@ -70,7 +68,7 @@ export class WaitHelper {
             try {
                 await WaitHelper.getInstance().waitForElement(frame);
                 await browser.switchToFrame(await frame);
-                let isDisplayed = browser.waitUntil(EC.visibilityOf(targetElement), {
+                let isDisplayed = await browser.waitUntil(ExpectedConditions.visibilityOf(targetElement), {
                     timeout: timeout
                 }).then(() => true, () => false);
 
@@ -99,7 +97,7 @@ export class WaitHelper {
         timeout = PageHelper.DEFAULT_TIMEOUT,
         message = 'Element should not be visible') {
         let mess: string = targetElement.toString() + message;
-        return await browser.waitUntil(EC.invisibilityOf(targetElement), {
+        return await browser.waitUntil(ExpectedConditions.invisibilityOf(targetElement), {
             timeout: timeout,
             timeoutMsg: mess
         });
@@ -115,7 +113,7 @@ export class WaitHelper {
         timeout = PageHelper.DEFAULT_TIMEOUT,
         message = CommonPageValidations.shouldBeClickable) {
         let mess: string = targetElement.toString() + message;
-        return await browser.waitUntil(EC.elementToBeClickable(targetElement), {
+        return await browser.waitUntil(ExpectedConditions.elementToBeClickable(targetElement), {
             timeout: timeout,
             timeoutMsg: mess
         });
@@ -140,7 +138,7 @@ export class WaitHelper {
             await WaitHelper.getInstance().waitForElement(frame);
             await browser.switchToFrame(frame);
 
-            let isClickable = await browser.waitUntil(EC.elementToBeClickable(targetElement), {
+            let isClickable = await browser.waitUntil(ExpectedConditions.elementToBeClickable(targetElement), {
                 timeout: timeout
             }).then(() => true, () => false);
             await browser.switchToParentFrame();
@@ -175,7 +173,7 @@ export class WaitHelper {
     }
 
     public async waitForElementOptionallyPresent(targetElement, timeout = PageHelper.DEFAULT_TIMEOUT) {
-        const isDisplayed = this.EC.presenceOf(targetElement);
+        const isDisplayed = ExpectedConditions.presenceOf(targetElement);
         return await browser.waitUntil(isDisplayed, {
             timeout: timeout,
         }).then(function () {
@@ -225,7 +223,7 @@ export class WaitHelper {
 
     // tslint:disable-next-line:member-ordering
     public async waitForTitle(titletWait: string, timeout = PageHelper.DEFAULT_TIMEOUT, attempts = PageHelper.MAX_RETRY_ATTEMPTS) {
-        await browser.waitUntil(EC.titleContains(titletWait), { timeout: timeout, timeoutMsg: 'Failed, after waiting for title: ' + titletWait });
+        await browser.waitUntil(ExpectedConditions.titleContains(titletWait), { timeout: timeout, timeoutMsg: 'Failed, after waiting for title: ' + titletWait });
         return true;
     }
 
@@ -298,7 +296,7 @@ export class WaitHelper {
             timeout = timeout * 1000;
         }
         for (let i = 0; i < attempts; ++i) {
-            const isAlertPresent = await browser.waitUntil(EC.alertIsPresent(), {
+            const isAlertPresent = await browser.waitUntil(ExpectedConditions.alertIsPresent(), {
                 timeout: timeout
             }).then(() => true, () => false);
             if (isAlertPresent) {

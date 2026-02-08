@@ -1,10 +1,9 @@
 import { WaitHelper } from './wait-helper';
 import { PageHelper } from './page-helper';
 import { PageConfigHelper } from '../misc-utils/PageHelper';
-import * as EC from 'wdio-wait-for';
+import * as ExpectedConditions from 'wdio-wait-for';
 
 export class ElementHelper {
-    private static readonly EC = EC;
 
     static async getBrowser() {
         return global.browserName;
@@ -87,15 +86,15 @@ export class ElementHelper {
     }
 
     static async isVisible(locator) {
-        return this.EC.visibilityOf(locator);
+        return ExpectedConditions.visibilityOf(locator);
     }
 
     static async isNotVisible(locator) {
-        return this.EC.invisibilityOf(locator);
+        return ExpectedConditions.invisibilityOf(locator);
     }
 
     static async inDom(locator) {
-        return this.EC.presenceOf(locator);
+        return ExpectedConditions.presenceOf(locator);
     }
 
     static async notInDom(locator) {
@@ -103,7 +102,7 @@ export class ElementHelper {
     }
 
     static async isClickable(locator) {
-        return this.EC.elementToBeClickable(locator);
+        return ExpectedConditions.elementToBeClickable(locator);
     }
 
     static async hasText(locator, text: string) {
@@ -111,7 +110,7 @@ export class ElementHelper {
     }
 
     static async titleIs(title: string) {
-        return this.EC.titleIs(title);
+        return ExpectedConditions.titleIs(title);
     }
 
     static async hasClass(locator: WebdriverIO.Element, klass: string) {

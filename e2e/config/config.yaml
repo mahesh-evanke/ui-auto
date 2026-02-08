@@ -10,7 +10,9 @@ region: regular
 tags: "@Completed21"
 retryOnFail: '0'
 shardTestFiles: false
-edgedriverpath: ""
+# Path to msedgedriver.exe (optional). If set, WDIO uses this binary and does not download EdgeDriver.
+edgedriverpath: 'C:/WS/vscode/drivers/msedgedriver.exe'
+# Path to chromedriver.exe (optional). If set, WDIO uses this binary and does not download ChromeDriver.
 chromedriverpath: "<path>"
 #this is only for when run in grid or seleniumbox 
 maxInstances: 1

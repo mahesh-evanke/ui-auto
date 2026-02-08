@@ -1,68 +1,97 @@
-import {Options} from '@wdio/types';
+/**
+ * WebdriverIO v9 config for Cucumber e2e tests.
+ * Supports Chrome and Edge with optional custom driver exe paths (no auto-download for Edge when path set).
+ * Screenshot on scenario failure is written to report folder and attached to Cucumber JSON.
+ */
+/// <reference types="@wdio/globals/types" />
+import type { Options } from '@wdio/types';
+// Browser is injected at runtime by WDIO; declare for type-checking in config hooks.
+declare const browser: WebdriverIO.Browser;
 import { PageConfigHelper } from "../support/misc-utils/PageHelper";
 import { generate } from 'multiple-cucumber-html-reporter';
 import { removeSync } from 'fs-extra';
 import cucumberJson from 'wdio-cucumberjs-json-reporter';
-import * as  moment from 'moment';
-import * as  fs from 'fs';
-import * as  glob from 'glob';
+import moment from 'moment';
+import * as fs from 'fs';
+import * as glob from 'glob';
 import * as yamlReader from 'js-yaml';
 
-const e2eConfig = yamlReader.load(fs.readFileSync('e2e/config/config.yaml', 'utf8'));
-const executionMode = e2eConfig.executionMode.toUpperCase();
-const environment = e2eConfig.environment.toUpperCase();
-const reportFolder = e2eConfig.reportFolder;
+const e2eConfig = yamlReader.load(fs.readFileSync('e2e/config/config.yaml', 'utf8')) as Record<string, unknown>;
+const executionMode = String(e2eConfig.executionMode).toUpperCase();
+const environment = String(e2eConfig.environment).toUpperCase();
+const reportFolder = String(e2eConfig.reportFolder);
 
-let runServices = [];
-let baseUrl = null;
-let browserName = e2eConfig.browserName.toUpperCase();
+let baseUrl: string | null = null;
+let browserName = String(e2eConfig.browserName).toUpperCase();
 
-if (environment == 'VAL')
-    baseUrl = e2eConfig.valUrl;
-else if (environment == 'DEV')
-    baseUrl = e2eConfig.devUrl;
-else if (environment == 'STANDALONE') 
-    baseUrl = e2eConfig.standaloneUrl
-else{
+if (environment === 'VAL')
+    baseUrl = String(e2eConfig.valUrl);
+else if (environment === 'DEV')
+    baseUrl = String(e2eConfig.devUrl);
+else if (environment === 'STANDALONE')
+    baseUrl = String(e2eConfig.standaloneUrl);
+else {
     console.log('Incorrect environment value');
-    process.exit();
+    process.exit(1);
 }
 
-console.log('Application URL: '+baseUrl)
+console.log('Application URL: ' + baseUrl);
 
-if (browserName == 'IE') {
+// Normalize browserName for WDIO v9; build driver options for custom exe (no download when path set)
+let capabilitiesBase: Record<string, unknown> = {
+    maxInstances: Number(e2eConfig.maxInstances ?? 1),
+    'e34:l_testName': e2eConfig.seleniumBoxTestName,
+    'e34:video': e2eConfig.seleniumBoxVideoSw,
+    'e34:userId': e2eConfig.seleniumBoxId,
+    'e34:token': e2eConfig.seleniumBoxToken,
+    'e34:projectId': e2eConfig.seleniumBoxProjectName,
+    'e34:credential': e2eConfig.seleniumBoxCredential,
+};
+
+if (browserName === 'IE') {
     browserName = 'internet explorer';
-} else if (browserName == 'CHROME') {
+    capabilitiesBase.browserName = browserName;
+} else if (browserName === 'CHROME') {
     browserName = 'chrome';
-    runServices = ['chromedriver'];
-    if(e2eConfig.chromedriverpath != '<path>' || e2eConfig.chromedriverpath != '')
-        process.env['CHROMEDRIVER_FILEPATH'] = e2eConfig.chromedriverpath;
-} else if (browserName == 'EDGE') {
-    browserName = 'MicrosoftEdge';
-    runServices = ['edgedriver'];
-    if(e2eConfig.edgedriverpath != '<path>' || e2eConfig.edgedriverpath != '')
-        process.env['EDGEDRIVER_PATH'] = e2eConfig.edgedriverpath;
+    capabilitiesBase.browserName = browserName;
+    const chromedriverPath = e2eConfig.chromedriverpath && String(e2eConfig.chromedriverpath).trim() !== '' && String(e2eConfig.chromedriverpath) !== '<path>';
+    if (chromedriverPath) {
+        (capabilitiesBase as Record<string, unknown>)['wdio:chromedriverOptions'] = { binary: String(e2eConfig.chromedriverpath).trim() };
+    }
+} else if (browserName === 'EDGE') {
+    browserName = 'msedge';
+    capabilitiesBase.browserName = browserName;
+    const edgedriverPath = e2eConfig.edgedriverpath && String(e2eConfig.edgedriverpath).trim() !== '' && String(e2eConfig.edgedriverpath) !== '<path>';
+    if (edgedriverPath) {
+        (capabilitiesBase as Record<string, unknown>)['wdio:edgedriverOptions'] = { binary: String(e2eConfig.edgedriverpath).trim() };
+    }
+} else {
+    capabilitiesBase.browserName = browserName;
 }
 
-let port, protocol, seleniumAddressVal;
+let port: number | undefined;
+let protocol: string;
+let hostname: string;
 
 if (executionMode === 'LOCAL') {
-    port=4444;
+    hostname = 'localhost';
+    port = 4444;
     protocol = 'http';
-    seleniumAddressVal = e2eConfig.seleniumLocalAddress;
-} else if (executionMode == 'GRID') {
-    seleniumAddressVal = e2eConfig.seleniumAddress;
-    runServices = [];
-} else if (executionMode == 'SELENIUMBOX') {
-    seleniumAddressVal = e2eConfig.seleniumBoxAddress;
-    runServices = [];
+} else if (executionMode === 'GRID') {
+    hostname = String(e2eConfig.seleniumAddress);
+    protocol = 'http';
+} else if (executionMode === 'SELENIUMBOX') {
+    hostname = String(e2eConfig.seleniumBoxAddress);
     port = 443;
-    protocol = 'https'
+    protocol = 'https';
+} else {
+    console.log('Incorrect executionMode value');
+    process.exit(1);
 }
 
-const paths = glob.sync(e2eConfig.features);
+const paths = glob.sync(String(e2eConfig.features ?? ''));
 const parser = require("gherkin-parse");
-const tags = e2eConfig.tags.split(/[, ]+/);
+const tags = String(e2eConfig.tags ?? '').split(/[, ]+/);
 
 var features = [];
 pathloop: for (let path of paths) {
@@ -93,8 +122,8 @@ let featuresFiles = Array.from(new Set(features));
 let startTime;
 let endTime;
 
-export const config: Options.Testrunner = {
-    services: runServices,
+export const config: WebdriverIO.Config = {
+    runner: 'local',
     //
     // ====================
     // Runner Configuration
@@ -137,35 +166,13 @@ export const config: Options.Testrunner = {
     // and 30 processes will get spawned. The property handles how many capabilities
     // from the same test should run tests.
     //
-    maxInstances: e2eConfig.maxInstances,
+    maxInstances: Number(e2eConfig.maxInstances ?? 1),
     //
     // If you have trouble getting all important capabilities together, check out the
     // Sauce Labs platform configurator - a great tool to configure your capabilities:
     // https://saucelabs.com/platform/platform-configurator
     //
-    capabilities: [{
-
-        // maxInstances can get overwritten per capability. So if you have an in-house Selenium
-        // grid with only 5 firefox instances available you can make sure that not more than
-        // 5 instances get started at a time.
-        maxInstances: e2eConfig.maxInstances,
-        //
-        browserName: browserName,
-        //acceptInsecureCerts: true,
-        //'goog:chromeOptions': {
-        //    excludeSwitches: ['enable-logging']
-        //},
-        'e34:l_testName': e2eConfig.seleniumBoxTestName,
-        'e34:video': e2eConfig.seleniumBoxVideoSw,
-        'e34:userId': e2eConfig.seleniumBoxId,
-        'e34:token': e2eConfig.seleniumBoxToken,
-        'e34:projectId': e2eConfig.seleniumBoxProjectName,
-        'e34:credential': e2eConfig.seleniumBoxCredential,
-        // If outputDir is provided WebdriverIO can capture driver session logs
-        // it is possible to configure which logTypes to include/exclude.
-        // excludeDriverLogs: ['*'], // pass '*' to exclude all driver session logs
-        // excludeDriverLogs: ['bugreport', 'server'],
-    }],
+    capabilities: [capabilitiesBase],
     //
     // ===================
     // Test Configurations
@@ -200,7 +207,7 @@ export const config: Options.Testrunner = {
     baseUrl: baseUrl,
     //
     // Default timeout for all waitFor* commands.
-    waitforTimeout: e2eConfig.allScriptsTimeout,
+    waitforTimeout: Number(e2eConfig.allScriptsTimeout ?? 11000),
     //
     // Default timeout in milliseconds for request
     // if browser driver or grid doesn't send response
@@ -213,10 +220,14 @@ export const config: Options.Testrunner = {
     // Services take over a specific job you don't want to take care of. They enhance
     // your test setup with almost no effort. Unlike plugins, they don't add new
     // commands. Instead, they hook themselves up into the test process.
-    hostname: seleniumAddressVal,
-    port: port,
-    path: '/wd/hub/',
-    protocol: protocol,
+    // For LOCAL: omit hostname/port/path so WDIO starts driver (using binary from capabilities when set).
+    // For GRID/SELENIUMBOX: connect to remote hub.
+    ...(executionMode !== 'LOCAL' && {
+        hostname,
+        port,
+        path: '/wd/hub/',
+        protocol,
+    }),
     // Framework you want to run your specs with.
     // The following are supported: Mocha, Jasmine, and Cucumber
     // see also: https://webdriver.io/docs/frameworks
@@ -265,9 +276,9 @@ export const config: Options.Testrunner = {
         // <boolean> fail if there are any undefined or pending steps
         strict: false,
         // <string> (expression) only execute the features or scenarios with tags matching the expression
-        tagExpression: e2eConfig.tags,
+        tagExpression: String(e2eConfig.tags ?? ''),
         // <number> timeout for step definitions
-        timeout: e2eConfig.getPageTimeout,
+        timeout: Number(e2eConfig.getPageTimeout ?? 40000),
         // <boolean> Enable this config to treat undefined definitions as warnings.
         ignoreUndefinedDefinitions: false
     },
@@ -285,7 +296,8 @@ export const config: Options.Testrunner = {
      * @param {Object} config wdio configuration object
      * @param {Array.<Object>} capabilities list of capabilities details
      */
-    onPrepare: function (config, capabilities) {
+    onPrepare: function () {
+        startTime = new Date();
         removeSync(reportFolder);
     },
     /**
@@ -386,30 +398,43 @@ export const config: Options.Testrunner = {
      * @param {number}                 result.duration  duration of scenario in milliseconds
      * @param {Object}                 context          Cucumber World object
      */
-    afterScenario: async function (world, result, context) {
+    afterScenario: async function (world, result) {
         if (!result.passed) {
-            let scrollHeight = parseInt(await browser.execute("return document.body.scrollHeight"));
-            let clientHeight = parseInt(await browser.execute("return document.body.clientHeight"));
-            const num = Math.ceil(scrollHeight / clientHeight);
-            for (let i = 0; i < num; i++) {
-                let height = i * clientHeight;
-                await browser.execute("window.scrollTo(0," + height + ");");
-                await takeScreenshot(i);
-                cucumberJson.attach(await browser.takeScreenshot(), 'image/png');
-            }
-        }
-        async function takeScreenshot(num: number) {
-            await browser.takeScreenshot().then(function (png) {
-                var dir = reportFolder + '/screenshot';
+            try {
+                const scrollHeight = parseInt(await browser.execute("return document.body.scrollHeight") as string, 10);
+                const clientHeight = parseInt(await browser.execute("return document.body.clientHeight") as string, 10);
+                const num = Math.ceil(scrollHeight / clientHeight) || 1;
+                const timestamp = moment(new Date()).format("yyyy_MM_DD__HH_mm_ss_SSS");
+                const scenarioName = (world as { pickle?: { name?: string } }).pickle?.name ?? 'scenario';
+                const safeName = scenarioName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 50);
+                const dir = reportFolder + '/screenshot';
                 if (!fs.existsSync(dir)) {
                     fs.mkdirSync(dir, { recursive: true });
                 }
-                const time = moment(new Date()).format("yyyy_MM_DD__HH_mm_ss_SSS");
-                dir = dir + "/failure_" + time + "_" + num + ".png"
-                var stream = fs.createWriteStream(dir);
-                stream.write(Buffer.from(png, 'base64'));
-                stream.end();
-            });
+                for (let i = 0; i < num; i++) {
+                    const height = i * clientHeight;
+                    await browser.execute("window.scrollTo(0," + height + ");");
+                    const png = await browser.takeScreenshot();
+                    const filepath = `${dir}/failure_${timestamp}_${safeName}_${i}.png`;
+                    await fs.promises.writeFile(filepath, Buffer.from(png, 'base64'));
+                    try {
+                        cucumberJson.attach(png, 'image/png');
+                    } catch {
+                        // Reporter attach may not be available in all contexts
+                    }
+                }
+            } catch (err) {
+                try {
+                    const png = await browser.takeScreenshot();
+                    const dir = reportFolder + '/screenshot';
+                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                    const filepath = dir + '/failure_fallback_' + moment(new Date()).format("yyyy_MM_DD__HH_mm_ss_SSS") + '.png';
+                    await fs.promises.writeFile(filepath, Buffer.from(png, 'base64'));
+                    cucumberJson.attach(png, 'image/png');
+                } catch (fallbackErr) {
+                    console.warn('Screenshot on failure could not be taken:', (fallbackErr as Error).message);
+                }
+            }
         }
     },
     /**

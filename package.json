@@ -36,7 +36,8 @@
         "repl": "npx wdio repl chrome",
         "webio": "node webio/cli.js",
         "webio:generate": "node webio/generate-feature.js",
-        "webio:generate-locators": "node webio/generate-locators-and-features.js"
+        "webio:generate-locators": "node webio/generate-locators-and-features.js",
+        "webio:generate-api": "node webio/generate-api-feature.js"
     },
     "dependencies": {
         "axios": "^1.13.5"

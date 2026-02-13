@@ -165,6 +165,137 @@
   }
 })();
 
+/**
+ * Network capture: intercept XHR and Fetch, store API requests in __WEBIO__.networkLog.
+ * Log format: { id, url, method, headers, requestBody, responseStatus, responseBody, timestamp }.
+ * Raw logs are never exposed in UI; only safe summaries (method, URL, status) are shown.
+ */
+(function () {
+  if (!window.__WEBIO__) window.__WEBIO__ = {};
+  var ns = window.__WEBIO__;
+  if (!ns.networkLog) ns.networkLog = [];
+  var idCounter = 1;
+
+  function safeParseJson(str) {
+    if (str == null || str === "") return null;
+    try {
+      if (typeof str === "string") return JSON.parse(str);
+      return str;
+    } catch (e) {
+      return str;
+    }
+  }
+
+  function captureRequest(url, method, headers, requestBody, responseStatus, responseBody, timestamp) {
+    var entry = {
+      id: "nw_" + idCounter++,
+      url: url || "",
+      method: (method || "GET").toUpperCase(),
+      headers: headers || {},
+      requestBody: requestBody,
+      responseStatus: responseStatus,
+      responseBody: responseBody,
+      timestamp: timestamp || new Date().toISOString()
+    };
+    ns.networkLog.push(entry);
+  }
+
+  function headersToObject(headerList) {
+    if (!headerList) return {};
+    var o = {};
+    if (headerList.forEach) {
+      headerList.forEach(function (v, k) { o[k] = v; });
+    } else if (typeof headerList.entries === "function") {
+      var it = headerList.entries();
+      var next;
+      while ((next = it.next()) && !next.done) {
+        o[next.value[0]] = next.value[1];
+      }
+    }
+    return o;
+  }
+
+  if (!window.__WEBIO_NETWORK_CAPTURE_INIT__) {
+    window.__WEBIO_NETWORK_CAPTURE_INIT__ = true;
+
+    var XHR = window.XMLHttpRequest;
+    if (XHR) {
+      var origOpen = XHR.prototype.open;
+      var origSend = XHR.prototype.send;
+      var origSetRequestHeader = XHR.prototype.setRequestHeader;
+      XHR.prototype.open = function (method, url) {
+        this._webio_method = method;
+        this._webio_url = url;
+        this._webio_headers = {};
+        return origOpen.apply(this, arguments);
+      };
+      XHR.prototype.setRequestHeader = function (name, value) {
+        if (!this._webio_headers) this._webio_headers = {};
+        this._webio_headers[name] = value;
+        return origSetRequestHeader ? origSetRequestHeader.apply(this, arguments) : undefined;
+      };
+      XHR.prototype.send = function (body) {
+        var self = this;
+        var url = self._webio_url || "";
+        var method = (self._webio_method || "GET").toUpperCase();
+        var reqHeaders = self._webio_headers || {};
+        var startTs = new Date().toISOString();
+        var reqBody = null;
+        if (body != null && body !== "") {
+          reqBody = typeof body === "string" ? safeParseJson(body) : body;
+          if (reqBody === body && typeof body === "string") reqBody = body;
+        }
+        self.addEventListener("load", function () {
+          var status = self.status;
+          var respBody = null;
+          try {
+            var text = self.responseText;
+            if (text) respBody = safeParseJson(text);
+            if (respBody === null && text) respBody = text;
+          } catch (e) {}
+          captureRequest(url, method, reqHeaders, reqBody, status, respBody, startTs);
+        });
+        self.addEventListener("error", function () {
+          captureRequest(url, method, reqHeaders, reqBody, 0, null, startTs);
+        });
+        return origSend.apply(this, arguments);
+      };
+    }
+
+    var origFetch = window.fetch;
+    if (origFetch) {
+      window.fetch = function (input, init) {
+        init = init || {};
+        var url = typeof input === "string" ? input : (input && input.url) || "";
+        var method = (init.method || "GET").toUpperCase();
+        var reqHeaders = headersToObject(init.headers);
+        var reqBody = null;
+        if (init.body != null) {
+          if (typeof init.body === "string") reqBody = safeParseJson(init.body);
+          else reqBody = init.body;
+          if (reqBody === init.body && typeof init.body === "string") reqBody = init.body;
+        }
+        var startTs = new Date().toISOString();
+        return origFetch.apply(this, arguments).then(function (res) {
+          var status = res.status;
+          res.clone().text().then(function (text) {
+            var respBody = null;
+            if (text) respBody = safeParseJson(text);
+            if (respBody === null && text) respBody = text;
+            captureRequest(url, method, reqHeaders, reqBody, status, respBody, startTs);
+          }).catch(function () {
+            captureRequest(url, method, reqHeaders, reqBody, status, null, startTs);
+          });
+          return res;
+        }).catch(function (err) {
+          captureRequest(url, method, reqHeaders, reqBody, 0, null, startTs);
+          throw err;
+        });
+      };
+    }
+  }
+})();
+
 (() => {
   if (!window.__WEBIO__) {
     window.__WEBIO__ = {};
@@ -472,6 +603,12 @@
 
     var recordedScreens = {};
     window.webioRecordedScreens = function () { return recordedScreens; };
+
+    var apiMethodFilter = "";
+    var apiUrlKeyword = "";
+    var apiStatusFilter = "";
+    var selectedApiIds = {};
+    var webioActiveTab = "webui";
 
     function getLogicalName(el) {
         var label = getControlLabel(el);
@@ -1639,6 +1776,144 @@
         return div.innerHTML;
     }
 
+    function getFilteredNetworkLog(methodFilter, urlKeyword, statusFilter) {
+        var log = (window.__WEBIO__ && window.__WEBIO__.networkLog) ? window.__WEBIO__.networkLog : [];
+        return log.filter(function (entry) {
+            if (methodFilter && (entry.method || "").toUpperCase() !== (methodFilter || "").toUpperCase()) return false;
+            if (urlKeyword && (entry.url || "").indexOf(urlKeyword) === -1) return false;
+            if (statusFilter !== "" && statusFilter != null) {
+                var status = entry.responseStatus;
+                var want = String(statusFilter).trim();
+                if (want.slice(-1) === "x" && want.length >= 2) {
+                    var prefix = want.slice(0, -1);
+                    if (prefix === "2" && Math.floor(status / 100) !== 2) return false;
+                    if (prefix === "4" && Math.floor(status / 100) !== 4) return false;
+                    if (prefix === "5" && Math.floor(status / 100) !== 5) return false;
+                } else if (parseInt(want, 10) !== status) return false;
+            }
+            return true;
+        });
+    }
+
+    function apiNameFromEntry(entry) {
+        try {
+            var u = new URL(entry.url, window.location.origin);
+            var path = u.pathname || "";
+            var last = path.split("/").filter(Boolean).pop();
+            if (last) return last.replace(/[^\w-]/g, "_").slice(0, 40) || "api";
+        } catch (e) {}
+        return "api";
+    }
+
+    function formatFeatureValue(val) {
+        if (val === null || val === undefined) return '""';
+        if (typeof val === "string") return '"' + val.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+        if (typeof val === "number") return String(val);
+        if (typeof val === "boolean") return val ? "true" : "false";
+        if (Array.isArray(val)) return JSON.stringify(val);
+        if (typeof val === "object") return JSON.stringify(val);
+        return '"' + String(val) + '"';
+    }
+
+    function flattenToPathValueTable(obj, prefix, rows) {
+        prefix = prefix || "";
+        rows = rows || [];
+        if (obj === null || obj === undefined) return rows;
+        if (typeof obj !== "object" || Array.isArray(obj)) {
+            rows.push({ path: prefix.replace(/^\./, ""), value: formatFeatureValue(obj) });
+            return rows;
+        }
+        Object.keys(obj).forEach(function (key) {
+            var path = prefix ? prefix + "." + key : key;
+            var v = obj[key];
+            if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+                flattenToPathValueTable(v, path, rows);
+            } else {
+                rows.push({ path: path, value: formatFeatureValue(v) });
+            }
+        });
+        return rows;
+    }
+
+    function buildApiFeatureContent(entries) {
+        var lines = ["Feature: API tests", ""];
+        entries.forEach(function (entry) {
+            var name = apiNameFromEntry(entry);
+            var url = (entry.url || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+            var method = (entry.method || "GET").toUpperCase();
+            if (["GET", "POST", "PUT", "DELETE"].indexOf(method) === -1) method = "GET";
+            var status = entry.responseStatus != null ? entry.responseStatus : 0;
+            var bodyObj = null;
+            if (entry.requestBody != null && entry.requestBody !== "") {
+                if (typeof entry.requestBody === "object") bodyObj = entry.requestBody;
+                else {
+                    try { bodyObj = JSON.parse(entry.requestBody); } catch (e) { bodyObj = null; }
+                }
+            }
+            lines.push("  @api");
+            lines.push("  Scenario: Verify " + name);
+            if (bodyObj && typeof bodyObj === "object" && !Array.isArray(bodyObj) && Object.keys(bodyObj).length > 0) {
+                var tableRows = flattenToPathValueTable(bodyObj);
+                lines.push('    Given User sends ' + method + ' request to "' + url + '" with body:');
+                lines.push("      | path                          | value          |");
+                tableRows.forEach(function (r) {
+                    var pathStr = String(r.path || "");
+                    var valueStr = String(r.value || "");
+                    lines.push("      | " + pathStr + " | " + valueStr + " |");
+                });
+            } else {
+                lines.push('    Given User sends ' + method + ' request to "' + url + '"');
+            }
+            lines.push("    Then User expects status code " + status);
+            lines.push("");
+        });
+        return lines.join("\n").replace(/\n+$/, "\n");
+    }
+
+    function showApiFeatureEditPopup(initialContent) {
+        var existing = document.querySelector("[data-webio-api-feature-popup]");
+        if (existing) document.body.removeChild(existing);
+        var popup = document.createElement("div");
+        popup.setAttribute("data-webio-api-feature-popup", "true");
+        popup.setAttribute("data-export-popup", "true");
+        popup.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;color:#000;border:1px solid #ccc;padding:20px;font-family:sans-serif;box-shadow:2px 2px 20px rgba(0,0,0,0.5);z-index:999999;max-width:700px;width:90vw;height:85vh;max-height:85vh;overflow:hidden;color-scheme:light;display:flex;flex-direction:column;box-sizing:border-box;";
+        popup.innerHTML = "<style>[data-webio-api-feature-popup] textarea,[data-webio-api-feature-popup] h3{color:#000!important;background:#fff!important}[data-webio-api-feature-popup] button{color:#000!important;background:#f5f5f5!important;border:1px solid #ccc!important}</style>"
+            + "<div class=\"webio-api-feature-drag-handle\" style=\"cursor:move;user-select:none;margin:-20px -20px 12px -20px;padding:12px 20px;border-bottom:1px solid #eee;flex-shrink:0;\"><h3 style=\"margin:0;\">API Feature — Edit then Save</h3></div>"
+            + "<div style=\"flex:1;min-height:0;display:flex;flex-direction:column;margin-top:8px;\">"
+            + "<textarea id=\"webioApiFeatureContent\" style=\"flex:1;min-height:0;width:100%;font-family:monospace;font-size:12px;padding:10px;box-sizing:border-box;border:1px solid #ccc;overflow-y:auto;resize:none;display:block;\"></textarea>"
+            + "</div>"
+            + "<div style=\"margin-top:12px;text-align:right;flex-shrink:0;\">"
+            + "<button id=\"webioApiFeatureCopy\" style=\"padding:8px 15px;margin-right:8px;cursor:pointer;\">Copy</button>"
+            + "<button id=\"webioApiFeatureDownload\" style=\"padding:8px 15px;margin-right:8px;cursor:pointer;\">Download .feature</button>"
+            + "<button id=\"webioApiFeatureClose\" style=\"padding:8px 15px;cursor:pointer;\">Close</button>"
+            + "</div>";
+        document.body.appendChild(popup);
+        var ta = popup.querySelector("#webioApiFeatureContent");
+        ta.value = initialContent;
+        popup.querySelector("#webioApiFeatureCopy").onclick = function () {
+            ta.select();
+            document.execCommand("copy");
+            alert("Copied to clipboard.");
+        };
+        popup.querySelector("#webioApiFeatureDownload").onclick = function () {
+            var content = ta.value;
+            var blob = new Blob([content], { type: "text/plain" });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = "api-tests-" + Date.now() + ".feature";
+            a.style.display = "none";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+        popup.querySelector("#webioApiFeatureClose").onclick = function () {
+            document.body.removeChild(popup);
+        };
+        if (typeof makePopupDraggable === "function") makePopupDraggable(popup, ".webio-api-feature-drag-handle");
+    }
+
     function updateListUI() {
         if (panelMinimized) return;
         var useRecorded = Object.keys(recordedScreens).length > 0;
@@ -1679,15 +1954,38 @@
         var pathHadFocus = pathInput && document.activeElement === pathInput;
         var preservedScreenIdValue = prevInput ? prevInput.value : null;
         var preservedPathValue = pathHadFocus && pathInput ? pathInput.value : null;
+        var apiMethodEl = listUI.querySelector("#apiMethodFilter");
+        var apiUrlEl = listUI.querySelector("#apiUrlKeyword");
+        var apiStatusEl = listUI.querySelector("#apiStatusFilter");
+        if (apiMethodEl) apiMethodFilter = apiMethodEl.value || "";
+        if (apiUrlEl) apiUrlKeyword = (apiUrlEl.value || "").trim();
+        if (apiStatusEl) apiStatusFilter = (apiStatusEl.value || "").trim();
+        listUI.querySelectorAll(".webio-api-checkbox").forEach(function (cb) {
+            var id = cb.getAttribute("data-api-id");
+            if (id) selectedApiIds[id] = cb.checked;
+        });
+        var apiListEl = listUI.querySelector("#apiListContainer");
+        var savedApiListScrollTop = apiListEl ? apiListEl.scrollTop : 0;
         var parentPathForTemplate = preservedPathValue !== null ? preservedPathValue : persistedParentPath;
         var rawPath = (parentPathForTemplate || "").trim() || "generated";
         var exportPathSegment = rawPath === "generated" ? "generated" : ("generated/" + rawPath);
 
-        // Preserve scroll position so re-renders (e.g. from MutationObserver) don't jump back to top
-        var scrollEl = listUI.querySelector(".webio-scroll");
+        var filteredApiLog = getFilteredNetworkLog(apiMethodFilter, apiUrlKeyword, apiStatusFilter);
+        var apiListHtml = filteredApiLog.length ? filteredApiLog.map(function (entry) {
+            var shortUrl = (entry.url || "").length > 45 ? (entry.url || "").slice(0, 42) + "..." : (entry.url || "");
+            var status = entry.responseStatus != null ? entry.responseStatus : "-";
+            var checked = selectedApiIds[entry.id] ? " checked" : "";
+            return "<div style=\"margin:4px 0;padding:6px 8px;background:#fff;border:1px solid #ddd;border-radius:4px;font-size:11px;display:flex;align-items:center;gap:8px;\">"
+                + "<input type=\"checkbox\" class=\"webio-api-checkbox\" data-api-id=\"" + escapeHtml(entry.id) + "\"" + checked + " style=\"flex-shrink:0;\"/>"
+                + "<span style=\"flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;\" title=\"" + escapeHtml(entry.url || "") + "\">"
+                + "<b>" + escapeHtml(entry.method || "GET") + "</b> " + escapeHtml(shortUrl) + " <span style=\"color:#666;\">" + escapeHtml(String(status)) + "</span></span></div>";
+        }).join("") : "<div style=\"font-size:12px;color:#000;\">No API calls captured yet. Use the app to trigger XHR/Fetch requests.</div>";
+
+        // Preserve scroll position of the active tab so re-renders don't jump back to top
+        var scrollEl = listUI.querySelector("#webio-tab-webui .webio-scroll") || listUI.querySelector("#webio-tab-api .webio-scroll") || listUI.querySelector(".webio-scroll");
         var savedScrollTop = scrollEl ? scrollEl.scrollTop : 0;
 
-        listUI.innerHTML = `<style>[data-webio-panel] input,[data-webio-panel] select,[data-webio-panel] textarea{color:#000!important;background-color:#fff!important;border-color:#ccc!important}[data-webio-panel] button:not(#setScreenIdBtn):not(#recordingToggleBtn):not(#generateJsonBtn):not(#generateFeatureBtn):not(#webioHideBtn){color:#000!important;background-color:#fff!important;border-color:#ccc!important}</style>
+        listUI.innerHTML = `<style>[data-webio-panel] input,[data-webio-panel] select,[data-webio-panel] textarea{color:#000!important;background-color:#fff!important;border-color:#ccc!important}[data-webio-panel] button:not(#setScreenIdBtn):not(#recordingToggleBtn):not(#generateJsonBtn):not(#generateFeatureBtn):not(#generateApiFeatureBtn):not(#webioHideBtn):not(.webio-tab){color:#000!important;background-color:#fff!important;border-color:#ccc!important}</style>
             <div class="webio-header webio-drag-handle" style="flex-shrink:0;padding:12px;background:#fff;color:#000;border-bottom:1px solid #e0e0e0;cursor:move;user-select:none;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
                 <div style="flex:1;min-width:0;">
                     <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;text-transform:uppercase;">Assign Screen ID</div>
@@ -1699,41 +1997,78 @@
                 </div>
                 <button id="webioHideBtn" type="button" title="Hide panel (click bubble to show again)" style="flex-shrink:0;width:28px;height:28px;padding:0;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;color:#333;cursor:pointer;font-size:16px;line-height:1;">−</button>
             </div>
-            <div class="webio-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;">
-                <div style="margin-bottom:12px;">
-                    <button id="recordingToggleBtn" type="button" style="width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;background:${isRecording ? "#dc2626" : "#16a34a"};color:#fff;">
-                        ${isRecording ? "Stop Recording" : "Start Recording"}
-                    </button>
+            <div class="webio-tabs" style="flex-shrink:0;display:flex;border-bottom:1px solid #e0e0e0;background:#f5f5f5;">
+                <button type="button" id="webioTabWebui" class="webio-tab" data-tab="webui" style="flex:1;padding:10px 12px;border:none;border-bottom:3px solid ${webioActiveTab === "webui" ? "#2563eb" : "transparent"};background:${webioActiveTab === "webui" ? "#fff" : "transparent"};font-weight:600;font-size:12px;cursor:pointer;color:#000;">Web UI</button>
+                <button type="button" id="webioTabApi" class="webio-tab" data-tab="api" style="flex:1;padding:10px 12px;border:none;border-bottom:3px solid ${webioActiveTab === "api" ? "#2563eb" : "transparent"};background:${webioActiveTab === "api" ? "#fff" : "transparent"};font-weight:600;font-size:12px;cursor:pointer;color:#000;">API</button>
+            </div>
+            <div id="webio-tab-webui" class="webio-tab-pane" style="display:${webioActiveTab === "webui" ? "flex" : "none"};flex:1;flex-direction:column;min-height:0;">
+                <div class="webio-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;">
+                    <div style="margin-bottom:12px;">
+                        <button id="recordingToggleBtn" type="button" style="width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;background:${isRecording ? "#dc2626" : "#16a34a"};color:#fff;">
+                            ${isRecording ? "Stop Recording" : "Start Recording"}
+                        </button>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Page elements</div>
+                        <button id="areaSelectBtn" type="button" style="width:100%;padding:8px 12px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">
+                            ${areaSelectionMode ? "Disable" : "Enable"} area selection
+                        </button>
+                    </div>
+                    <div style="margin-bottom:12px;padding:12px;background:#fff;border:1px solid #e0e0e0;border-radius:8px;">
+                        <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Buttons</div>
+                        <button id="generateJsonBtn" type="button" style="display:block;width:100%;margin-bottom:6px;padding:10px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">Generate JSON</button>
+                        <button id="generateFeatureBtn" type="button" style="display:block;width:100%;margin-bottom:10px;padding:10px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">Generate Feature File</button>
+                        <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Parent path</div>
+                        <input id="parentPathInput" type="text" value="${escapeHtml(parentPathForTemplate)}" placeholder="e.g. login, dashboard" style="width:100%;padding:8px;box-sizing:border-box;margin-bottom:8px;border:1px solid #ccc;border-radius:6px;"/>
+                        <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Display export location path</div>
+                        <div id="exportLocationDisplay" style="font-size:10px;color:#555;word-break:break-all;margin-bottom:0;padding:6px;background:#f5f5f5;border-radius:4px;">pages/${escapeHtml(exportPathSegment)}/<br>features/${escapeHtml(exportPathSegment)}/</div>
+                    </div>
+                    <div style="margin-bottom:8px;font-size:11px;color:#000;font-weight:600;">All screens (click to select)</div>
+                    <div id="allScreensList" style="max-height:100px;overflow-y:auto;margin-bottom:12px;font-size:12px;">${allScreensHtml}</div>
+                    <div style="margin-bottom:8px;font-size:11px;color:#000;font-weight:600;">Saved elements — Edit / Delete</div>
+                    <div id="savedElementsList" style="max-height:160px;overflow-y:auto;margin-bottom:12px;font-size:12px;">${savedElementsHtml}</div>
+                    <div id="elementListWrap" style="margin-bottom:8px;">
+                        <div id="elementListHeader" style="font-size:11px;color:#000;font-weight:600;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;"><span id="elementListChevron">▶</span> Click to add to current screen</div>
+                        <div id="elementList" style="display:none;max-height:200px;overflow-y:auto;margin-top:6px;"></div>
+                    </div>
                 </div>
-                <div style="margin-bottom:12px;">
-                    <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Page elements</div>
-                    <button id="areaSelectBtn" type="button" style="width:100%;padding:8px 12px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">
-                        ${areaSelectionMode ? "Disable" : "Enable"} area selection
-                    </button>
-                </div>
-                <div style="margin-bottom:12px;padding:12px;background:#fff;border:1px solid #e0e0e0;border-radius:8px;">
-                    <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Buttons</div>
-                    <button id="generateJsonBtn" type="button" style="display:block;width:100%;margin-bottom:6px;padding:10px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">Generate JSON</button>
-                    <button id="generateFeatureBtn" type="button" style="display:block;width:100%;margin-bottom:10px;padding:10px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">Generate Feature File</button>
-                    <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Parent path</div>
-                    <input id="parentPathInput" type="text" value="${escapeHtml(parentPathForTemplate)}" placeholder="e.g. login, dashboard" style="width:100%;padding:8px;box-sizing:border-box;margin-bottom:8px;border:1px solid #ccc;border-radius:6px;"/>
-                    <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Display export location path</div>
-                    <div id="exportLocationDisplay" style="font-size:10px;color:#555;word-break:break-all;margin-bottom:0;padding:6px;background:#f5f5f5;border-radius:4px;">pages/${escapeHtml(exportPathSegment)}/<br>features/${escapeHtml(exportPathSegment)}/</div>
-                </div>
-                <div style="margin-bottom:8px;font-size:11px;color:#000;font-weight:600;">All screens (click to select)</div>
-                <div id="allScreensList" style="max-height:100px;overflow-y:auto;margin-bottom:12px;font-size:12px;">${allScreensHtml}</div>
-                <div style="margin-bottom:8px;font-size:11px;color:#000;font-weight:600;">Saved elements — Edit / Delete</div>
-                <div id="savedElementsList" style="max-height:160px;overflow-y:auto;margin-bottom:12px;font-size:12px;">${savedElementsHtml}</div>
-                <div id="elementListWrap" style="margin-bottom:8px;">
-                    <div id="elementListHeader" style="font-size:11px;color:#000;font-weight:600;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;"><span id="elementListChevron">▶</span> Click to add to current screen</div>
-                    <div id="elementList" style="display:none;max-height:200px;overflow-y:auto;margin-top:6px;"></div>
+            </div>
+            <div id="webio-tab-api" class="webio-tab-pane" style="display:${webioActiveTab === "api" ? "flex" : "none"};flex:1;flex-direction:column;min-height:0;">
+                <div class="webio-scroll webio-api-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;">
+                    <div style="margin-bottom:12px;padding:12px;background:#f8fafc;border:1px solid #e0e0e0;border-radius:8px;">
+                        <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">API / Network — select requests to generate tests</div>
+                        <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+                            <select id="apiMethodFilter" style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:12px;min-width:70px;">
+                                <option value="">All</option>
+                                <option value="GET"${apiMethodFilter === "GET" ? " selected" : ""}>GET</option>
+                                <option value="POST"${apiMethodFilter === "POST" ? " selected" : ""}>POST</option>
+                                <option value="PUT"${apiMethodFilter === "PUT" ? " selected" : ""}>PUT</option>
+                                <option value="DELETE"${apiMethodFilter === "DELETE" ? " selected" : ""}>DELETE</option>
+                                <option value="PATCH"${apiMethodFilter === "PATCH" ? " selected" : ""}>PATCH</option>
+                            </select>
+                            <input id="apiUrlKeyword" type="text" value="${escapeHtml(apiUrlKeyword)}" placeholder="URL contains" style="flex:1;min-width:80px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:12px;box-sizing:border-box;"/>
+                            <input id="apiStatusFilter" type="text" value="${escapeHtml(apiStatusFilter)}" placeholder="Status (e.g. 200, 2xx)" style="width:70px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:12px;box-sizing:border-box;"/>
+                        </div>
+                        <div id="apiListContainer" style="height:220px;min-height:180px;overflow-y:auto;overflow-x:hidden;margin-bottom:8px;font-size:12px;-webkit-overflow-scrolling:touch;">${apiListHtml}</div>
+                        <button id="generateApiFeatureBtn" type="button" style="width:100%;padding:8px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">Generate API Feature (selected only)</button>
+                    </div>
                 </div>
             </div>
             <div class="webio-resize-handle" style="height:6px;cursor:ns-resize;background:#e0e0e0;flex-shrink:0;" title="Drag to resize height"></div>
         `;
 
-        var newScrollEl = listUI.querySelector(".webio-scroll");
+        var newScrollEl = webioActiveTab === "webui"
+            ? listUI.querySelector("#webio-tab-webui .webio-scroll")
+            : listUI.querySelector("#webio-tab-api .webio-scroll");
         if (newScrollEl && savedScrollTop > 0) newScrollEl.scrollTop = savedScrollTop;
+        var newApiList = listUI.querySelector("#apiListContainer");
+        if (newApiList && savedApiListScrollTop > 0) {
+            (function (el, pos) {
+                var done = function () { el.scrollTop = pos; };
+                if (typeof requestAnimationFrame !== "undefined") requestAnimationFrame(function () { requestAnimationFrame(done); });
+                else setTimeout(done, 0);
+            })(newApiList, savedApiListScrollTop);
+        }
 
         var screenIdInput = listUI.querySelector("#screenIdInput");
         var currentScreenIdLabel = listUI.querySelector("#currentScreenIdLabel");
@@ -1862,6 +2197,48 @@
                 alert("JSON downloaded. Run: node webio/generate-locators-and-features.js <path-to-downloaded.json>");
             }
         };
+
+        var apiMethodFilterEl = listUI.querySelector("#apiMethodFilter");
+        var apiUrlKeywordEl = listUI.querySelector("#apiUrlKeyword");
+        var apiStatusFilterEl = listUI.querySelector("#apiStatusFilter");
+        if (apiMethodFilterEl) apiMethodFilterEl.onchange = function () { updateApiListOnly(); };
+        if (apiUrlKeywordEl) apiUrlKeywordEl.oninput = apiUrlKeywordEl.onchange = function () { updateApiListOnly(); };
+        if (apiStatusFilterEl) apiStatusFilterEl.oninput = apiStatusFilterEl.onchange = function () { updateApiListOnly(); };
+        listUI.querySelectorAll(".webio-api-checkbox").forEach(function (cb) {
+            cb.onchange = function () {
+                var id = cb.getAttribute("data-api-id");
+                if (id) selectedApiIds[id] = cb.checked;
+            };
+        });
+        var generateApiFeatureBtn = listUI.querySelector("#generateApiFeatureBtn");
+        if (generateApiFeatureBtn) {
+            generateApiFeatureBtn.onclick = function () {
+                var log = (window.__WEBIO__ && window.__WEBIO__.networkLog) ? window.__WEBIO__.networkLog : [];
+                var selected = [];
+                Object.keys(selectedApiIds).forEach(function (id) {
+                    if (selectedApiIds[id]) {
+                        var entry = log.filter(function (e) { return e.id === id; })[0];
+                        if (entry) selected.push(entry);
+                    }
+                });
+                if (selected.length === 0) {
+                    alert("Select one or more API requests from the list above, then click Generate API Feature.");
+                    return;
+                }
+                var content = buildApiFeatureContent(selected);
+                showApiFeatureEditPopup(content);
+            };
+        }
+
+        listUI.querySelectorAll(".webio-tab").forEach(function (tabBtn) {
+            tabBtn.onclick = function () {
+                var tab = tabBtn.getAttribute("data-tab");
+                if (tab && (tab === "webui" || tab === "api")) {
+                    webioActiveTab = tab;
+                    updateListUI();
+                }
+            };
+        });
 
         const elementList = listUI.querySelector("#elementList");
         filteredSelectable.forEach((el, i) => {
@@ -2138,6 +2515,41 @@
         });
     }
 
+    function updateApiListOnly() {
+        if (!listUI || !listUI.parentNode) return;
+        var container = listUI.querySelector("#apiListContainer");
+        if (!container) return;
+        var methodEl = listUI.querySelector("#apiMethodFilter");
+        var urlEl = listUI.querySelector("#apiUrlKeyword");
+        var statusEl = listUI.querySelector("#apiStatusFilter");
+        if (methodEl) apiMethodFilter = methodEl.value || "";
+        if (urlEl) apiUrlKeyword = (urlEl.value || "").trim();
+        if (statusEl) apiStatusFilter = (statusEl.value || "").trim();
+        listUI.querySelectorAll(".webio-api-checkbox").forEach(function (cb) {
+            var id = cb.getAttribute("data-api-id");
+            if (id) selectedApiIds[id] = cb.checked;
+        });
+        var savedScroll = container.scrollTop;
+        var filteredApiLog = getFilteredNetworkLog(apiMethodFilter, apiUrlKeyword, apiStatusFilter);
+        var apiListHtml = filteredApiLog.length ? filteredApiLog.map(function (entry) {
+            var shortUrl = (entry.url || "").length > 45 ? (entry.url || "").slice(0, 42) + "..." : (entry.url || "");
+            var status = entry.responseStatus != null ? entry.responseStatus : "-";
+            var checked = selectedApiIds[entry.id] ? " checked" : "";
+            return "<div style=\"margin:4px 0;padding:6px 8px;background:#fff;border:1px solid #ddd;border-radius:4px;font-size:11px;display:flex;align-items:center;gap:8px;\">"
+                + "<input type=\"checkbox\" class=\"webio-api-checkbox\" data-api-id=\"" + escapeHtml(entry.id) + "\"" + checked + " style=\"flex-shrink:0;\"/>"
+                + "<span style=\"flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;\" title=\"" + escapeHtml(entry.url || "") + "\">"
+                + "<b>" + escapeHtml(entry.method || "GET") + "</b> " + escapeHtml(shortUrl) + " <span style=\"color:#666;\">" + escapeHtml(String(status)) + "</span></span></div>";
+        }).join("") : "<div style=\"font-size:12px;color:#000;\">No API calls captured yet. Use the app to trigger XHR/Fetch requests.</div>";
+        container.innerHTML = apiListHtml;
+        container.scrollTop = savedScroll;
+        listUI.querySelectorAll(".webio-api-checkbox").forEach(function (cb) {
+            cb.onchange = function () {
+                var id = cb.getAttribute("data-api-id");
+                if (id) selectedApiIds[id] = cb.checked;
+            };
+        });
+    }
+
     function runHighlightScan() {
         if (document.body && listUI && !document.body.contains(listUI)) {
             document.body.appendChild(listUI);
@@ -2145,7 +2557,10 @@
         injectHighlightStyle();
         initializeSelectable();
         if (panelMinimized) return;
-        // Do not replace panel DOM while user is typing in Screen ID or Parent Path (avoids wiping input)
+        if (webioActiveTab === "api") {
+            updateApiListOnly();
+            return;
+        }
         if (!listUI.contains(document.activeElement)) {
             updateListUI();
         }

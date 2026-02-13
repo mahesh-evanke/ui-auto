@@ -15,7 +15,8 @@ maxInstances: 1
 reportFolder: ./reports/integrationTests
 allScriptsTimeout: 11000
 getPageTimeout: 90000
-features: "./e2e/features/**/*.feature"
+# UI features + generated API features (e2e/api/Generate/)
+features: "./e2e/{features,api/Generate}/**/*.feature"
 valUrl: http://127.0.0.1:5500/e2e/features/support/sample-form.html
 devUrl: http://localhost:4200/
 standaloneUrl: http://localhost:4200/

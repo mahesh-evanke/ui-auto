@@ -224,11 +224,32 @@ pathloop: for (let path of paths) {
 
 let featuresFiles = Array.from(new Set(featuresFromTags));
 
-// If --spec was provided, narrow down to those specs only (intersection).
+// If --spec was provided: include those specs (run them even if they don't match tag filter).
 if (cliSpecs.length > 0) {
     const cliSet = new Set(cliSpecs.map(s => normalizeFeaturePath(s)));
+    const normalizedToRawPath = new Map<string, string>();
+    for (const p of paths) {
+        const normalized = normalizeFeaturePath(p.replace(/\\/g, '/'));
+        normalizedToRawPath.set(normalized, p);
+    }
+    const existingNormalized = new Set(
+        featuresFiles.map(spec => normalizeFeaturePath(spec.replace('..\\', 'e2e/').replace('..//', 'e2e/').replace(/\\/g, '/')))
+    );
+    for (const cliSpec of cliSet) {
+        const normalized = normalizeFeaturePath(cliSpec);
+        if (!existingNormalized.has(normalized)) {
+            const pathKey = normalized.startsWith('e2e/') ? normalized : normalized.replace(/^\.\//, '');
+            const rawPath = normalizedToRawPath.get(pathKey) ?? normalizedToRawPath.get('e2e/' + pathKey);
+            if (rawPath) {
+                const specPath = rawPath.replace('e2e\\', '..\\').replace(/e2e\//g, '../');
+                featuresFiles.push(specPath);
+                featureExecutionKindBySpec[specPath] = isApiOnlyFeature(rawPath) ? 'API_ONLY' : 'UI';
+                existingNormalized.add(normalized);
+            }
+        }
+    }
     const filtered = featuresFiles.filter(spec => {
-        const normalized = normalizeFeaturePath(spec.replace('..\\', 'e2e/').replace('..//', 'e2e/'));
+        const normalized = normalizeFeaturePath(spec.replace('..\\', 'e2e/').replace('..//', 'e2e/').replace(/\\/g, '/'));
         return cliSet.has(normalized);
     });
     if (filtered.length > 0) {

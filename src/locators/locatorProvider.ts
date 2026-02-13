@@ -52,12 +52,31 @@ export function resolvePageLocatorsPath(pageName: string, opts?: LocatorOpts): s
   return path.join(resolveLocatorsDir(opts), 'pages', `${pageName}.json`);
 }
 
+function normalizeLocatorValue(val: unknown): [string, string] | undefined {
+  if (!Array.isArray(val)) return val as [string, string] | undefined;
+  if (val.length >= 2 && (val.length === 2 || (val.length === 6 && val[0] && val[1]))) {
+    return [String(val[0]), String(val[1])];
+  }
+  return undefined;
+}
+
 export function getElementLocator(elementName: string, opts: LocatorOpts & { common?: boolean; pageName?: string }): [string, string] | undefined {
   const common = Boolean(opts.common);
   const pageName = opts.pageName;
-  const filePath = common ? resolveCommonLocatorsPath(opts) : resolvePageLocatorsPath(String(pageName ?? ''), opts);
-  const json = getCachedJson(filePath);
-  return json[elementName];
+  if (common) {
+    const filePath = resolveCommonLocatorsPath(opts);
+    const json = getCachedJson(filePath);
+    return normalizeLocatorValue(json[elementName]) ?? (json[elementName] as [string, string] | undefined);
+  }
+  const pagesPath = resolvePageLocatorsPath(String(pageName ?? ''), opts);
+  if (fs.existsSync(pagesPath)) {
+    const json = getCachedJson(pagesPath);
+    const val = json[elementName];
+    const normalized = normalizeLocatorValue(val);
+    if (normalized) return normalized;
+    return val as [string, string] | undefined;
+  }
+  throw new Error(`Locator JSON not found: ${pagesPath}`);
 }
 
 export function getPageUrlByName(pageName: string, opts?: LocatorOpts): string {

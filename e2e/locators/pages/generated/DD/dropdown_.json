@@ -1,0 +1,10 @@
+{
+  "Select a City": [
+    "xpath",
+    "//*[@id=\"__next\"]/div[1]/div[4]/div[1]/div[1]/div[1]/div[1]/div[1]/section[2]/div[2]/div[1]/div[3]"
+  ],
+  "Option List": [
+    "id",
+    "dropdownItem_1"
+  ]
+}

@@ -1,4 +1,6 @@
 import * as path from 'path';
+import * as fs from 'fs';
+import * as yaml from 'js-yaml';
 import { CheckboxHelper } from '../html-helpers/checkbox-helper';
 import { DropDownHelper } from '../html-helpers/dropdown-helper';
 import { ElementHelper } from '../html-helpers/element-helper';
@@ -61,6 +63,9 @@ export class PageConfigHelper {
         }
         else if (elementtoFound[0] === 'className') {
             locator = '.' + elementtoFound[1];
+        }
+        else if (elementtoFound[0] === 'css') {
+            locator = elementtoFound[1];
         } else {
             locator = '[' + elementtoFound[0] + '="' + elementtoFound[1] + '"]';
         }
@@ -96,7 +101,7 @@ export class PageConfigHelper {
 
     }
 
-    public static async answerQuestions(key: string, value: string, dob: Date = new Date("5/10/1995")) {
+    public static async answerQuestions(key: string, value: string, dob: Date = new Date()) {
         //console.log(key + " ___:___ "+value)
         let objValue = value.toString();
         if (objValue.toLowerCase() == "<blank>") {
@@ -235,14 +240,23 @@ export class PageConfigHelper {
         await ElementHelper.click(await PageConfigHelper.findElement('Next', true));
     }
 
-    public static async changeFrame() {
+    public     static async changeFrame() {
         await browser.switchToParentFrame();
-        if (PageConfigHelper.getCurrentPage() == "Marriage" || PageConfigHelper.getCurrentPage() == "Advance Designation") {
-            await browser.switchToFrame(await $('<iframe />'));
-        }
-        if (PageConfigHelper.getCurrentPage() == "Person Info" || PageConfigHelper.getCurrentPage() == "Contact Info") {
-            await browser.switchToFrame(await $('<iframe />'));
-            await browser.switchToFrame(await $('<iframe />'));
-        }
+        try {
+            const configPath = path.join(process.cwd(), 'e2e', 'config', 'config.yaml');
+            if (fs.existsSync(configPath)) {
+                const cfg = (yaml.load(fs.readFileSync(configPath, 'utf8')) as Record<string, any>) || {};
+                const pagesWithIframe = cfg.pagesWithIframe || {};
+                const singleFrame: string[] = pagesWithIframe.singleFrame || [];
+                const doubleFrame: string[] = pagesWithIframe.doubleFrame || [];
+                const page = PageConfigHelper.getCurrentPage();
+                if (singleFrame.includes(page)) {
+                    await browser.switchToFrame(await $('<iframe />'));
+                } else if (doubleFrame.includes(page)) {
+                    await browser.switchToFrame(await $('<iframe />'));
+                    await browser.switchToFrame(await $('<iframe />'));
+                }
+            }
+        } catch (_e) { /* use defaults if config not available */ }
     }
 }

@@ -136,6 +136,40 @@ export class ElementHelper {
         return targetElement.click();
     }
 
+    /**
+     * For hidden radio/checkbox inputs, returns the clickable target (label[for=id] or parent).
+     * Otherwise returns the same element so other behavior is unchanged.
+     */
+    static async getClickableTargetForRadioOrCheckbox(element: WebdriverIO.Element): Promise<WebdriverIO.Element> {
+        const tag = await element.getTagName();
+        if (tag.toLowerCase() !== 'input') return element as WebdriverIO.Element;
+        const type = (await element.getAttribute('type') || '').toLowerCase();
+        if (type !== 'radio' && type !== 'checkbox') return element as WebdriverIO.Element;
+        const id = await element.getAttribute('id');
+        if (id) {
+            const escapedId = id.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            try {
+                const label = await browser.$(`label[for="${escapedId}"]`);
+                if (label && await label.isDisplayed()) return label as unknown as WebdriverIO.Element;
+            } catch (_) {}
+        }
+        try {
+            const parent = await element.$('..');
+            if (parent) return parent as unknown as WebdriverIO.Element;
+        } catch (_) {}
+        return element as WebdriverIO.Element;
+    }
+
+    /**
+     * Clicks radio or checkbox: uses label or parent when the input is hidden (e.g. PrimeReact).
+     * Other elements are clicked as usual.
+     */
+    static async clickRadioOrCheckbox(element: WebdriverIO.Element) {
+        const clickable = await this.getClickableTargetForRadioOrCheckbox(element) as WebdriverIO.Element;
+        await WaitHelper.getInstance().waitForElementToBeClickable(clickable);
+        return clickable.click();
+    }
+
     static async clickIfPresent(targetElement: WebdriverIO.Element) {
         const isPresent = await targetElement.isDisplayed();
         if (isPresent) {

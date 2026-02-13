@@ -1,0 +1,107 @@
+Step Type,Gherkin Statement,Parameters,Source File,Description
+When,User are on scenare title {string},title (string),web_actions_stepdefs.ts,Logs scenario title
+When,Verify field {string} text is {string},fieldName (string) expectedText (string),web_actions_stepdefs.ts,Verifies element text matches expected value
+Given,enters {string} text in {string} textbox,txtInput (string) elementName (string),web_actions_stepdefs.ts,Sends text to a textbox (supports placeholders like 500 characters <CURRENT_DATE <DOB <blank>)
+When,User updates following information to pup up using {string},buttonName (string) DataTable,web_actions_stepdefs.ts,Updates popup info using button then saves
+When,User adds following information to pup up using {string},buttonName (string) DataTable,web_actions_stepdefs.ts,Adds info to popup via button then saves
+When,click More Info link and verfiy popup text,DataTable,web_actions_stepdefs.ts,Clicks More Info links and verifies popup title/text
+When,click page link and verify new pages opens with title,DataTable,web_actions_stepdefs.ts,Clicks link verifies new tab opens with expected title
+When,User selects {string} link on Person Status screen,objName (string),web_actions_stepdefs.ts,Clicks specified link on Person Status screen
+When,User inputs information on the {string} screen if exist,objName (string) DataTable,web_actions_stepdefs.ts,Inputs data on screen if it exists
+When,User inputs information on the {string} screen,objName (string) DataTable,web_actions_stepdefs.ts,Inputs data on specified screen
+When,User verify information on {string} screen with following params,screenName (string) DataTable,web_actions_stepdefs.ts,Verifies screen values match DataTable params
+When,User verifies field entries on the Payment Method,DataTable,web_actions_stepdefs.ts,Verifies Payment Method screen field entries
+When,User verifies field entries on the {string} screen in query mode,objName (string) DataTable,web_actions_stepdefs.ts,Verifies screen fields in query mode
+When,enters SSN with criteria {string} in {string} textbox,criteriaName (string) ObjName (string),web_actions_stepdefs.ts,Enters SSN from CSV criteria into textbox
+When,User clicks on {string} button,btnName (string),web_actions_stepdefs.ts,Clicks button by name
+Given,User is on {string} screen,screenName (string),web_actions_stepdefs.ts,Sets current page and loads locators for screen
+When,clicks on {string} button,objName (string),web_actions_stepdefs.ts,Clicks button or interactive element
+When,selects {string} text from {string} Drop-down list,optionVal (string) objName (string),web_actions_stepdefs.ts,Selects option by text from dropdown
+When,selects {string} from {string} Drop-down list,optionVal (string) objName (string),web_actions_stepdefs.ts,Selects option from dropdown
+When,verify {string} text is present on the screen,txtName (string),web_actions_stepdefs.ts,Verifies text is visible on screen
+Given,select {string} Checkbox,objName (string),web_actions_stepdefs.ts,Checks checkbox by name
+Given,select {string} Checkbox with Wait,objName (string),web_actions_stepdefs.ts,Checks checkbox with wait for element
+When,clicks on {string} Radio button,objName (string),web_actions_stepdefs.ts,Clicks radio button
+When,verify data from {string} web table,objName (string) DataTable,web_actions_stepdefs.ts,Verifies web table data matches DataTable
+When,User verifies information on {string} screen header with following parameters,objName (string) DataTable,web_actions_stepdefs.ts,Verifies screen header info
+When,User verify information on {string} screen header with following parameters,objName (string) DataTable,web_actions_stepdefs.ts,Same as above (alternate spelling)
+Then,verify alerts displayed on the screen,DataTable,web_actions_stepdefs.ts,Verifies alert messages match DataTable
+When,verify information from {string} webtable,objName (string) DataTable,web_actions_stepdefs.ts,Verifies webtable data
+Then,User switches to SSIWeb application,,web_actions_stepdefs.ts,Switches browser to SSIWeb app
+When,clicks on {string} link,objName (string),web_actions_stepdefs.ts,Clicks link by name
+Given,User inputs information on {string} screen with following params,screenName (string) DataTable,web_actions_stepdefs.ts,Inputs data on screen using DataTable
+Given,User inputs information on {string} screen with following parameters,screenName (string) DataTable,web_actions_stepdefs.ts,Same as above
+Given,User navigates to {string} URL,url (string),web_actions_stepdefs.ts,Navigates to URL and loads page locators
+When,user refreshes {string} page,screenName (string),web_actions_stepdefs.ts,Refreshes specified page
+When,user refreshes page,,web_actions_stepdefs.ts,Refreshes current page
+Given,select Claims Summary Checkbox,,web_actions_stepdefs.ts,Selects Claims Summary checkbox
+When,user enters {string} in Employee Job Title field on T2T18 Determinations screen,text (string),web_actions_stepdefs.ts,Enters text in Employee Job Title field
+When,delete Lawful Presence status row data,,web_actions_stepdefs.ts,Deletes Lawful Presence row
+When,save New Lawful Presence Status row data,,web_actions_stepdefs.ts,Saves new Lawful Presence row
+When,User clicks on {string} link on Person Status screen,pageName (string),web_actions_stepdefs.ts,Clicks link on Person Status screen
+Given,clicks on Claims Summary button,,web_actions_stepdefs.ts,Clicks Claims Summary button
+When,clicks on {string} link with {string} instance,objName (string) instStr (string),web_actions_stepdefs.ts,Clicks link at specific instance
+Given,closes the application,,web_actions_stepdefs.ts,Closes browser
+When,user fills in birth proof and citizenship information,,web_actions_stepdefs.ts,Fills birth proof and citizenship
+When,clicks on {string} Chevron link,objName (string),web_actions_stepdefs.ts,Clicks chevron/expand link
+When,verifies status of {string} chevron link and {string} text in textbox,elementName (string) text (string),web_actions_stepdefs.ts,Verifies chevron and textbox text
+When,User clicks on {string} link in Claim Development path,pageName (string),web_actions_stepdefs.ts,Clicks link in Claim Development path
+When,Select from Person Providing Statement,,web_actions_stepdefs.ts,Selects person providing statement
+When,click on save button on Person Statement screen,,web_actions_stepdefs.ts,Saves Person Statement screen
+When,Select Person Contacted on Report of Contact screen,,web_actions_stepdefs.ts,Selects person contacted
+When,clicks on the Report of Contact OK button,,web_actions_stepdefs.ts,Clicks OK on Report of Contact
+When,selects {string},value (string),web_actions_stepdefs.ts,Selects option from various controls
+Then,enters {string} text into textfield,inputValue (string),web_actions_stepdefs.ts,Enters text into textfield
+When,select Annuity from Civil Service Annuity Type Drop-down List,,web_actions_stepdefs.ts,Selects Annuity option
+Then,system generates notice messages with description {string},errMsg (string),web_actions_stepdefs.ts,Verifies notice message displayed
+Then,User waits for {string} seconds,waitTime (string),web_actions_stepdefs.ts,Waits for specified seconds
+Then,verify data from {string} webtable dates,objName (string) DataTable,web_actions_stepdefs.ts,Verifies webtable dates
+When,Select Spouse enrolled in SMI Check Box on HI screen,,web_actions_stepdefs.ts,Selects spouse SMI checkbox
+When,Select Consent obtained from spouse Check Box on HI screen,,web_actions_stepdefs.ts,Selects consent checkbox
+When,verify data from {string} webtable,objName (string) DataTable,web_actions_stepdefs.ts,Verifies webtable data
+Then,Verify {string} PDF data generated from CCM,fileName (string),web_actions_stepdefs.ts,Verifies PDF content
+Then,system generates notice warning message with description {string},errMsg (string),web_actions_stepdefs.ts,Verifies warning message
+Then,system generates edit message with description {string},errMsg (string),web_actions_stepdefs.ts,Verifies edit message
+Then,system generates edit message with description {string} on {string} model,errMsg (string) modelId (string),web_actions_stepdefs.ts,Verifies edit message on modal
+Then,system generates error message with description {string} in a frame,errMsg (string),web_actions_stepdefs.ts,Verifies error in frame
+Then,system generates error message with description {string} on Contact Info Manage Addresses screen,errMsg (string),web_actions_stepdefs.ts,Verifies error on specific screen
+When,clicks on {string} button from {string} popup window,objName (string) popupWindowObj (string),web_actions_stepdefs.ts,Clicks button in popup
+When,verify {string} text is present in {string} popup window,txtName (string) popupWindowObj (string),web_actions_stepdefs.ts,Verifies text in popup
+When,Click OK in popup window,,web_actions_stepdefs.ts,Clicks OK in popup
+When,verify {string} text is present in popup window,txtName (string),web_actions_stepdefs.ts,Verifies text in popup
+When,navigate to GN 00204.010 Protective Filing link on Filing Date screen,,web_actions_stepdefs.ts,Navigates to Protective Filing link
+Given,enters {string} text in {string} textbox in a frame,txtInput (string) elementName (string),web_actions_stepdefs.ts,Enters text in iframe textbox
+When,click on {string} button in a frame,objName (string),web_actions_stepdefs.ts,Clicks button in iframe
+When,click on {string} Radio button in a frame,objName (string),web_actions_stepdefs.ts,Clicks radio in iframe
+When,click on {string} Checkbox in a frame,objName (string),web_actions_stepdefs.ts,Clicks checkbox in iframe
+When,selects {string} from {string} Drop-down list in a frame,optionVal (string) objName (string),web_actions_stepdefs.ts,Selects from dropdown in iframe
+When,save Lawful Presence record,,web_actions_stepdefs.ts,Saves Lawful Presence record
+Then,delete current Citizen Information entry,,web_actions_stepdefs.ts,Deletes current citizen entry
+Then,verify {string} label is displayed below date field,elementName (string),web_actions_stepdefs.ts,Verifies label below date field
+When,check if {string} text is present on the screen,txtName (string),web_actions_stepdefs.ts,Checks if text is present (non-assertive)
+When,select {string} from Report of Contact Relationship to Claimant Drop-down,optionVal (string),web_actions_stepdefs.ts,Selects from Relationship dropdown
+Given,User is on {string} CCE screen,screenName (string),web_actions_stepdefs.ts,Sets CCE screen context
+When,clicks on Select All Address Types Checkbox,,web_actions_stepdefs.ts,Selects all address type checkboxes
+Then,system generates notice message with description {string},errMsg (string),web_actions_stepdefs.ts,Verifies notice message
+Then,system generates exclusion message with description {string},errMsg (string),web_actions_stepdefs.ts,Verifies exclusion message
+Then,enters {string} date in {string} textbox,textVal (string) objName (string),web_actions_stepdefs.ts,Enters formatted date in textbox
+When,input {string} text in {string} textbox,txtInput (string) elementName (string),web_actions_stepdefs.ts,Sends text to textbox
+When,enters {string} for {string},value (string) elementName (string),web_actions_stepdefs.ts,Enters value for element
+When,switch to {string} tab,tab1 (string),web_actions_stepdefs.ts,Switches browser tab
+Then,User switches to SSIWeb application,,web_actions_stepdefs.ts,Switches to SSIWeb (duplicate)
+When,click on {string} button on {string} screen,value (string) screenName (string),web_actions_stepdefs.ts,Clicks button on specific screen
+When,User clicks on T2 {string} screen link,value (string),web_actions_stepdefs.ts,Clicks T2 screen link
+When,check if Uninsured,,web_actions_stepdefs.ts,Checks uninsured status
+When,click More Info link and verify popup text,DataTable,web_actions_stepdefs.ts,Same as above (correct spelling)
+When,verify {string} is not on {string} screen,value (string) screenName (string),web_actions_stepdefs.ts,Verifies element not on screen
+Given,User navigates to {string} screen to Establish New Medicare claim,pageName (string),GoToPage_stepdefs.ts,Navigates to Home/establish claim screen
+Given,Go to page {string},pageName (string),GoToPage_stepdefs.ts,Goes to page via menu link
+Given,User navigates to T2 RIB {string} screen for an new claim with {string} test data criteria,pageName (string) criteria (string),GoToPage_stepdefs.ts,Navigates to T2 RIB screen for new claim
+Given,User navigates to T2 RIB {string} screen for an existing claim with {string} test data criteria,pageName (string) criteria (string),GoToPage_stepdefs.ts,Navigates to T2 RIB screen for existing claim
+Given,User navigates to T2 RIB {string} screen for an existing claim in Query Mode with {string} test data criteria,pageName (string) criteria (string),GoToPage_stepdefs.ts,Navigates in Query Mode
+When,User goes to {string} screen for a new claim with {string} test data criteria case,pageName (string) criteria (string),GoToPage_stepdefs.ts,Full flow to screen for new claim
+Given,User navigates to {string} screen for an existing pending claim with {string} test data criteria case,pageName (string) criteria (string),GoToPage_stepdefs.ts,Navigates for pending claim
+When,User goes to {string} screen in Query Mode with {string} test data criteria case,pageName (string) criteria (string),GoToPage_stepdefs.ts,Goes to screen in Query Mode
+Given,User navigates to {string} screen for a new claim with {string} test data criteria,pageName (string) criteria (string),GoToPage_stepdefs.ts,Navigates for new claim
+Given,User navigates to {string} screen for an existing pending claim with {string} test data criteria for Enrollment cases,pageName (string) criteria (string),GoToPage_stepdefs.ts,Navigates for Enrollment pending claim
+Given,enters inputs with header names {string} from datatable to verify the edit message in {string} column,inputs (string) errorMsg (string) DataTable,HomePage.ts,Verifies edit message using datatable inputs

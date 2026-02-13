@@ -1,0 +1,13 @@
+{
+  "Office Code": ["id", "office-code"],
+  "Office Code Label": ["id", "office-code-label"],
+  "Help": ["id", "help-link"],
+  "Submit": ["id", "submit-btn"],
+  "Region": ["id", "region"],
+  "Agree": ["id", "agree"],
+  "active": ["id", "status-active"],
+  "Inactive": ["id", "status-inactive"],
+  "Order Amount": ["id", "order-amount"],
+  "Page Heading": ["id", "page-heading"],
+  "Order Total Label": ["id", "order-total-label"]
+}

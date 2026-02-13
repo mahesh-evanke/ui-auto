@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sample Form - E2E Elements</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 480px; margin: 2rem auto; padding: 0 1rem; }
+    label { display: block; margin-top: 0.75rem; font-weight: 500; }
+    input[type="text"], select { width: 100%; padding: 0.5rem; margin-top: 0.25rem; box-sizing: border-box; }
+    .row { margin: 0.75rem 0; }
+    .row input { margin-right: 0.5rem; }
+    button { margin-top: 1rem; padding: 0.5rem 1rem; cursor: pointer; }
+    #results { margin-top: 1.5rem; }
+    #results table { border-collapse: collapse; width: 100%; }
+    #results th, #results td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    #results th { background: #f0f0f0; }
+    a { color: #06c; }
+  </style>
+</head>
+<body>
+  <h1 id="page-heading">Sample Form - E2E Elements</h1>
+  <h2 id="order-total-label">Order Total : <span id="order-amount">$100.00</span></h2>
+  <p>This page is used by <code>Web_Actions_Step_Verification.feature</code> to verify Gherkin step definitions.</p>
+
+  <form id="sample-form" action="#" method="get">
+    <label id="office-code-label" for="office-code">Office Code</label>
+    <input type="text" id="office-code" name="office-code" placeholder="Office Code" />
+
+    <label class="row">Region</label>
+    <select id="region" name="region">
+      <option value="">-- Select --</option>
+      <option value="north">North</option>
+      <option value="south">South</option>
+      <option value="east">East</option>
+      <option value="west">West</option>
+    </select>
+
+    <div class="row">
+      <label><input type="checkbox" id="agree" name="agree" /> Agree</label>
+    </div>
+
+    <div class="row">
+      <span>Status</span>
+      <label><input type="radio" id="status-active" name="status" value="active" /> active</label>
+      <label><input type="radio" id="status-inactive" name="status" value="inactive" /> Inactive</label>
+    </div>
+
+    <button type="submit" id="submit-btn">Submit</button>
+    <a id="help-link" href="#help">Help</a>
+  </form>
+
+  <div id="results">
+    <table>
+      <tr>
+        <th>Col1</th>
+        <th>Col2</th>
+      </tr>
+      <tr>
+        <td>A</td>
+        <td>B</td>
+      </tr>
+    </table>
+  </div>
+
+  <script>
+    document.getElementById('sample-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+    });
+  </script>
+</body>
+</html>

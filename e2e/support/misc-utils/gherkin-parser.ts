@@ -12,6 +12,11 @@ export type ParsedScenario = {
     name: string
     tags: string[]
     stepCount: number
+    /**
+     * Plain-text step lines (without keyword) e.g.
+     * "User sends GET request to \"https://api.example.com\""
+     */
+    steps: string[]
 }
 
 export type ParsedFeatureFile = {
@@ -51,11 +56,19 @@ export function parseFeatureFile(filePath: string): ParsedFeatureFile {
         const scenarioName = (scenario.name || '').trim()
         const scenarioTags = tagsToStrings(scenario.tags as any)
         const steps = scenario.steps || []
+        const stepTexts: string[] = []
+        for (const step of steps) {
+            const text = (step.text || '').trim()
+            if (text) {
+                stepTexts.push(text)
+            }
+        }
 
         scenarios.push({
             name: scenarioName,
             tags: scenarioTags,
             stepCount: steps.length,
+            steps: stepTexts,
         })
     }
 

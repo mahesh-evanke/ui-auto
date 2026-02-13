@@ -1,0 +1,10 @@
+{
+  "Confirm": [
+    "xpath",
+    "//*[@id=\"webioTableConfirmBtn\"]"
+  ],
+  "customers": [
+    "id",
+    "customers"
+  ]
+}

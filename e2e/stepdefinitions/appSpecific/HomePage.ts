@@ -2,7 +2,7 @@
 import { PageConfigHelper } from "../../support/misc-utils/PageHelper";
 import { ElementHelper } from "../../support/html-helpers/element-helper";
 import * as EC from 'wdio-wait-for';
-import { Given, DataTable } from '@cucumber/cucumber';
+import { Given, DataTable } from '@wdio/cucumber-framework';
 
 const until = EC;
 const chai = require('chai').use(require('chai-as-promised'));

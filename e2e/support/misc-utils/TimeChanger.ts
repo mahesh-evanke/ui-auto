@@ -1,4 +1,4 @@
-import { DataTable } from '@cucumber/cucumber';
+import { DataTable } from '@wdio/cucumber-framework';
 import * as moment from 'moment';
 export class TimeChanger {
 

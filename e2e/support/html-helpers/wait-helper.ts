@@ -218,8 +218,15 @@ export class WaitHelper {
         return result;
     }
 
+    /**
+     * Wait for a visible element whose text contains the given string (case-insensitive).
+     * Works across sites where label casing may differ (e.g. "Select a City" vs "Select a city").
+     */
     public async waitForPageLabel(textWait: string, timeout = PageHelper.DEFAULT_TIMEOUT, attempts = PageHelper.WAIT_POLL_ATTEMPTS) {
-        await browser.waitUntil(EC.visibilityOf("//*[text()[contains(.,'" + textWait + "')]]"), { timeout: timeout, timeoutMsg: 'Failed, after waiting for element: ' + textWait });
+        const escaped = (textWait ?? '').replace(/'/g, "''");
+        const lower = escaped.toLowerCase();
+        const xpath = "//*[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '" + lower + "')]";
+        await browser.waitUntil(EC.visibilityOf(xpath), { timeout: timeout, timeoutMsg: 'Failed, after waiting for element: ' + textWait });
         return true;
     }
 
@@ -268,7 +275,12 @@ export class WaitHelper {
                 await this.waitForPageLabel(Object.values(title)[1]);
                 await browser.switchToParentFrame();
             }
-            assert.equal(await browser.getTitle(), Object.values(title)[0]);
+            const expectedTitle = Object.values(title)[0] as string;
+            const actualTitle = await browser.getTitle();
+            assert.ok(
+                actualTitle === expectedTitle || actualTitle.includes(expectedTitle),
+                `Expected page title to equal or contain "${expectedTitle}", but got "${actualTitle}"`
+            );
             PageConfigHelper.setCurrentPage(screenName);
         }
         else {

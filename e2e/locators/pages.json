@@ -1,4 +1,116 @@
 {
-  "Login Page": [{"title": "Your App", "label": "Login"}],
-  "Home": [{"title": "Your App", "label": "Home"}]
+  "Login Page": [
+    {
+      "title": "Your App",
+      "label": "Login"
+    }
+  ],
+  "Home": [
+    {
+      "title": "Your App",
+      "label": "Home"
+    }
+  ],
+  "Tailwind": [
+    {
+      "title": "Installing Tailwind CSS with Vite - Tailwind CSS",
+      "label": "Documentation"
+    }
+  ],
+  "Tailwind Plus": [
+    {
+      "title": "Tailwind CSS Components - Tailwind Plus",
+      "label": "Components"
+    }
+  ],
+  "Input Groups": [
+    {
+      "title": "Tailwind CSS Input Groups - Official Tailwind UI Components",
+      "label": "Input Groups"
+    }
+  ],
+  "Sample Form": [
+    {
+      "title": "Sample Form - E2E Elements",
+      "label": "Office Code"
+    }
+  ],
+  "inputtext_": [
+    {
+      "title": "inputtext_",
+      "label": "inputtext_"
+    }
+  ],
+  "Screen": [
+    {
+      "title": "PrimeReact - React UI Component Library",
+      "label": "Checking"
+    }
+  ],
+  "generated/radio/Screen": [
+    {
+      "title": "PrimeReact - React UI Component Library",
+      "label": "Checking"
+    }
+  ],
+  "generated/Screen": [
+    {
+      "title": "Misha House Billing",
+      "label": "Misha House Billing"
+    }
+  ],
+  "generated/checkbox/Screen": [
+    {
+      "title": "PrimeReact - React UI Component Library",
+      "label": "Checking"
+    }
+  ],
+  "generated/webtables/html_html_tables.asp": [
+    {
+      "title": "HTML Tables",
+      "label": "Tutorials"
+    }
+  ],
+  "generated/dropdown/e2e_features_support_sample-form.html": [
+    {
+      "title": "Sample Form - E2E Elements",
+      "label": "Office Code"
+    }
+  ],
+  "generated/DD/dropdown_": [
+    {
+      "title": "React Select Component",
+      "label": "Dropdown"
+    }
+  ],
+  "generated/rad2/Screen": [
+    {
+      "title": "React Select Component",
+      "label": "Select a City"
+    }
+  ],
+  "generated/Link/e2e_features_support_sample-form.html": [
+    {
+      "title": "Sample Form - E2E Elements",
+      "label": "Sample Form - E2E Elements"
+    }
+  ],
+  "generated/table/webtable-example_": [
+    {
+      "title": "WebTable Example » Dezlearn » Learn IT Easy",
+      "label": "WebTable Example"
+    }
+  ],
+  "generated/web2/webtable-example_": [
+    {
+      "title": "WebTable Example » Dezlearn » Learn IT Easy",
+      "label": "WebTable Example"
+    }
+  ],
+  "generated/tv/webtable-example_": [
+    {
+      "title": "WebTable Example » Dezlearn » Learn IT Easy",
+      "label": "WebTable Example"
+    }
+  ]
 }

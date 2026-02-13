@@ -7,15 +7,15 @@ import { TextboxHelper } from '../../support/html-helpers/textbox-helper';
 import { CheckboxHelper } from '../../support/html-helpers/checkbox-helper';
 import { WaitHelper } from '../../support/html-helpers/wait-helper';
 import { CSVReader } from '../../support/misc-utils/csv-reader';
-import { Given, When } from '@cucumber/cucumber';
-import { EnrollCalcInput } from './EnrollCalcInput';
+import { Given, When } from '@wdio/cucumber-framework';
+import { enrollCalc, syncDobToScenarioContext } from './CCE_context';
+import { loadFrameworkConfig } from '../../../src/config/loadConfig';
 
+const e2eConfig = loadFrameworkConfig();
 const chai = require('chai').use(require('chai-as-promised'));
 const expect = chai.expect;
 
-Given('Set page name to {string}', async (pageName: string) => {
-    PageConfigHelper.setCurrentPage(pageName);
-})
+// Set page name to - moved to web_actions_stepdefs.ts
 
 //FUNC01
 Given('User navigates to {string} screen to Establish New Medicare claim', async (pageName: string) => {
@@ -93,29 +93,11 @@ Given('User navigates to T2 RIB {string} screen for an new claim with {string} t
         await ElementHelper.click(nextButton);
         await WaitHelper.getInstance().waitForPageLoad("Protective Filing Date");
         if (pageName == "Filing Date" || pageName == "Protective Filing Date") {
-            let dobString = "";
-            switch (ssn) {
-                case "126909900":
-                    {
-                        dobString = "08/06/1955";
-                        break;
-                    }
-                case "042569705":
-                    {
-                        dobString = "06/19/1948";
-                        break;
-                    }
-                case "132864403":
-                    {
-                        dobString = "04/01/1955";
-                        break;
-                    }
-
-                default:
-
-            }
-            if (!new EnrollCalcInput().dob) {
-                new EnrollCalcInput().dob = new Date(dobString);
+            const ssnToDob = (e2eConfig as any)?.ssnToDob as Record<string, string> | undefined;
+            const dobString = ssnToDob?.[ssn];
+            if (!enrollCalc.dob && dobString) {
+                enrollCalc.dob = new Date(dobString);
+                syncDobToScenarioContext();
             }
             return;
         }
@@ -144,8 +126,8 @@ Given('User navigates to T2 RIB {string} screen for an new claim with {string} t
             const submitButton: WebdriverIO.Element = await PageConfigHelper.findElement("bttn_Accept", false);
             await ElementHelper.click(submitButton);
         }
-        var enrollCalc: EnrollCalcInput = new EnrollCalcInput();
         enrollCalc.dob = new Date((await (await PageConfigHelper.findElement("BirthDateValue", false)).getText()).trim());
+        syncDobToScenarioContext();
 
         const citizenText = "Citizenship details are required";
         let Citizentexts = await $$("//*[text()[contains(.,'" + citizenText + "')]]");

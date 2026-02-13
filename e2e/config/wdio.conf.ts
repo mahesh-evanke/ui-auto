@@ -4,15 +4,76 @@ import { generate } from 'multiple-cucumber-html-reporter';
 import { removeSync } from 'fs-extra';
 import cucumberJson from 'wdio-cucumberjs-json-reporter';
 import moment from 'moment';
-import * as  fs from 'fs';
-import * as  glob from 'glob';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as http from 'http';
+import * as glob from 'glob';
 import * as yamlReader from 'js-yaml';
 import { parseFeatureFile } from '../support/misc-utils/gherkin-parser';
 
-const e2eConfig = yamlReader.load(fs.readFileSync('e2e/config/config.yaml', 'utf8'));
+/**
+ * Simple synchronous yes/no prompt.
+ *
+ * IMPORTANT: This must only be called in the WDIO "launcher" (main) process,
+ * not inside worker processes, otherwise workers will block waiting for stdin.
+ */
+function promptYesNo(question: string, defaultValue: boolean): boolean {
+    const fsLocal = require('fs') as typeof fs;
+    const buffer = Buffer.alloc(1024);
+    process.stdout.write(`${question} `);
+    try {
+        const bytes = fsLocal.readSync(0, buffer, 0, buffer.length, null);
+        const input = buffer.toString('utf8', 0, bytes).trim().toLowerCase();
+        if (input === 'yes' || input === 'y') return true;
+        if (input === 'no' || input === 'n') return false;
+    } catch {
+        // On any read error, fall back to default.
+    }
+    return defaultValue;
+}
+
+const SAMPLE_FORM_SERVER_PORT = 5500;
+let sampleFormServer: http.Server | null = null;
+
+function startSampleFormStaticServer(): Promise<void> {
+    return new Promise((resolve) => {
+        if (sampleFormServer) {
+            resolve();
+            return;
+        }
+        const root = process.cwd();
+        sampleFormServer = http.createServer((req, res) => {
+            const safePath = path.join(root, req.url!.split('?')[0] || '');
+            if (!safePath.startsWith(root)) {
+                res.writeHead(403);
+                res.end();
+                return;
+            }
+            fs.readFile(safePath, (err, data) => {
+                if (err) {
+                    res.writeHead(404);
+                    res.end();
+                    return;
+                }
+                const ext = path.extname(safePath);
+                const mime = ext === '.html' ? 'text/html' : ext === '.css' ? 'text/css' : ext === '.js' ? 'application/javascript' : 'application/octet-stream';
+                res.setHeader('Content-Type', mime);
+                res.writeHead(200);
+                res.end(data);
+            });
+        });
+        sampleFormServer.listen(SAMPLE_FORM_SERVER_PORT, '127.0.0.1', () => {
+            console.log('[Sample Form] Static server on http://127.0.0.1:' + SAMPLE_FORM_SERVER_PORT);
+            resolve();
+        });
+    });
+}
+
+const e2eConfig = yamlReader.load(fs.readFileSync('e2e/config/config.yaml', 'utf8')) as any;
 const executionMode = e2eConfig.executionMode.toUpperCase();
 const environment = e2eConfig.environment.toUpperCase();
 const reportFolder = e2eConfig.reportFolder;
+const openBrowserFromConfig: boolean = Boolean(e2eConfig.openBrowser);
 
 // WDIO v9 has built-in driver management. Legacy driver service packages like
 // `wdio-chromedriver-service` / `wdio-edgedriver-service` are not compatible with v9.
@@ -65,20 +126,93 @@ if (executionMode == 'GRID') {
 const paths = glob.sync(e2eConfig.features);
 const tags = e2eConfig.tags.split(/[, ]+/);
 
-var features = [];
+type FeatureExecutionKind = 'UI' | 'API_ONLY';
+const featureExecutionKindBySpec: Record<string, FeatureExecutionKind> = {};
+
+function isApiOnlyFeature(featurePath: string): boolean {
+    try {
+        const parsed = parseFeatureFile(featurePath);
+        let hasSteps = false;
+        for (const scenario of parsed.scenarios) {
+            for (const stepText of scenario.steps) {
+                hasSteps = true;
+                const s = stepText.trim();
+                const isApiStep =
+                    s.startsWith('User sends ') ||
+                    s.startsWith('User expects status code ') ||
+                    s.startsWith('User validates response has fields:') ||
+                    s.startsWith('User validates response has ') ||
+                    s.startsWith('User has a valid auth token from ') ||
+                    s.startsWith('User sends POST request to "') ||
+                    s.startsWith('User sends GET request to "') ||
+                    s.startsWith('User sends PUT request to "') ||
+                    s.startsWith('User sends DELETE request to "') ||
+                    s.startsWith('User sends PATCH request to "') ||
+                    s.startsWith('User sends POST request to ') ||
+                    s.startsWith('User sends GET request to ') ||
+                    s.startsWith('User sends PUT request to ') ||
+                    s.startsWith('User sends DELETE request to ') ||
+                    s.startsWith('User sends PATCH request to ');
+                if (!isApiStep) {
+                    return false;
+                }
+            }
+        }
+        return hasSteps;
+    } catch {
+        // If parsing fails, assume UI to be safe.
+        return false;
+    }
+}
+
+/**
+ * Determine whether this process is a WDIO worker or the main launcher.
+ * Note: the config file is usually evaluated only in the launcher process,
+ * but we keep this guard for safety.
+ */
+const isWorkerProcess = !!process.env.WDIO_WORKER_ID;
+
+// Optional CLI spec filtering (e.g. --spec "e2e/features/api.feature").
+function getCliSpecs(): string[] {
+    const specs: string[] = [];
+    const argv = process.argv || [];
+    for (let i = 0; i < argv.length; i++) {
+        const arg = argv[i];
+        if (arg === '--spec' && argv[i + 1]) {
+            specs.push(argv[i + 1]);
+            i++;
+        } else if (arg.startsWith('--spec=')) {
+            specs.push(arg.substring('--spec='.length));
+        }
+    }
+    return specs.map(s => s.replace(/\\/g, '/'));
+}
+
+const cliSpecs = getCliSpecs();
+
+function normalizeFeaturePath(p: string): string {
+    // Our glob returns Windows-style backslashes; WDIO CLI uses forward slashes.
+    return p.replace(/\\/g, '/');
+}
+
+var featuresFromTags: string[] = [];
 pathloop: for (let path of paths) {
     try {
         const parsed = parseFeatureFile(path);
         for (const tag of parsed.featureTags) {
             if (tags.includes(tag)) {
-                features.push(path.replace('e2e\\', '..\\'));
+                const specPath = path.replace('e2e\\', '..\\');
+                featuresFromTags.push(specPath);
+                featureExecutionKindBySpec[specPath] = isApiOnlyFeature(path) ? 'API_ONLY' : 'UI';
                 continue pathloop;
             }
         }
         for (const scenario of parsed.scenarios) {
             for (const tag of scenario.tags) {
                 if (tags.includes(tag)) {
-                    features.push(path.replace('e2e\\', '..\\'));
+                    const specPath = path.replace('e2e\\', '..\\');
+                    featuresFromTags.push(specPath);
+                    featureExecutionKindBySpec[specPath] = isApiOnlyFeature(path) ? 'API_ONLY' : 'UI';
                     continue pathloop;
                 }
             }
@@ -87,7 +221,62 @@ pathloop: for (let path of paths) {
         // ignore malformed/unparseable feature files
     }
 }
-let featuresFiles = Array.from(new Set(features));
+
+let featuresFiles = Array.from(new Set(featuresFromTags));
+
+// If --spec was provided, narrow down to those specs only (intersection).
+if (cliSpecs.length > 0) {
+    const cliSet = new Set(cliSpecs.map(s => normalizeFeaturePath(s)));
+    const filtered = featuresFiles.filter(spec => {
+        const normalized = normalizeFeaturePath(spec.replace('..\\', 'e2e/').replace('..//', 'e2e/'));
+        return cliSet.has(normalized);
+    });
+    if (filtered.length > 0) {
+        featuresFiles = filtered;
+    }
+}
+
+const hasUiFeatures = featuresFiles.some(f => featureExecutionKindBySpec[f] === 'UI');
+const allApiOnly = featuresFiles.length > 0 && !hasUiFeatures;
+
+// Decide (once in launcher) whether to open the browser and pass it to workers via env.
+let userOpenBrowserChoice: boolean;
+const envChoice = process.env.WDIO_OPEN_BROWSER;
+
+if (!isWorkerProcess) {
+    // Launcher process: always prompt user.
+    const answer = promptYesNo(
+        'Do you want to open the browser? (yes/no)',
+        openBrowserFromConfig
+    );
+    userOpenBrowserChoice = answer;
+    // Propagate to workers via environment variable.
+    process.env.WDIO_OPEN_BROWSER = answer ? 'true' : 'false';
+} else if (envChoice === 'true' || envChoice === 'false') {
+    // Worker process: reuse user's choice from launcher, no prompt here.
+    userOpenBrowserChoice = envChoice === 'true';
+} else {
+    // Fallback (should not normally happen) – use config default.
+    userOpenBrowserChoice = openBrowserFromConfig;
+}
+
+// Final "visible browser" decision:
+// - If any UI steps exist in selected features => force true (ignore user choice)
+// - If only API steps => respect user choice
+// NOTE: WDIO still needs at least one capability even when this is false;
+//       we handle that by running the browser in headless mode for API-only + "no".
+const shouldOpenBrowser: boolean = hasUiFeatures ? true : userOpenBrowserChoice;
+
+// For a pure API-only run we can still start WebDriver in headless mode so there is
+// no visible browser window but WDIO remains happy with at least one capability.
+const isApiOnlyRun = allApiOnly;
+const runHeadless = isApiOnlyRun && !userOpenBrowserChoice;
+
+if (!isWorkerProcess && hasUiFeatures && !userOpenBrowserChoice) {
+    console.log(
+        '[Runner] UI steps detected in selected features – overriding user choice and starting browser.'
+    );
+}
 let startTime;
 let endTime;
 
@@ -100,6 +289,8 @@ const baseCapability: any = {
     // 5 instances get started at a time.
     maxInstances: e2eConfig.maxInstances,
     browserName: browserName,
+    // Return from navigation when DOM is interactive instead of full load; avoids timeouts on heavy doc/SPA pages
+    pageLoadStrategy: 'eager',
     // If a local driver binary path is provided, force WebdriverIO to use it.
     // This prevents auto-downloading a driver in environments where downloads are restricted.
     ...(browserName === 'MicrosoftEdge' && e2eConfig.edgedriverpath && e2eConfig.edgedriverpath !== '<path>' ? {
@@ -114,7 +305,25 @@ const baseCapability: any = {
     'e34:token': e2eConfig.seleniumBoxToken,
     'e34:projectId': e2eConfig.seleniumBoxProjectName,
     'e34:credential': e2eConfig.seleniumBoxCredential,
+    // For API-only runs where the user selected "no", run the browser headless so
+    // there is no visible window but WDIO still has a valid capability.
+    ...(runHeadless && browserName === 'chrome'
+        ? {
+            'goog:chromeOptions': {
+                args: ['--headless=new', '--disable-gpu', '--window-size=1280,720'],
+            },
+        }
+        : {}),
+    ...(runHeadless && browserName === 'MicrosoftEdge'
+        ? {
+            'ms:edgeOptions': {
+                args: ['--headless=new', '--disable-gpu', '--window-size=1280,720'],
+            },
+        }
+        : {}),
 };
+
+const effectiveCapabilities: any[] = [baseCapability];
 
 export const config: any = {
     services: runServices,
@@ -166,7 +375,7 @@ export const config: any = {
     // Sauce Labs platform configurator - a great tool to configure your capabilities:
     // https://saucelabs.com/platform/platform-configurator
     //
-    capabilities: [baseCapability],
+    capabilities: effectiveCapabilities,
     //
     // ===================
     // Test Configurations
@@ -214,7 +423,7 @@ export const config: any = {
     // Services take over a specific job you don't want to take care of. They enhance
     // your test setup with almost no effort. Unlike plugins, they don't add new
     // commands. Instead, they hook themselves up into the test process.
-    ...(executionMode === 'LOCAL' ? {} : {
+    ...(executionMode === 'LOCAL' || !shouldOpenBrowser ? {} : {
         hostname: seleniumAddressVal,
         port: port,
         path: '/wd/hub/',
@@ -247,7 +456,8 @@ export const config: any = {
         retry: 0,
         // <string[]> (file/dir) require files before executing features
         require: [
-            './e2e/stepdefinitions/**/*.ts'
+            './e2e/stepdefinitions/**/*.ts',
+            './e2e/api-step-definitions/**/*.ts'
         ],
         // <boolean> show full backtrace for errors
         backtrace: false,
@@ -345,6 +555,10 @@ export const config: any = {
      * @param {Object}                 context  Cucumber World object
      */
     beforeScenario: async function (world, context) {
+        if (!shouldOpenBrowser) {
+            // API-only run without browser; skip UI-specific setup.
+            return;
+        }
         global.environment = environment;
         global.browseName = browserName;
         PageConfigHelper.sameScenarioSwitch = false;
@@ -391,6 +605,10 @@ export const config: any = {
      * @param {Object}                 context          Cucumber World object
      */
     afterScenario: async function (world, result, context) {
+        if (!shouldOpenBrowser) {
+            // API-only run without browser; nothing to clean up.
+            return;
+        }
         if (!result.passed) {
             const scrollHeight = parseInt(await browser.execute("return document.body.scrollHeight") as unknown as string);
             const clientHeight = parseInt(await browser.execute("return document.body.clientHeight") as unknown as string);

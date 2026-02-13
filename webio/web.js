@@ -1,0 +1,2324 @@
+(() => {
+  if (!window.__WEBIO__) {
+    window.__WEBIO__ = {};
+  }
+
+  const STORAGE_KEY = "__WEBIO_COLLECTED_SCREENS__";
+  const ns = window.__WEBIO__;
+
+  if (!ns.screens) {
+    ns.screens = [];
+  }
+
+  function loadStoredScreens() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveStoredScreens(screens) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(screens));
+    } catch (e) {
+    }
+  }
+
+  function getPageTitle() {
+    try {
+      return (document && document.title && document.title.trim && document.title.trim()) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function getPageLabel() {
+    try {
+      const h = document.querySelector("main h1, main h2, h1, h2");
+      if (h && h.textContent) return h.textContent.trim();
+    } catch (e) {
+      return "";
+    }
+    return "";
+  }
+
+  function getXPath(el) {
+    if (!el || el.nodeType !== 1) return "";
+    if (el.id) return '//*[@id="' + el.id.replace(/"/g, '\\"') + '"]';
+    const parts = [];
+    let node = el;
+    while (node && node.nodeType === 1 && node !== document.documentElement) {
+      let index = 1;
+      let sibling = node.previousSibling;
+      while (sibling) {
+        if (sibling.nodeType === 1 && sibling.nodeName === node.nodeName) {
+          index++;
+        }
+        sibling = sibling.previousSibling;
+      }
+      const tagName = node.nodeName.toLowerCase();
+      const part = tagName + "[" + index + "]";
+      parts.unshift(part);
+      node = node.parentNode;
+    }
+    return "/html/" + parts.join("/");
+  }
+
+  function getCssSelector(el) {
+    if (!el || el.nodeType !== 1) return "";
+    if (el.id) return "#" + String(el.id).replace(/\s/g, "\\ ");
+    const path = [];
+    let node = el;
+    while (node && node.nodeType === 1 && node !== document.documentElement) {
+      let selector = node.nodeName.toLowerCase();
+      if (node.classList && node.classList.length) {
+        selector += "." + Array.from(node.classList).join(".");
+      }
+      path.unshift(selector);
+      node = node.parentElement;
+    }
+    return path.join(" > ");
+  }
+
+  function getLogicalName(el) {
+    if (!el || el.nodeType !== 1) return "";
+    if (el.getAttribute && el.getAttribute("aria-label")) {
+      return el.getAttribute("aria-label").trim();
+    }
+    if (el.getAttribute && el.getAttribute("placeholder")) {
+      return el.getAttribute("placeholder").trim();
+    }
+    if (el.innerText && el.innerText.trim()) {
+      return el.innerText.trim();
+    }
+    return el.tagName ? el.tagName.toLowerCase() : "";
+  }
+
+  function getObjectType(el) {
+    if (!el || el.nodeType !== 1) return "Button";
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    const typeAttr = (el.getAttribute && el.getAttribute("type")) ? String(el.getAttribute("type")).toLowerCase() : "";
+    if (tag === "input") {
+      if (typeAttr === "button" || typeAttr === "submit") return "Button";
+      return "Textbox";
+    }
+    if (tag === "textarea") return "Textbox";
+    if (tag === "a") return "Link";
+    if (tag === "button") return "Button";
+    return "Button";
+  }
+
+  function captureElement(target) {
+    if (!target) return;
+    const el = target.nodeType === 1 ? target : target.parentElement;
+    if (!el || !document.documentElement.contains(el)) return;
+
+    const page = window.location.href || "";
+    const title = getPageTitle();
+    const label = getPageLabel();
+    const screenId = title || page;
+
+    const logicalName = getLogicalName(el);
+    const objectType = getObjectType(el);
+    const xpath = getXPath(el);
+    const css = getCssSelector(el);
+
+    const record = {
+      screenId,
+      page,
+      title,
+      label,
+      capturedAt: new Date().toISOString(),
+      logicalName,
+      objectType,
+      selectorType: "xpath",
+      selectorValue: xpath,
+      css,
+      tag: el.tagName ? el.tagName.toLowerCase() : "",
+      id: el.id || "",
+      name: (el.getAttribute && el.getAttribute("name")) || ""
+    };
+
+    ns.screens.push(record);
+
+    const stored = loadStoredScreens();
+    stored.push(record);
+    saveStoredScreens(stored);
+  }
+
+  if (!ns.__initializedContextMenuCapture) {
+    ns.__initializedContextMenuCapture = true;
+    document.addEventListener(
+      "contextmenu",
+      function (e) {
+        try {
+          captureElement(e.target);
+        } catch (err) {
+        }
+      },
+      true
+    );
+  }
+})();
+
+(() => {
+  if (!window.__WEBIO__) {
+    window.__WEBIO__ = {};
+  }
+
+  const STORAGE_KEY = "__WEBIO_COLLECTED_SCREENS__";
+  const ns = window.__WEBIO__;
+
+  if (!ns.screens) {
+    ns.screens = [];
+  }
+
+  function loadStoredScreens() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveStoredScreens(screens) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(screens));
+    } catch (e) {
+      // ignore storage failures; capture must not break the page
+    }
+  }
+
+  function getPageTitle() {
+    try {
+      return (document && document.title && document.title.trim && document.title.trim()) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function getPageLabel() {
+    try {
+      const h = document.querySelector("main h1, main h2, h1, h2");
+      if (h && h.textContent) return h.textContent.trim();
+    } catch (e) {
+      return "";
+    }
+    return "";
+  }
+
+  function getXPath(el) {
+    if (!el || el.nodeType !== 1) return "";
+    if (el.id) return '//*[@id="' + el.id.replace(/"/g, '\\"') + '"]';
+    const parts = [];
+    let node = el;
+    while (node && node.nodeType === 1 && node !== document.documentElement) {
+      let index = 1;
+      let sibling = node.previousSibling;
+      while (sibling) {
+        if (sibling.nodeType === 1 && sibling.nodeName === node.nodeName) {
+          index++;
+        }
+        sibling = sibling.previousSibling;
+      }
+      const tagName = node.nodeName.toLowerCase();
+      const part = tagName + "[" + index + "]";
+      parts.unshift(part);
+      node = node.parentNode;
+    }
+    return "/html/" + parts.join("/");
+  }
+
+  function getCssSelector(el) {
+    if (!el || el.nodeType !== 1) return "";
+    if (el.id) return "#" + String(el.id).replace(/\s/g, "\\ ");
+    const path = [];
+    let node = el;
+    while (node && node.nodeType === 1 && node !== document.documentElement) {
+      let selector = node.nodeName.toLowerCase();
+      if (node.classList && node.classList.length) {
+        selector += "." + Array.from(node.classList).join(".");
+      }
+      path.unshift(selector);
+      node = node.parentElement;
+    }
+    return path.join(" > ");
+  }
+
+  function getLogicalName(el) {
+    if (!el || el.nodeType !== 1) return "";
+    if (el.getAttribute && el.getAttribute("aria-label")) {
+      return el.getAttribute("aria-label").trim();
+    }
+    if (el.getAttribute && el.getAttribute("placeholder")) {
+      return el.getAttribute("placeholder").trim();
+    }
+    if (el.innerText && el.innerText.trim()) {
+      return el.innerText.trim();
+    }
+    return el.tagName ? el.tagName.toLowerCase() : "";
+  }
+
+  function getObjectType(el) {
+    if (!el || el.nodeType !== 1) return "Button";
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    const typeAttr = (el.getAttribute && el.getAttribute("type")) ? String(el.getAttribute("type")).toLowerCase() : "";
+    if (tag === "input") {
+      if (typeAttr === "button" || typeAttr === "submit") return "Button";
+      return "Textbox";
+    }
+    if (tag === "textarea") return "Textbox";
+    if (tag === "a") return "Link";
+    if (tag === "button") return "Button";
+    return "Button";
+  }
+
+  function captureElement(target) {
+    if (!target) return;
+    const el = target.nodeType === 1 ? target : target.parentElement;
+    if (!el || !document.documentElement.contains(el)) return;
+
+    const page = window.location.href || "";
+    const title = getPageTitle();
+    const label = getPageLabel();
+    const screenId = title || page;
+
+    const logicalName = getLogicalName(el);
+    const objectType = getObjectType(el);
+    const xpath = getXPath(el);
+    const css = getCssSelector(el);
+
+    const record = {
+      screenId,
+      page,
+      title,
+      label,
+      capturedAt: new Date().toISOString(),
+      logicalName,
+      objectType,
+      selectorType: "xpath",
+      selectorValue: xpath,
+      css,
+      tag: el.tagName ? el.tagName.toLowerCase() : "",
+      id: el.id || "",
+      name: (el.getAttribute && el.getAttribute("name")) || ""
+    };
+
+    ns.screens.push(record);
+
+    const stored = loadStoredScreens();
+    stored.push(record);
+    saveStoredScreens(stored);
+  }
+
+  if (!ns.__initializedContextMenuCapture) {
+    ns.__initializedContextMenuCapture = true;
+    document.addEventListener(
+      "contextmenu",
+      function (e) {
+        try {
+          captureElement(e.target);
+        } catch (err) {
+          // ignore capture errors
+        }
+      },
+      true
+    );
+  }
+})();
+
+/**
+ * Injected locator-collector script: right-click any element to capture
+ * selector details; store per screen ID; persist across page navigations;
+ * export current screen or all screens as JSON for Gherkin feature generation.
+ */
+(() => {
+    const STORAGE_KEY = "webio_collected_screens";
+    const PANEL_SETTINGS_KEY = "webio_panel_settings";
+    const pageUrl = window.location.href;
+    const defaultScreenIdForPage = (function () {
+        if (typeof window.__WEBIO_SCREEN_ID__ !== "undefined" && window.__WEBIO_SCREEN_ID__) return window.__WEBIO_SCREEN_ID__;
+        var t = document.title && document.title.trim();
+        if (t) return t;
+        try {
+            var p = new URL(pageUrl).pathname.replace(/\//g, "_").slice(1);
+            if (p) return p;
+        } catch (e) {}
+        return "Screen";
+    })();
+
+    function getPageTitle() {
+        return (document && document.title && document.title.trim && document.title.trim()) || "";
+    }
+    function getPageLabelFallback() {
+        try {
+            var heading = document.querySelector("main h1, main h2, h1, h2");
+            if (heading && heading.textContent) return heading.textContent.trim();
+        } catch (e) {}
+        return getPageTitle() || defaultScreenIdForPage;
+    }
+    
+    function loadScreens() {
+        try {
+            var raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? JSON.parse(raw) : {};
+        } catch (e) {
+            return {};
+        }
+    }
+    function loadPanelSettings() {
+        try {
+            var raw = localStorage.getItem(PANEL_SETTINGS_KEY);
+            if (!raw) return { lastScreenId: null, parentPath: "generated" };
+            var o = JSON.parse(raw);
+            return {
+                lastScreenId: (o && typeof o.lastScreenId === "string" && o.lastScreenId.trim()) ? o.lastScreenId.trim() : null,
+                parentPath: (o && typeof o.parentPath === "string" && o.parentPath.trim()) ? o.parentPath.trim() : "generated"
+            };
+        } catch (e) {
+            return { lastScreenId: null, parentPath: "generated" };
+        }
+    }
+    function savePanelSettings(settings) {
+        try {
+            localStorage.setItem(PANEL_SETTINGS_KEY, JSON.stringify({
+                lastScreenId: settings.lastScreenId != null ? String(settings.lastScreenId).trim() : null,
+                parentPath: (settings.parentPath != null && String(settings.parentPath).trim()) ? String(settings.parentPath).trim() : "generated"
+            }));
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+    /**
+     * Persist collected screens to localStorage.
+     * Returns true on success; false on failure (quota, blocked storage, serialization error, etc.).
+     * We intentionally do not throw because this runs inside the page and should not break UX.
+     */
+    function saveScreens(screens) {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(screens));
+            return true;
+        } catch (e) {
+            try {
+                window.__WEBIO_LAST_SAVE_ERROR__ = (e && e.message) ? String(e.message) : String(e);
+                // Avoid noisy logs; one warning helps debugging when saves "randomly" fail.
+                console.warn("[webio] Failed to save locators to localStorage:", e);
+            } catch (_) {}
+            return false;
+        }
+    }
+
+    var collectedScreens = loadScreens();
+    var panelSettings = loadPanelSettings();
+    var currentScreenId = (panelSettings.lastScreenId && panelSettings.lastScreenId.length) ? panelSettings.lastScreenId : defaultScreenIdForPage;
+    var persistedParentPath = panelSettings.parentPath || "generated";
+    if (!collectedScreens[currentScreenId]) {
+        collectedScreens[currentScreenId] = {
+            screenId: currentScreenId,
+            page: pageUrl,
+            title: getPageTitle(),
+            label: getPageLabelFallback(),
+            elements: []
+        };
+        saveScreens(collectedScreens);
+    } else {
+        collectedScreens[currentScreenId].page = pageUrl;
+        collectedScreens[currentScreenId].title = getPageTitle();
+        collectedScreens[currentScreenId].label = getPageLabelFallback();
+        saveScreens(collectedScreens);
+    }
+
+    function getCurrentScreen() {
+        if (!collectedScreens[currentScreenId]) {
+            collectedScreens[currentScreenId] = {
+                screenId: currentScreenId,
+                page: pageUrl,
+                title: getPageTitle(),
+                label: getPageLabelFallback(),
+                elements: []
+            };
+        }
+        return collectedScreens[currentScreenId];
+    }
+    function persistScreens() {
+        return saveScreens(collectedScreens);
+    }
+    function persistScreensOrAlert(contextLabel) {
+        var ok = persistScreens();
+        if (!ok) {
+            var msg = "Save failed (storage blocked or full). Try clearing site storage or reducing saved elements.";
+            try {
+                if (window.__WEBIO_LAST_SAVE_ERROR__) msg += "\n\nDetails: " + window.__WEBIO_LAST_SAVE_ERROR__;
+            } catch (e) {}
+            // Using alert because this is a tool panel; failure must be obvious.
+            alert("[webio] " + (contextLabel ? contextLabel + ": " : "") + msg);
+        }
+        return ok;
+    }
+
+    window.collectedScreens = collectedScreens;
+    window.webioCurrentScreenId = function () { return currentScreenId; };
+
+    var isRecording = false;
+    window.webioIsRecording = function () { return isRecording; };
+
+    var recordedScreens = {};
+    window.webioRecordedScreens = function () { return recordedScreens; };
+
+    function getLogicalName(el) {
+        var label = getControlLabel(el);
+        if (label) return label.trim();
+        if (el.getAttribute && el.getAttribute("aria-label")) return (el.getAttribute("aria-label") || "").trim();
+        if (el.getAttribute && el.getAttribute("placeholder")) return (el.getAttribute("placeholder") || "").trim();
+        if (el.innerText && el.innerText.trim()) return el.innerText.trim().slice(0, 100);
+        if (el.value != null && typeof el.value === "string") return el.value.trim().slice(0, 100);
+        return (el.tagName || "").toLowerCase() || "Element";
+    }
+
+    function isRecordableElement(el) {
+        if (!el || el.nodeType !== 1) return false;
+        var tag = (el.tagName || "").toLowerCase();
+        var root = getControlRoot(el);
+        var checkEl = root || el;
+        var typeAttr = (checkEl.getAttribute && checkEl.getAttribute("type")) ? String(checkEl.getAttribute("type")).toLowerCase() : "";
+        if (tag === "button" || tag === "a") return true;
+        if (tag === "input") {
+            if (typeAttr === "hidden") return false;
+            return ["text", "password", "search", "email", "checkbox", "radio", "submit", "button", ""].indexOf(typeAttr) >= 0;
+        }
+        if (tag === "textarea" || tag === "select") return true;
+        if (tag === "label" && checkEl.querySelector && checkEl.querySelector("input[type=radio], input[type=checkbox]")) return true;
+        if (root && (isMuiControlClass(checkEl, "MuiRadio-root") || isMuiControlClass(checkEl, "MuiCheckbox-root") || isMuiControlClass(checkEl, "MuiSwitch-root"))) return true;
+        var role = (checkEl.getAttribute && checkEl.getAttribute("role")) ? String(checkEl.getAttribute("role")).toLowerCase() : "";
+        if (["button", "link", "textbox", "searchbox", "checkbox", "radio", "switch", "combobox", "listbox"].indexOf(role) >= 0) return true;
+        return false;
+    }
+
+    function getRecordableElementFromTarget(clickTarget) {
+        if (!clickTarget || clickTarget.nodeType !== 1) return null;
+        var el = clickTarget;
+        while (el && el !== document.body) {
+            if (isRecordableElement(el)) return el;
+            var root = getControlRoot(el);
+            if (root && isRecordableElement(root)) return root;
+            el = el.parentElement;
+        }
+        return null;
+    }
+
+    function captureRecordedElement(el, actionType, inputValue) {
+        if (!isRecording) return;
+        var target = el;
+        var root = getControlRoot(el);
+        if (root) target = root;
+        if (!isRecordableElement(target)) return;
+        if (target.closest && target.closest("[data-webio-panel], [data-locator-popup], [data-export-popup], [data-webio-contextmenu]")) return;
+
+        var logicalName = getLogicalName(target);
+        var objectType = determineObjectType(target);
+        var xpath = "";
+        var css = "";
+        try { xpath = getXPath(target) || ""; } catch (x) {}
+        try { css = getCssSelector(target) || ""; } catch (x) {}
+        var selectorValue = xpath || css;
+        if (!selectorValue) return;
+
+        var record = {
+            logicalName: logicalName,
+            objectType: objectType,
+            selectorType: xpath ? "xpath" : "css",
+            selectorValue: selectorValue,
+            actionType: actionType || "click",
+            inputValue: inputValue != null ? String(inputValue) : ""
+        };
+
+        if (!recordedScreens[currentScreenId]) {
+            recordedScreens[currentScreenId] = {
+                screenId: currentScreenId,
+                page: window.location.href || "",
+                title: getPageTitle(),
+                label: getPageLabelFallback(),
+                elements: []
+            };
+        }
+        var elements = recordedScreens[currentScreenId].elements;
+        if (actionType === "input" && (objectType === "Textbox" || objectType === "textbox")) {
+            var existing = elements.find(function (r) { return r.selectorValue === selectorValue; });
+            if (existing) {
+                existing.inputValue = record.inputValue;
+                return;
+            }
+        }
+        elements.push(record);
+    }
+
+    function initRecordingListeners() {
+        if (window.__WEBIO_RECORDING_INIT__) return;
+        window.__WEBIO_RECORDING_INIT__ = true;
+        document.addEventListener("click", function (e) {
+            if (!isRecording) return;
+            if (e.target.closest && e.target.closest("[data-webio-panel], [data-locator-popup], [data-export-popup], [data-webio-contextmenu]")) return;
+            var el = getRecordableElementFromTarget(e.target);
+            if (el) captureRecordedElement(el, "click", null);
+        }, true);
+        document.addEventListener("change", function (e) {
+            if (!isRecording) return;
+            var el = e.target;
+            if (!el || el.nodeType !== 1) return;
+            if (el.closest && el.closest("[data-webio-panel], [data-locator-popup], [data-export-popup]")) return;
+            var tag = (el.tagName || "").toLowerCase();
+            var typeAttr = (el.getAttribute && el.getAttribute("type")) ? String(el.getAttribute("type")).toLowerCase() : "";
+            if (tag === "select") captureRecordedElement(el, "change", (el.options && el.options[el.selectedIndex]) ? el.options[el.selectedIndex].text : el.value);
+            else if (tag === "input" && (typeAttr === "checkbox" || typeAttr === "radio")) captureRecordedElement(el, "change", el.checked);
+            else if ((tag === "input" && ["text", "password", "search", "email", ""].indexOf(typeAttr) >= 0) || tag === "textarea") captureRecordedElement(el, "input", el.value);
+        }, true);
+    }
+    initRecordingListeners();
+
+    let contextMenu = null;
+    let tooltip = null;
+    let areaSelectionMode = false;
+    let selectionRect = null;
+    let isSelecting = false;
+    let selectable = [];
+    let filteredSelectable = [];
+    
+    // -----------------------------
+    // Web table drag selection mode
+    // -----------------------------
+    // Stores everything in ONE object: window.__WEBIO__.selectedTable
+    // Shape:
+    // selectedTable = { name, selectedRows, selectedColumns, data }
+    let tableSelectionMode = false;
+    let activeTable = null;
+    let tableSelectedRows = new Set();   // data rows (0-based, excludes header)
+    let tableSelectedCols = new Set();   // columns (0-based)
+    let dragStart = null; // { r: number, c: number } (r is table row index including header at 0)
+    let dragEnd = null;   // { r: number, c: number }
+    let tablePreviewPopup = null;
+
+    const TABLE_SELECTED_CELL_CLASS = "webio-table-selected-cell";
+    function ensureTableSelectionStyles() {
+        if (document.getElementById("webio-table-selection-style")) return;
+        const style = document.createElement("style");
+        style.id = "webio-table-selection-style";
+        style.textContent = `
+            .${TABLE_SELECTED_CELL_CLASS} { outline: 2px solid #f59e0b !important; background: rgba(245, 158, 11, 0.12) !important; }
+            [data-webio-table-preview] * { color: #000 !important; color-scheme: light; }
+        `;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    function getClosestTable(el) {
+        try {
+            return el && el.closest ? el.closest("table") : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function getCellCoords(cell, tableEl) {
+        if (!cell || !tableEl) return null;
+        const td = cell.closest ? cell.closest("td,th") : null;
+        if (!td) return null;
+        const tr = td.parentElement;
+        if (!tr) return null;
+        // rowIndex on HTMLTableRowElement is relative to the entire table (includes header rows)
+        const rowIndex = tr.rowIndex;
+        const colIndex = td.cellIndex;
+        if (typeof rowIndex !== "number" || typeof colIndex !== "number") return null;
+        return { r: rowIndex, c: colIndex };
+    }
+
+    function clearTableHighlights() {
+        if (!activeTable) return;
+        try {
+            const cells = activeTable.querySelectorAll("td." + TABLE_SELECTED_CELL_CLASS + ", th." + TABLE_SELECTED_CELL_CLASS);
+            cells.forEach((c) => c.classList.remove(TABLE_SELECTED_CELL_CLASS));
+        } catch (e) {}
+    }
+
+    function applyTableHighlights() {
+        if (!activeTable) return;
+        clearTableHighlights();
+        const rows = activeTable.rows ? Array.from(activeTable.rows) : [];
+        if (!rows.length) return;
+        // header
+        const headerRow = rows[0];
+        Array.from(headerRow.cells || []).forEach((cell, ci) => {
+            if (tableSelectedCols.has(ci)) cell.classList.add(TABLE_SELECTED_CELL_CLASS);
+        });
+        // body
+        for (let ri = 1; ri < rows.length; ri++) {
+            const bodyRowIdx = ri - 1;
+            if (!tableSelectedRows.has(bodyRowIdx)) continue;
+            const cells = Array.from(rows[ri].cells || []);
+            cells.forEach((cell, ci) => {
+                if (tableSelectedCols.has(ci)) cell.classList.add(TABLE_SELECTED_CELL_CLASS);
+            });
+        }
+    }
+
+    function computeSelectedTableData() {
+        if (!activeTable) return { headers: [], rows: [] };
+        const rows = activeTable.rows ? Array.from(activeTable.rows) : [];
+        if (!rows.length) return { headers: [], rows: [] };
+        const headerCells = Array.from(rows[0].cells || []);
+        const sortedCols = Array.from(tableSelectedCols).sort((a, b) => a - b);
+        const headers = sortedCols.map((ci) => (headerCells[ci] && (headerCells[ci].innerText || headerCells[ci].textContent) || "").trim());
+        const sortedRows = Array.from(tableSelectedRows).sort((a, b) => a - b);
+        const dataRows = sortedRows.map((rIdx) => {
+            const tr = rows[rIdx + 1]; // +1 to skip header
+            const cells = tr ? Array.from(tr.cells || []) : [];
+            return sortedCols.map((ci) => (cells[ci] && (cells[ci].innerText || cells[ci].textContent) || "").trim());
+        });
+        return { headers, rows: dataRows, sortedCols, sortedRows };
+    }
+
+    function setSelectedTableObject(name) {
+        const calc = computeSelectedTableData();
+        const selectedTable = {
+            name: String(name || "").trim() || "Table",
+            selectedRows: calc.sortedRows || [],
+            selectedColumns: calc.sortedCols || [],
+            data: [calc.headers].concat(calc.rows || [])
+        };
+        try {
+            window.__WEBIO__.selectedTable = selectedTable;
+        } catch (e) {}
+        // also attach to current screen for generation/export
+        try {
+            const s = getCurrentScreen();
+            s.selectedTable = selectedTable;
+        } catch (e) {}
+        // If recording mode is active, attach to recordedScreens too so generation includes it.
+        try {
+            if (recordedScreens && recordedScreens[currentScreenId]) {
+                recordedScreens[currentScreenId].selectedTable = selectedTable;
+            }
+        } catch (e) {}
+        return selectedTable;
+    }
+
+    function renderTablePreview() {
+        if (!tablePreviewPopup) return;
+        const nameInput = tablePreviewPopup.querySelector("#webioTableNameInput");
+        const name = nameInput ? nameInput.value : (activeTable && activeTable.id ? activeTable.id : "Table");
+        const selectedTable = setSelectedTableObject(name);
+
+        const previewWrap = tablePreviewPopup.querySelector("#webioTablePreviewWrap");
+        if (!previewWrap) return;
+        const data = selectedTable.data || [];
+        const htmlRows = data.map((row, idx) => {
+            const cells = (row || []).map((c) => `<${idx === 0 ? "th" : "td"} style="border:1px solid #ddd;padding:6px;text-align:left;">${escapeHtml(String(c ?? ""))}</${idx === 0 ? "th" : "td"}>`).join("");
+            return `<tr>${cells}</tr>`;
+        }).join("");
+        previewWrap.innerHTML = `
+          <div style="font-size:12px;margin-bottom:8px;color:#111;">
+            Selected rows: <b>${JSON.stringify(selectedTable.selectedRows || [])}</b> &nbsp; Selected columns: <b>${JSON.stringify(selectedTable.selectedColumns || [])}</b>
+          </div>
+          <div style="overflow:auto;max-height:240px;border:1px solid #eee;border-radius:6px;">
+            <table style="border-collapse:collapse;width:100%;font-size:12px;">
+              ${htmlRows}
+            </table>
+          </div>
+        `;
+    }
+
+    function openTablePreviewPopup(defaultName) {
+        // close existing
+        const existing = document.querySelector("[data-webio-table-preview]");
+        if (existing) {
+            try { document.body.removeChild(existing); } catch (e) {}
+        }
+        tablePreviewPopup = document.createElement("div");
+        tablePreviewPopup.setAttribute("data-webio-table-preview", "true");
+        tablePreviewPopup.style.cssText = `
+            position: fixed; top: 20px; left: 20px;
+            background: #fff; border: 1px solid #ccc; border-radius: 10px;
+            padding: 14px; z-index: 999999; width: 420px; max-width: 90vw;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.25); font-family: sans-serif;
+        `;
+        tablePreviewPopup.innerHTML = `
+            <div class="webio-table-drag-handle" style="cursor:move;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:4px 0;">
+              <div style="font-weight:700;">Table selection</div>
+              <div style="font-size:12px;color:#555;">Drag to select. Click header = toggle column. Click row cell = toggle row.</div>
+            </div>
+            <label style="display:block;font-size:12px;margin-bottom:8px;">
+              Table name<br/>
+              <input id="webioTableNameInput" value="${escapeHtml(String(defaultName || ""))}" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"/>
+            </label>
+            <div id="webioTablePreviewWrap" style="margin-bottom:10px;"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+              <button id="webioTableConfirmBtn" style="padding:8px 12px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;cursor:pointer;">Confirm</button>
+              <button id="webioTableResetBtn" style="padding:8px 12px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer;">Reset Selection</button>
+              <button id="webioTableCancelBtn" style="padding:8px 12px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer;">Cancel</button>
+            </div>
+        `;
+        document.body.appendChild(tablePreviewPopup);
+        makePopupDraggable(tablePreviewPopup, ".webio-table-drag-handle");
+        tablePreviewPopup.querySelector("#webioTableNameInput").addEventListener("input", function () {
+            renderTablePreview();
+        });
+        tablePreviewPopup.querySelector("#webioTableResetBtn").onclick = function (ev) {
+            try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
+            tableSelectedRows = new Set();
+            tableSelectedCols = new Set();
+            applyTableHighlights();
+            renderTablePreview();
+        };
+        tablePreviewPopup.querySelector("#webioTableCancelBtn").onclick = function (ev) {
+            try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
+            exitTableSelectionMode(true);
+        };
+        tablePreviewPopup.querySelector("#webioTableConfirmBtn").onclick = function (ev) {
+            try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
+            // Persist selectedTable and also capture a locator for the table root by name (so step can resolve it).
+            const nameInput = tablePreviewPopup.querySelector("#webioTableNameInput");
+            const tableName = nameInput ? String(nameInput.value || "").trim() : "";
+            const selectedTable = setSelectedTableObject(tableName);
+
+            // Capture locator for the table itself (no data), so locator JSON contains the table name.
+            try {
+                const t = activeTable;
+                if (t) {
+                    const logicalName = selectedTable.name;
+                    const selectorType = t.id ? "id" : "xpath";
+                    const selectorValue = t.id ? t.id : (getXPath(t) || "");
+                    if (selectorValue) {
+                        const payload = { logicalName, objectType: "Other", selectorType, selectorValue, value: "" };
+                        const screen = getCurrentScreen();
+                        screen.elements = screen.elements || [];
+                        if (!screen.elements.some((e) => e && e.logicalName === logicalName)) {
+                            screen.elements.push(payload);
+                        }
+                        if (recordedScreens && recordedScreens[currentScreenId]) {
+                            const rs = recordedScreens[currentScreenId];
+                            rs.elements = rs.elements || [];
+                            if (!rs.elements.some((e) => e && e.logicalName === logicalName)) {
+                                rs.elements.push(payload);
+                            }
+                        }
+                    }
+                }
+            } catch (e) {}
+
+            persistScreensOrAlert("Persist table selection");
+            updateListUI();
+            exitTableSelectionMode(false);
+        };
+
+        renderTablePreview();
+    }
+
+    function startTableSelectionMode(tableEl) {
+        ensureTableSelectionStyles();
+        tableSelectionMode = true;
+        activeTable = tableEl;
+        dragStart = null;
+        dragEnd = null;
+        // Keep any existing selection (merge behavior) if user re-enters mode on same table,
+        // otherwise start clean.
+        if (!activeTable || !activeTable.rows || activeTable.rows.length === 0) {
+            alert("[webio] No rows found in this table.");
+            return;
+        }
+        openTablePreviewPopup(activeTable.id || "ProductTable");
+        applyTableHighlights();
+    }
+
+    function exitTableSelectionMode(clearSelection) {
+        tableSelectionMode = false;
+        dragStart = null;
+        dragEnd = null;
+        if (clearSelection) {
+            tableSelectedRows = new Set();
+            tableSelectedCols = new Set();
+        }
+        clearTableHighlights();
+        activeTable = null;
+        if (tablePreviewPopup) {
+            try { document.body.removeChild(tablePreviewPopup); } catch (e) {}
+            tablePreviewPopup = null;
+        }
+    }
+
+    function onTableMouseDown(e) {
+        if (!tableSelectionMode || !activeTable) return;
+        const coords = getCellCoords(e.target, activeTable);
+        if (!coords) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragStart = coords;
+        dragEnd = coords;
+        applyDraggedRectangle(true);
+    }
+    function onTableMouseOver(e) {
+        if (!tableSelectionMode || !activeTable) return;
+        if (!dragStart) return;
+        const coords = getCellCoords(e.target, activeTable);
+        if (!coords) return;
+        dragEnd = coords;
+        applyDraggedRectangle(true);
+    }
+    function onTableMouseUp(e) {
+        if (!tableSelectionMode || !activeTable) return;
+        if (!dragStart || !dragEnd) return;
+        e.preventDefault();
+        e.stopPropagation();
+        applyDraggedRectangle(false); // commit
+        dragStart = null;
+        dragEnd = null;
+        applyTableHighlights();
+        renderTablePreview();
+    }
+
+    function applyDraggedRectangle(previewOnly) {
+        if (!activeTable || !dragStart || !dragEnd) return;
+        const r1 = Math.min(dragStart.r, dragEnd.r);
+        const r2 = Math.max(dragStart.r, dragEnd.r);
+        const c1 = Math.min(dragStart.c, dragEnd.c);
+        const c2 = Math.max(dragStart.c, dragEnd.c);
+        if (!previewOnly) {
+            // Merge selection: add all rows/cols in rectangle.
+            for (let c = c1; c <= c2; c++) tableSelectedCols.add(c);
+            for (let r = r1; r <= r2; r++) {
+                if (r === 0) continue; // header row not stored in selectedRows
+                tableSelectedRows.add(r - 1);
+            }
+        }
+        applyTableHighlights();
+    }
+
+    function onTableClickToggle(e) {
+        if (!tableSelectionMode || !activeTable) return;
+        const coords = getCellCoords(e.target, activeTable);
+        if (!coords) return;
+        // If user clicks a selected area again: remove row/column.
+        // - header cell click toggles column
+        // - body cell click toggles row
+        if (coords.r === 0) {
+            if (tableSelectedCols.has(coords.c)) tableSelectedCols.delete(coords.c);
+            else tableSelectedCols.add(coords.c);
+        } else {
+            const bodyRow = coords.r - 1;
+            if (tableSelectedRows.has(bodyRow)) tableSelectedRows.delete(bodyRow);
+            else tableSelectedRows.add(bodyRow);
+        }
+        applyTableHighlights();
+        renderTablePreview();
+    }
+
+    // Global listeners (capture phase) so selection works on any page without touching app code.
+    document.addEventListener("mousedown", function (e) {
+        if (!tableSelectionMode) return;
+        if (!activeTable) return;
+        if (!activeTable.contains(e.target)) return;
+        onTableMouseDown(e);
+    }, true);
+    document.addEventListener("mouseover", function (e) {
+        if (!tableSelectionMode) return;
+        if (!activeTable) return;
+        if (!activeTable.contains(e.target)) return;
+        onTableMouseOver(e);
+    }, true);
+    document.addEventListener("mouseup", function (e) {
+        if (!tableSelectionMode) return;
+        if (!activeTable) return;
+        onTableMouseUp(e);
+    }, true);
+    document.addEventListener("click", function (e) {
+        if (!tableSelectionMode) return;
+        if (!activeTable) return;
+        if (!activeTable.contains(e.target)) return;
+        onTableClickToggle(e);
+    }, true);
+    
+    function getXPath(el) {
+        if (el.id) return `//*[@id="${el.id}"]`;
+        if (el === document.body) return '/html/body';
+        let ix = 0;
+        const siblings = el.parentNode.childNodes;
+        for (let i = 0; i < siblings.length; i++) {
+            const sibling = siblings[i];
+            
+            if (sibling === el) return getXPath(el.parentNode) + '/' + el.tagName.toLowerCase() + `[${ix + 1}]`;
+            if (sibling.nodeType === 1 && sibling.tagName === el.tagName) ix++;
+        }
+    }
+    
+    function getCssSelector(el) {
+        if (el.id) return `#${el.id}`;
+        let path = [];
+        while (el && el.nodeType === 1) {
+            let selector = el.nodeName.toLowerCase();
+            if (el.className) selector += "." + [...el.classList].join(".");
+            path.unshift(selector);
+            el = el.parentElement;
+        }
+        return path.join(" > ");
+    }
+    
+    function getConfidence(el) {
+        let score = 0.5;
+        if (el.id) score += 0.3;
+        if (el.className && el.className.length < 40) score += 0.2;
+        return Math.min(1.0, score);
+    }
+
+    /** Return true if el is or is inside a Material-UI Radio/Checkbox/Switch root. */
+    function isMuiControlClass(el, className) {
+        if (!el || !el.classList) return false;
+        for (var i = 0; i < el.classList.length; i++) {
+            if (el.classList[i].indexOf(className) !== -1) return true;
+        }
+        return false;
+    }
+    /** Resolve to the MUI control root (e.g. .MuiRadio-root) when right-clicking icon/span inside it. */
+    function getMuiControlRoot(el) {
+        if (!el || !el.closest) return null;
+        var root = el.closest(".MuiRadio-root, .MuiCheckbox-root, .MuiSwitch-root, [class*=\"MuiRadio-root\"], [class*=\"MuiCheckbox-root\"], [class*=\"MuiSwitch-root\"]");
+        return root || null;
+    }
+    /**
+     * Universal control root for any UI (MUI, Ant Design, Bootstrap, plain HTML, etc.).
+     * Returns the clickable wrapper: MUI root, <label> containing radio/checkbox, or [role="radio"]/[role="checkbox"].
+     */
+    function getControlRoot(el) {
+        if (!el || !el.closest) return null;
+        var mui = getMuiControlRoot(el);
+        if (mui) return mui;
+        var label = el.tagName && el.tagName.toLowerCase() === "label" ? el : (el.closest("label") || null);
+        if (label && label.querySelector && label.querySelector("input[type=\"radio\"], input[type=\"checkbox\"]"))
+            return label;
+        var roleRoot = el.closest("[role=\"radio\"], [role=\"checkbox\"], [role=\"switch\"]");
+        return roleRoot || null;
+    }
+    /**
+     * Get the native input inside any control (MUI root, label, or role wrapper). Used for id/name in selectors.
+     * Uses case-insensitive type check so type="Radio" / "Checkbox" is found on sites that set it via JS.
+     */
+    function getControlInput(root) {
+        if (!root) return null;
+        if (root.tagName && root.tagName.toLowerCase() === "input") return root;
+        if (!root.querySelector) return null;
+        var input = root.querySelector("input[type=\"radio\"], input[type=\"checkbox\"], input[type=\"hidden\"], input[type=\"Radio\"], input[type=\"Checkbox\"]");
+        if (input) return input;
+        var allInputs = root.querySelectorAll("input");
+        for (var i = 0; i < allInputs.length; i++) {
+            var t = (allInputs[i].getAttribute && allInputs[i].getAttribute("type")) ? String(allInputs[i].getAttribute("type")).toLowerCase() : "";
+            if (t === "radio" || t === "checkbox" || t === "hidden") return allInputs[i];
+        }
+        return null;
+    }
+    /** Get visible label text for any control (MUI, PrimeReact, native <label>, or label[for], sibling label). */
+    function getControlLabel(root) {
+        if (!root) return "";
+        var formLabel = root.closest && root.closest(".MuiFormControlLabel-root");
+        if (formLabel) {
+            var labelEl = formLabel.querySelector(".MuiFormControlLabel-label");
+            if (labelEl && labelEl.innerText) return labelEl.innerText.trim();
+            if (formLabel.innerText) return formLabel.innerText.trim();
+        }
+        if (root.tagName && root.tagName.toLowerCase() === "label" && root.innerText)
+            return root.innerText.trim();
+        var labelParent = root.closest && root.closest("label");
+        if (labelParent && labelParent.innerText) return labelParent.innerText.trim();
+        var inputEl = getControlInput(root) || (root.tagName && root.tagName.toLowerCase() === "input" ? root : null);
+        if (inputEl && inputEl.id) {
+            try {
+                var idStr = String(inputEl.id).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+                var forLabel = document.querySelector('label[for="' + idStr + '"]');
+                if (forLabel && forLabel.innerText) return forLabel.innerText.trim();
+            } catch (e) {}
+        }
+        var wrapper = root.parentElement;
+        if (wrapper) {
+            var next = root.nextElementSibling;
+            if (next && next.tagName && next.tagName.toLowerCase() === "label" && next.innerText) return next.innerText.trim();
+            var prev = root.previousElementSibling;
+            if (prev && prev.tagName && prev.tagName.toLowerCase() === "label" && prev.innerText) return prev.innerText.trim();
+        }
+        return "";
+    }
+    function determineObjectType(el) {
+        if (!el) return "Button";
+        var root = getControlRoot(el);
+        var checkEl = root || el;
+        if (isMuiControlClass(checkEl, "MuiRadio-root")) return "Radio";
+        if (isMuiControlClass(checkEl, "MuiCheckbox-root") || isMuiControlClass(checkEl, "MuiSwitch-root")) return "Checkbox";
+        var role = (checkEl.getAttribute && checkEl.getAttribute("role")) ? String(checkEl.getAttribute("role")).toLowerCase() : "";
+        if (role === "textbox" || role === "searchbox") return "Textbox";
+        if (role === "combobox" || role === "listbox") return "Dropdown";
+        if (role === "checkbox" || role === "switch") return "Checkbox";
+        if (role === "radio" || role === "radiogroup") return "Radio";
+        if (role === "button" || role === "link") return role === "link" ? "Link" : "Button";
+        var inputEl = getControlInput(checkEl);
+        if (inputEl) {
+            var itype = (inputEl.getAttribute && inputEl.getAttribute("type")) ? String(inputEl.getAttribute("type")).toLowerCase() : "";
+            if (itype === "radio") return "Radio";
+            if (itype === "checkbox") return "Checkbox";
+        }
+        var tag = (el.tagName || "").toLowerCase();
+        var typeAttr = (el.getAttribute && el.getAttribute("type")) ? String(el.getAttribute("type")).toLowerCase() : "";
+        if (tag === "textarea") return "Textbox";
+        if (tag === "button") return "Button";
+        if (tag === "a") return "Link";
+        if (tag === "select") return "Dropdown";
+        if (tag === "input") {
+            if (typeAttr === "checkbox") return "Checkbox";
+            if (typeAttr === "radio") return "Radio";
+            return "Textbox";
+        }
+        return "Button";
+    }
+
+    function buildSelectorOptions(el, savedRecord) {
+        const seen = new Set();
+        const options = [];
+        function add(type, value, label) {
+            if (!type || value == null || String(value).trim() === "") return;
+            const key = type + "__" + value;
+            if (seen.has(key)) return;
+            seen.add(key);
+            options.push({ type, value: String(value).trim(), label: label || type + ": " + (String(value).length > 45 ? String(value).slice(0, 42) + "..." : value) });
+        }
+        if (el) {
+            var inputEl = getControlInput(el) || el;
+            if (inputEl.id && inputEl.id.trim()) add("id", inputEl.id.trim(), "id: " + inputEl.id.trim());
+            var name = (inputEl.getAttribute && inputEl.getAttribute("name")) || (el.getAttribute && el.getAttribute("name"));
+            if (name && String(name).trim()) add("name", String(name).trim(), "name: " + String(name).trim());
+            var dataTestId = (inputEl.getAttribute && inputEl.getAttribute("data-testid")) || (el.getAttribute && el.getAttribute("data-testid"));
+            if (dataTestId && String(dataTestId).trim()) add("data-testid", String(dataTestId).trim(), "data-testid: " + String(dataTestId).trim());
+            var tag = (el.tagName || "").toLowerCase();
+            var text = (el.innerText || el.textContent || "").trim().slice(0, 200);
+            if (tag === "a" && text) add("linkText", text, "linkText: " + (text.length > 40 ? text.slice(0, 37) + "..." : text));
+            if (tag === "button" && text) add("buttonText", text, "buttonText: " + (text.length > 40 ? text.slice(0, 37) + "..." : text));
+            // For radio/checkbox use the actual input so we get id-based selector (e.g. //*[@id="category1"]) when present; else xpath
+            var selectorEl = inputEl && (inputEl.id || inputEl.tagName === "INPUT" || inputEl.tagName === "SELECT") ? inputEl : el;
+            add("css", getCssSelector(selectorEl), "css: ...");
+            add("xpath", getXPath(selectorEl), "xpath: ...");
+        }
+        if (savedRecord) {
+            if (savedRecord.selectorType && savedRecord.selectorValue) add(savedRecord.selectorType, savedRecord.selectorValue);
+            if (savedRecord.css) add("css", savedRecord.css);
+            if (savedRecord.xpath) add("xpath", savedRecord.xpath);
+            if (savedRecord.id) add("id", savedRecord.id);
+        }
+        return options.length ? options : [{ type: "css", value: "", label: "css: " }];
+    }
+
+    function makePopupDraggable(popup, handleSelector) {
+        var handle = popup.querySelector(handleSelector);
+        if (!handle) return;
+        var startX = 0, startY = 0, startLeft = 0, startTop = 0;
+        function onMove(e) {
+            var dx = e.clientX - startX;
+            var dy = e.clientY - startY;
+            popup.style.left = Math.max(0, startLeft + dx) + "px";
+            popup.style.top = Math.max(0, startTop + dy) + "px";
+            popup.style.right = "auto";
+            popup.style.transform = "none";
+        }
+        function onUp() {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+        }
+        handle.addEventListener("mousedown", function (e) {
+            if (e.target.closest("input, button, select")) return;
+            var rect = popup.getBoundingClientRect();
+            startX = e.clientX;
+            startY = e.clientY;
+            startLeft = rect.left;
+            startTop = rect.top;
+            e.preventDefault();
+            popup.style.transform = "none";
+            popup.style.left = startLeft + "px";
+            popup.style.top = startTop + "px";
+            popup.style.right = "auto";
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp);
+        });
+    }
+
+    function showPopup(el, defaults, onSave) {
+        const existingPopup = document.querySelector('[data-locator-popup]');
+        if (existingPopup) document.body.removeChild(existingPopup);
+
+        const popup = document.createElement("div");
+        popup.setAttribute("data-locator-popup", "true");
+        popup.style.cssText = "position:fixed;top:30px;left:30px;z-index:999999;background:#fff;color:#000;border:1px solid #ccc;padding:16px;font-family:sans-serif;box-shadow:2px 2px 10px rgba(0,0,0,0.3);color-scheme:light;width:320px;";
+
+        var esc = function (s) { return (s == null ? "" : String(s)).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); };
+        var objType = defaults.objectType || (el ? determineObjectType(el) : "Button");
+        var selectorOpts = buildSelectorOptions(el, defaults);
+        var selIdx = 0;
+        if (defaults.selectorType && defaults.selectorValue) {
+            var found = selectorOpts.findIndex(function (o) { return o.type === defaults.selectorType && o.value === defaults.selectorValue; });
+            if (found >= 0) selIdx = found;
+        }
+        var selOpt = selectorOpts[selIdx] || selectorOpts[0];
+        var selValue = defaults.selectorValue != null ? defaults.selectorValue : (selOpt ? selOpt.value : "");
+        var actionValue = defaults.value != null ? defaults.value : (el && el.value != null && typeof el.value === "string" ? el.value : "");
+        if (!actionValue && objType === "Textbox" && el && (el.placeholder || (el.getAttribute && el.getAttribute("placeholder"))))
+            actionValue = (el.placeholder || el.getAttribute("placeholder") || "").trim();
+        if (!actionValue && objType === "Dropdown" && el && el.options && el.options.length)
+            actionValue = (el.options[el.selectedIndex] && el.options[el.selectedIndex].text) ? el.options[el.selectedIndex].text.trim() : "";
+        var objTypes = ["Textbox", "Button", "Link", "Dropdown", "Checkbox", "Radio", "Other"];
+        var objHtml = objTypes.map(function (t) { return "<option value=\"" + esc(t) + "\"" + (t === objType ? " selected" : "") + ">" + esc(t) + "</option>"; }).join("");
+        var selHtml = selectorOpts.map(function (o, i) { return "<option value=\"" + i + "\">" + esc(o.label) + "</option>"; }).join("");
+
+        popup.innerHTML = "<style>[data-locator-popup] input,[data-locator-popup] label,[data-locator-popup] button,[data-locator-popup] select{color:#000!important;background-color:#fff!important;border-color:#ccc!important}</style>" +
+            "<div class=\"webio-popup-drag-handle\" style=\"cursor:move;user-select:none;padding:4px 0 8px;margin:-16px -16px 10px -16px;border-bottom:1px solid #eee;font-weight:600;\">Capture element</div>" +
+            "<label style=\"display:block;margin-bottom:8px;font-size:12px;\">Logical Name<br><input id=\"logicalName\" value=\"" + esc(defaults.logicalName) + "\" style=\"width:100%;padding:6px;box-sizing:border-box;\"/></label>" +
+            "<label style=\"display:block;margin-bottom:8px;font-size:12px;\">Object Type<br><select id=\"objectType\" style=\"width:100%;padding:6px;box-sizing:border-box;\">" + objHtml + "</select></label>" +
+            "<label style=\"display:block;margin-bottom:8px;font-size:12px;\">Choose Attribute/Selector to Save<br><select id=\"selectorSelect\" style=\"width:100%;padding:6px;box-sizing:border-box;\">" + selHtml + "</select></label>" +
+            "<label style=\"display:block;margin-bottom:8px;font-size:12px;\">Selector Value<br><input id=\"selectorValue\" value=\"" + esc(selValue) + "\" style=\"width:100%;padding:6px;box-sizing:border-box;\"/></label>" +
+            "<label style=\"display:block;margin-bottom:12px;font-size:12px;\">Value (text to enter / option to select)<br><input id=\"actionValue\" value=\"" + esc(actionValue) + "\" placeholder=\"e.g. username, option1\" style=\"width:100%;padding:6px;box-sizing:border-box;\"/></label>" +
+            "<div style=\"text-align:right;\"><button id=\"cancelBtn\" style=\"margin-right:8px;padding:6px 12px;\">Cancel</button><button id=\"saveBtn\" style=\"padding:6px 16px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;\">Save</button></div>";
+
+        document.body.appendChild(popup);
+        makePopupDraggable(popup, ".webio-popup-drag-handle");
+        // Focus to ensure keystrokes go to the popup, not the underlying app.
+        try { popup.querySelector("#logicalName") && popup.querySelector("#logicalName").focus(); } catch (e) {}
+
+        var selSelect = popup.querySelector("#selectorSelect");
+        var selValueInput = popup.querySelector("#selectorValue");
+        selSelect.addEventListener("change", function () {
+            var idx = parseInt(selSelect.value, 10);
+            if (!isNaN(idx) && selectorOpts[idx]) selValueInput.value = selectorOpts[idx].value;
+        });
+
+        popup.querySelector("#saveBtn").onclick = function (ev) {
+            try { if (ev) { ev.preventDefault(); ev.stopPropagation(); } } catch (e) {}
+            try {
+                var idx = parseInt(selSelect.value, 10);
+                var chosen = selectorOpts[idx] || selectorOpts[0] || { type: "css", value: selValueInput.value };
+                onSave({
+                    logicalName: (popup.querySelector("#logicalName").value || "").trim() || "Element",
+                    objectType: popup.querySelector("#objectType").value || objType,
+                    selectorType: chosen.type,
+                    selectorValue: (selValueInput.value || chosen.value || "").trim(),
+                    value: (popup.querySelector("#actionValue").value || "").trim(),
+                    css: chosen.type === "css" ? (selValueInput.value || chosen.value) : (defaults.css || ""),
+                    xpath: chosen.type === "xpath" ? (selValueInput.value || chosen.value) : (defaults.xpath || ""),
+                    confidence: defaults.confidence
+                });
+            } catch (e) {
+                alert("[webio] Save failed: " + (e && e.message ? e.message : "unknown error"));
+            } finally {
+                try { if (el && el.style) el.style.outline = ""; } catch (e) {}
+                try { document.body.removeChild(popup); } catch (e) {}
+            }
+        };
+        popup.querySelector("#cancelBtn").onclick = function (ev) {
+            try { if (ev) { ev.preventDefault(); ev.stopPropagation(); } } catch (e) {}
+            try { if (el && el.style) el.style.outline = ""; } catch (e) {}
+            try { document.body.removeChild(popup); } catch (e) {}
+        };
+    }
+    
+    function showContextMenu(e, el) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Remove existing context menu
+        if (contextMenu) {
+            document.body.removeChild(contextMenu);
+        }
+        
+        contextMenu = document.createElement("div");
+        contextMenu.setAttribute("data-webio-contextmenu", "true");
+        // Use viewport coords because the menu is position:fixed
+        // (pageX/pageY + fixed can push the menu off-screen for lower elements).
+        var x = (typeof e.clientX === "number") ? e.clientX : (typeof e.pageX === "number" ? e.pageX : 0);
+        var y = (typeof e.clientY === "number") ? e.clientY : (typeof e.pageY === "number" ? e.pageY : 0);
+        contextMenu.style.cssText = `
+            position: fixed; left: ${x}px; top: ${y}px;
+            background: #fff; color: #000; border: 1px solid #ccc; padding: 5px 0;
+            font-family: sans-serif; box-shadow: 2px 2px 10px rgba(0,0,0,0.3);
+            z-index: 999999; min-width: 150px; color-scheme: light;
+        `;
+        
+        function closeMenu() {
+            try { if (contextMenu) document.body.removeChild(contextMenu); } catch (e) {}
+            contextMenu = null;
+        }
+
+        function persistLocatorForElement(targetEl, objectTypeOverride, defaultValueOverride) {
+            const label = (getControlLabel(targetEl) || targetEl.innerText || "").trim() || targetEl.tagName.toLowerCase();
+            var selectorEl = targetEl;
+            var ctrlInput = getControlInput(targetEl);
+            if (ctrlInput && (ctrlInput.id || ctrlInput.tagName === "INPUT" || ctrlInput.tagName === "SELECT")) selectorEl = ctrlInput;
+            const css = getCssSelector(selectorEl);
+            const xpath = getXPath(selectorEl);
+            const confidence = getConfidence(selectorEl);
+
+            var defaultObjectType = objectTypeOverride || determineObjectType(targetEl);
+            var defaultValue = defaultValueOverride != null ? defaultValueOverride : "";
+
+            showPopup(targetEl, {
+                logicalName: label,
+                css,
+                xpath,
+                confidence,
+                objectType: defaultObjectType,
+                value: defaultValue
+            }, (userInput) => {
+                targetEl.style.outline = '2px solid green';
+                var ctrlInput = getControlInput(targetEl);
+                var exportId = (ctrlInput && ctrlInput.id) ? ctrlInput.id : (targetEl.id || "");
+                var objType = userInput.objectType || determineObjectType(targetEl);
+                var payload = {
+                    tag: (ctrlInput && ctrlInput.tagName) ? ctrlInput.tagName.toLowerCase() : targetEl.tagName.toLowerCase(),
+                    id: exportId,
+                    class: targetEl.className,
+                    text: label,
+                    logicalName: userInput.logicalName,
+                    objectType: objType,
+                    selectorType: userInput.selectorType,
+                    selectorValue: userInput.selectorValue,
+                    value: userInput.value,
+                    css: userInput.css,
+                    xpath: userInput.xpath,
+                    confidence: userInput.confidence
+                };
+                if ((objType === "Radio" || objType === "Checkbox") && label) payload.labelText = label;
+                getCurrentScreen().elements.push(payload);
+                persistScreensOrAlert("Persist locator");
+                updateListUI();
+            });
+            closeMenu();
+        }
+
+        function persistLocatorDirect(targetEl, objectTypeOverride, valueOverride) {
+            if (!targetEl) return;
+            const label = (getControlLabel(targetEl) || targetEl.innerText || "").trim() || targetEl.tagName.toLowerCase();
+            var selectorEl = targetEl;
+            var ctrlInput = getControlInput(targetEl);
+            if (ctrlInput && (ctrlInput.id || ctrlInput.tagName === "INPUT" || ctrlInput.tagName === "SELECT")) selectorEl = ctrlInput;
+
+            const css = getCssSelector(selectorEl);
+            const xpath = getXPath(selectorEl);
+            const confidence = getConfidence(selectorEl);
+            const selectorOpts = buildSelectorOptions(targetEl, null);
+            const xpathOpt = selectorOpts && selectorOpts.find(function (o) { return o.type === "xpath"; });
+            const xpathValue = (xpathOpt && xpathOpt.value) ? xpathOpt.value : (xpath || "");
+            const objType = objectTypeOverride || determineObjectType(targetEl);
+            const defaultValue = valueOverride != null ? String(valueOverride).trim() : "";
+
+            var payload = {
+                tag: (ctrlInput && ctrlInput.tagName) ? ctrlInput.tagName.toLowerCase() : targetEl.tagName.toLowerCase(),
+                id: (ctrlInput && ctrlInput.id) ? ctrlInput.id : (targetEl.id || ""),
+                class: targetEl.className,
+                text: label,
+                logicalName: label,
+                objectType: objType,
+                selectorType: "xpath",
+                selectorValue: (xpathValue || "").trim(),
+                value: defaultValue,
+                css: css,
+                xpath: xpath,
+                confidence: confidence
+            };
+            if ((objType === "Radio" || objType === "Checkbox") && label) payload.labelText = label;
+            getCurrentScreen().elements.push(payload);
+            persistScreensOrAlert("Persist locator");
+            updateListUI();
+            closeMenu();
+        }
+
+        function addMenuAction(label, onClick) {
+            const item = document.createElement("div");
+            item.innerText = label;
+            item.style.cssText = "padding: 8px 15px; cursor: pointer;";
+            item.onmouseenter = () => { item.style.background = "#f0f0f0"; };
+            item.onmouseleave = () => { item.style.background = "#fff"; };
+            item.onclick = () => {
+                try { onClick(); } catch (err) {}
+            };
+            contextMenu.appendChild(item);
+        }
+
+        // If user right-clicks on a table (or inside it), show table-specific actions. Order: Save locator, Verify text, Verify web table.
+        const closestTable = getClosestTable(el);
+        if (closestTable) {
+            addMenuAction("Save locator", () => {
+                persistLocatorForElement(el);
+            });
+            addMenuAction("Verify Text", () => {
+                const cellText = ((el && (el.innerText || el.textContent)) || "").trim();
+                persistLocatorDirect(el, "Other", cellText);
+            });
+            addMenuAction("Verify Web Table", () => {
+                closeMenu();
+                startTableSelectionMode(closestTable);
+            });
+        } else {
+            // Default non-table actions. Order: Save locator, Verify text.
+            addMenuAction("Save locator", () => {
+                persistLocatorForElement(el);
+            });
+            addMenuAction("Verify Text", () => {
+                const textVal = ((el && (el.innerText || el.textContent)) || "").trim();
+                persistLocatorDirect(el, "Other", textVal);
+            });
+        }
+        document.body.appendChild(contextMenu);
+
+        // Clamp the menu so it stays visible within the viewport.
+        try {
+            var rect = contextMenu.getBoundingClientRect();
+            var pad = 8;
+            var maxLeft = Math.max(pad, (window.innerWidth || document.documentElement.clientWidth) - rect.width - pad);
+            var maxTop = Math.max(pad, (window.innerHeight || document.documentElement.clientHeight) - rect.height - pad);
+            var newLeft = Math.min(Math.max(pad, x), maxLeft);
+            var newTop = Math.min(Math.max(pad, y), maxTop);
+            contextMenu.style.left = newLeft + "px";
+            contextMenu.style.top = newTop + "px";
+        } catch (err) {}
+        
+        // Close context menu on click outside
+        setTimeout(() => {
+            const closeContextMenu = (e) => {
+                if (contextMenu && !contextMenu.contains(e.target)) {
+                    document.body.removeChild(contextMenu);
+                    contextMenu = null;
+                    document.removeEventListener("click", closeContextMenu);
+                }
+            };
+            document.addEventListener("click", closeContextMenu);
+        }, 0);
+    }
+    
+    function showTooltip(e, el) {
+        if (tooltip) {
+            document.body.removeChild(tooltip);
+        }
+        
+        tooltip = document.createElement("div");
+        tooltip.innerText = "Save locator";
+        tooltip.style.cssText = `
+            position: fixed; left: ${e.pageX + 10}px; top: ${e.pageY + 10}px;
+            background: #333; color: #fff; padding: 5px 10px;
+            font-family: sans-serif; font-size: 12px;
+            border-radius: 3px; pointer-events: none;
+            z-index: 999998; white-space: nowrap;
+        `;
+        
+        document.body.appendChild(tooltip);
+    }
+    
+    function hideTooltip() {
+        if (tooltip) {
+            document.body.removeChild(tooltip);
+            tooltip = null;
+        }
+    }
+    
+    const HIGHLIGHT_CLASS = 'webio-detected';
+    function injectHighlightStyle() {
+        if (document.getElementById('webio-highlight-style')) return;
+        var style = document.createElement('style');
+        style.id = 'webio-highlight-style';
+        style.textContent = '.' + HIGHLIGHT_CLASS + ' { outline: 2px solid red !important; box-shadow: 0 0 0 2px red !important; cursor: pointer !important; }'
+            + ' .webio-saved-highlight { outline: 2px solid #16a34a !important; box-shadow: 0 0 0 2px #16a34a !important; }'
+            + ' [data-webio-panel],[data-locator-popup],[data-export-popup],[data-webio-table-preview]{ font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif !important; color: #000 !important; background-color: #fff !important; box-sizing: border-box !important; -webkit-font-smoothing: antialiased !important; }'
+            + ' [data-webio-panel] *,[data-locator-popup] *,[data-export-popup] *,[data-webio-table-preview] *{ box-sizing: border-box !important; }'
+            + ' [data-webio-panel] input,[data-webio-panel] button,[data-webio-panel] select,[data-webio-panel] textarea,[data-locator-popup] input,[data-locator-popup] button,[data-locator-popup] select,[data-export-popup] input,[data-export-popup] button,[data-export-popup] textarea,[data-webio-table-preview] input,[data-webio-table-preview] button,[data-webio-table-preview] select{ font-family: inherit !important; color: #000 !important; background-color: #fff !important; border-color: #ccc !important; }';
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    function highlightElement(el) {
+        if (el && el.nodeType === 1) {
+            el.classList.add(HIGHLIGHT_CLASS);
+            el.style.cursor = 'pointer';
+        }
+    }
+
+    function removeHighlight(el) {
+        if (el && el.nodeType === 1) {
+            el.classList.remove(HIGHLIGHT_CLASS);
+            el.style.cursor = '';
+        }
+    }
+    
+    function isElementInSelectionRect(el, rect) {
+        if (!rect) return true;
+        const elRect = el.getBoundingClientRect();
+        return !(
+            elRect.right < rect.left ||
+            elRect.left > rect.right ||
+            elRect.bottom < rect.top ||
+            elRect.top > rect.bottom
+        );
+    }
+    
+    function filterSelectableByArea() {
+        filteredSelectable = selectionRect 
+            ? selectable.filter(el => isElementInSelectionRect(el, selectionRect))
+            : selectable;
+        
+        // Update highlights
+        selectable.forEach(el => {
+            removeHighlight(el);
+        });
+        
+        filteredSelectable.forEach(el => {
+            highlightElement(el);
+        });
+    }
+
+    /** Query all elements matching selector from root and from every descendant shadow root. */
+    function queryAllIncludingShadowRoots(root, selector) {
+        var out = [];
+        if (!root || !root.querySelectorAll) return out;
+        try {
+            var list = root.querySelectorAll(selector);
+            for (var i = 0; i < list.length; i++) out.push(list[i]);
+            var all = root.querySelectorAll("*");
+            for (var k = 0; k < all.length; k++) {
+                if (all[k].shadowRoot) {
+                    var inner = queryAllIncludingShadowRoots(all[k].shadowRoot, selector);
+                    for (var j = 0; j < inner.length; j++) out.push(inner[j]);
+                }
+            }
+        } catch (e) {}
+        return out;
+    }
+
+    /** Get all inputs that are radio/checkbox inside a label, from root and shadow roots; type checked case-insensitively. */
+    function queryLabelRadioCheckboxIncludingShadowRoots(root) {
+        var inputs = [];
+        function walk(r) {
+            if (!r || !r.querySelectorAll) return;
+            try {
+                var labels = r.querySelectorAll("label");
+                for (var i = 0; i < labels.length; i++) {
+                    var inps = labels[i].querySelectorAll("input");
+                    for (var j = 0; j < inps.length; j++) {
+                        var t = (inps[j].getAttribute && inps[j].getAttribute("type")) ? String(inps[j].getAttribute("type")).toLowerCase() : "";
+                        if (t === "radio" || t === "checkbox") inputs.push(inps[j]);
+                    }
+                }
+                var all = r.querySelectorAll("*");
+                for (var k = 0; k < all.length; k++) {
+                    if (all[k].shadowRoot) walk(all[k].shadowRoot);
+                }
+            } catch (e) {}
+        }
+        walk(root);
+        return inputs;
+    }
+    
+    function initializeSelectable() {
+        selectable.forEach(function (el) {
+            removeHighlight(el);
+        });
+        selectable = [];
+        // Detect all interactive controls: native + ARIA roles + MUI + PrimeReact + label containing radio/checkbox (listen: click, input, change)
+        var selector = [
+            'button', 'a', 'input', 'textarea', 'select',
+            '[role="button"]', '[role="link"]', '[role="textbox"]', '[role="searchbox"]',
+            '[role="combobox"]', '[role="listbox"]', '[role="option"]',
+            '[role="checkbox"]', '[role="radio"]', '[role="switch"]',
+            '.MuiRadio-root', '.MuiCheckbox-root', '.MuiSwitch-root',
+            '[class*="MuiRadio-root"]', '[class*="MuiCheckbox-root"]', '[class*="MuiSwitch-root"]',
+            '.p-radiobutton', '.p-checkbox', '.p-inputswitch',
+            '[class*="p-radiobutton"]', '[class*="p-checkbox"]', '[class*="radiobutton"]', '[class*="checkbox"]'
+        ].join(', ');
+        var nodes = queryAllIncludingShadowRoots(document.body, selector);
+        var seen = new Set();
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            if (node.tagName && node.tagName.toLowerCase() === "input") {
+                var typeAttr = (node.getAttribute && node.getAttribute("type")) ? String(node.getAttribute("type")).toLowerCase() : "";
+                if (typeAttr === "hidden") continue;
+                var inLabel = node.closest && node.closest("label");
+                var inRole = node.closest && node.closest("[role=\"radio\"], [role=\"checkbox\"], [role=\"switch\"]");
+                if (getMuiControlRoot(node) || inLabel || inRole) continue;
+            }
+            if (seen.has(node)) continue;
+            if (node.closest && node.closest("[data-webio-panel], [data-locator-popup], [data-export-popup], [data-webio-table-preview]")) continue;
+            seen.add(node);
+            selectable.push(node);
+        }
+        var labelInputs = queryLabelRadioCheckboxIncludingShadowRoots(document.body);
+        for (var j = 0; j < labelInputs.length; j++) {
+            var lbl = labelInputs[j].closest && labelInputs[j].closest("label");
+            if (lbl && !seen.has(lbl) && !(lbl.closest && lbl.closest("[data-webio-panel], [data-locator-popup], [data-export-popup], [data-webio-table-preview]"))) { seen.add(lbl); selectable.push(lbl); }
+        }
+        filteredSelectable = selectable;
+        selectable.forEach(function (el, index) {
+            el.setAttribute("data-locator-id", index);
+            if (el.getAttribute("data-webio-bound") === "true") return;
+            el.setAttribute("data-webio-bound", "true");
+            el.addEventListener("mouseenter", function (e) {
+                showTooltip(e, el);
+            });
+            el.addEventListener("mouseleave", function () {
+                hideTooltip();
+            });
+        });
+        filterSelectableByArea();
+    }
+    
+    // Right-click on ANY element to select it (not just suggested list)
+    document.addEventListener("contextmenu", (e) => {
+        if (e.target.closest("[data-locator-popup], [data-export-popup], [data-webio-panel], [data-webio-contextmenu]") || contextMenu) return;
+        var el = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+        if (!el || !document.body.contains(el)) return;
+        var controlRoot = getControlRoot(el);
+        if (controlRoot) el = controlRoot;
+        showContextMenu(e, el);
+    }, true);
+    
+    function getScreensForGeneration() {
+        var hasRecorded = Object.keys(recordedScreens).length > 0;
+        if (hasRecorded) {
+            return Object.keys(recordedScreens).map(function (id) {
+                var s = recordedScreens[id];
+                return {
+                    screenId: s.screenId,
+                    page: s.page,
+                    title: s.title,
+                    label: s.label,
+                    selectedTable: (s.selectedTable || (collectedScreens[id] && collectedScreens[id].selectedTable) || null),
+                    elements: (s.elements || []).map(function (el) {
+                        return {
+                            logicalName: el.logicalName,
+                            objectType: el.objectType,
+                            selectorType: el.selectorType,
+                            selectorValue: el.selectorValue,
+                            value: el.inputValue
+                        };
+                    })
+                };
+            });
+        }
+        return Object.keys(collectedScreens).map(function (id) { return collectedScreens[id]; });
+    }
+
+    function getExportDataCurrent() {
+        var screens = getScreensForGeneration();
+        var screen = screens.find(function (s) { return s.screenId === currentScreenId; });
+        if (!screen) screen = getCurrentScreen();
+        var jsonData = { page: screen.page, screenId: screen.screenId, elements: screen.elements || [] };
+        return { jsonData, jsonString: JSON.stringify(jsonData, null, 2) };
+    }
+    function getExportDataAll() {
+        var screensArray = getScreensForGeneration();
+        var jsonData = { screens: screensArray };
+        return { jsonData, jsonString: JSON.stringify(jsonData, null, 2) };
+    }
+
+    function downloadBlobAsFile(content, filename, mimeType) {
+        var blob = new Blob([content], { type: mimeType || "application/octet-stream" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { if (a.parentNode) document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return "";
+        var div = document.createElement("div");
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    function updateListUI() {
+        if (panelMinimized) return;
+        var useRecorded = Object.keys(recordedScreens).length > 0;
+        var screensSource = useRecorded ? recordedScreens : collectedScreens;
+        var screenIds = Object.keys(screensSource);
+        var allScreensHtml = screenIds.length ? screenIds.map(function (id) {
+            var screen = screensSource[id];
+            var count = (screen.elements && screen.elements.length) || 0;
+            var isCurrent = id === currentScreenId;
+            return "<div class=\"screen-row\" data-screen-id=\"" + escapeHtml(id) + "\" style=\"margin:4px 0;padding:6px 8px;background:" + (isCurrent ? "#e0f0ff" : "#f0f0f0") + ";border-radius:4px;font-size:12px;cursor:pointer;\"><b>" + (isCurrent ? "[Current] " : "") + escapeHtml(id) + "</b> (" + count + " elements) — click to select</div>";
+        }).join("") : "<div style=\"font-size:12px;color:#000;\">No screens yet. Assign a Screen ID above and capture elements.</div>";
+        var currentScreenData = useRecorded && recordedScreens[currentScreenId] ? recordedScreens[currentScreenId] : getCurrentScreen();
+        var currentElements = currentScreenData.elements || [];
+        var savedElementsHtml = currentElements.length ? currentElements.map(function (el, idx) {
+            var logical = el.logicalName || el.text || ("Element " + (idx + 1));
+            var name = logical.slice(0, 25);
+            return ""
+                + "<div class=\"saved-element-row\" data-element-idx=\"" + idx + "\""
+                + " style=\"margin:4px 0;padding:6px 8px;background:#fff;border:1px solid #ddd;border-radius:4px;"
+                + "font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;\">"
+                +   "<span title=\"" + escapeHtml(logical) + "\" style=\"flex:1;min-width:0;\">"
+                +     escapeHtml(name)
+                +     (useRecorded ? " <i style=\\\"color:#666;font-size:10px;\\\">(recorded)</i>" : "")
+                +   "</span>"
+                +   "<div style=\"flex-shrink:0;display:flex;gap:4px;\">"
+                +     "<button type=\"button\" class=\"editElementBtn\" data-idx=\"" + idx + "\""
+                +       " style=\"padding:2px 6px;font-size:11px;border:1px solid #2563eb;border-radius:4px;"
+                +       "background:#2563eb;color:#fff;cursor:pointer;\">Edit</button>"
+                +     "<button type=\"button\" class=\"deleteElementBtn\" data-idx=\"" + idx + "\""
+                +       " style=\"padding:2px 6px;font-size:11px;border:1px solid #dc2626;border-radius:4px;"
+                +       "background:#fff;color:#dc2626;cursor:pointer;\">Delete</button>"
+                +   "</div>"
+                + "</div>";
+        }).join("") : "<div style=\"font-size:12px;color:#000;\">" + (useRecorded ? "No recorded elements for this screen. Interact with page elements while recording." : "No saved elements for this screen. Right‑click page elements to add.") + "</div>";
+        var prevInput = listUI.querySelector("#screenIdInput");
+        var pathInput = listUI.querySelector("#parentPathInput");
+        var screenIdHadFocus = prevInput && document.activeElement === prevInput;
+        var pathHadFocus = pathInput && document.activeElement === pathInput;
+        var preservedScreenIdValue = prevInput ? prevInput.value : null;
+        var preservedPathValue = pathHadFocus && pathInput ? pathInput.value : null;
+        var parentPathForTemplate = preservedPathValue !== null ? preservedPathValue : persistedParentPath;
+        var rawPath = (parentPathForTemplate || "").trim() || "generated";
+        var exportPathSegment = rawPath === "generated" ? "generated" : ("generated/" + rawPath);
+
+        // Preserve scroll position so re-renders (e.g. from MutationObserver) don't jump back to top
+        var scrollEl = listUI.querySelector(".webio-scroll");
+        var savedScrollTop = scrollEl ? scrollEl.scrollTop : 0;
+
+        listUI.innerHTML = `<style>[data-webio-panel] input,[data-webio-panel] select,[data-webio-panel] textarea{color:#000!important;background-color:#fff!important;border-color:#ccc!important}[data-webio-panel] button:not(#setScreenIdBtn):not(#recordingToggleBtn):not(#generateJsonBtn):not(#generateFeatureBtn):not(#webioHideBtn){color:#000!important;background-color:#fff!important;border-color:#ccc!important}</style>
+            <div class="webio-header webio-drag-handle" style="flex-shrink:0;padding:12px;background:#fff;color:#000;border-bottom:1px solid #e0e0e0;cursor:move;user-select:none;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;text-transform:uppercase;">Assign Screen ID</div>
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+                        <input id="screenIdInput" type="text" value="${escapeHtml(screenIdHadFocus && preservedScreenIdValue !== null ? preservedScreenIdValue : currentScreenId)}" placeholder="e.g. Login, Dashboard" autocomplete="off" style="flex:1;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px;box-sizing:border-box;"/>
+                        <button id="setScreenIdBtn" type="button" style="flex-shrink:0;padding:10px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">Set</button>
+                    </div>
+                    <div style="font-size:11px;color:#000;">Current: <strong id="currentScreenIdLabel">${escapeHtml(currentScreenId)}</strong></div>
+                </div>
+                <button id="webioHideBtn" type="button" title="Hide panel (click bubble to show again)" style="flex-shrink:0;width:28px;height:28px;padding:0;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;color:#333;cursor:pointer;font-size:16px;line-height:1;">−</button>
+            </div>
+            <div class="webio-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;">
+                <div style="margin-bottom:12px;">
+                    <button id="recordingToggleBtn" type="button" style="width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;background:${isRecording ? "#dc2626" : "#16a34a"};color:#fff;">
+                        ${isRecording ? "Stop Recording" : "Start Recording"}
+                    </button>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Page elements</div>
+                    <button id="areaSelectBtn" type="button" style="width:100%;padding:8px 12px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">
+                        ${areaSelectionMode ? "Disable" : "Enable"} area selection
+                    </button>
+                </div>
+                <div style="margin-bottom:12px;padding:12px;background:#fff;border:1px solid #e0e0e0;border-radius:8px;">
+                    <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Buttons</div>
+                    <button id="generateJsonBtn" type="button" style="display:block;width:100%;margin-bottom:6px;padding:10px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">Generate JSON</button>
+                    <button id="generateFeatureBtn" type="button" style="display:block;width:100%;margin-bottom:10px;padding:10px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">Generate Feature File</button>
+                    <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Parent path</div>
+                    <input id="parentPathInput" type="text" value="${escapeHtml(parentPathForTemplate)}" placeholder="e.g. login, dashboard" style="width:100%;padding:8px;box-sizing:border-box;margin-bottom:8px;border:1px solid #ccc;border-radius:6px;"/>
+                    <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Display export location path</div>
+                    <div id="exportLocationDisplay" style="font-size:10px;color:#555;word-break:break-all;margin-bottom:0;padding:6px;background:#f5f5f5;border-radius:4px;">pages/${escapeHtml(exportPathSegment)}/<br>features/${escapeHtml(exportPathSegment)}/</div>
+                </div>
+                <div style="margin-bottom:8px;font-size:11px;color:#000;font-weight:600;">All screens (click to select)</div>
+                <div id="allScreensList" style="max-height:100px;overflow-y:auto;margin-bottom:12px;font-size:12px;">${allScreensHtml}</div>
+                <div style="margin-bottom:8px;font-size:11px;color:#000;font-weight:600;">Saved elements — Edit / Delete</div>
+                <div id="savedElementsList" style="max-height:160px;overflow-y:auto;margin-bottom:12px;font-size:12px;">${savedElementsHtml}</div>
+                <div id="elementListWrap" style="margin-bottom:8px;">
+                    <div id="elementListHeader" style="font-size:11px;color:#000;font-weight:600;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;"><span id="elementListChevron">▶</span> Click to add to current screen</div>
+                    <div id="elementList" style="display:none;max-height:200px;overflow-y:auto;margin-top:6px;"></div>
+                </div>
+            </div>
+            <div class="webio-resize-handle" style="height:6px;cursor:ns-resize;background:#e0e0e0;flex-shrink:0;" title="Drag to resize height"></div>
+        `;
+
+        var newScrollEl = listUI.querySelector(".webio-scroll");
+        if (newScrollEl && savedScrollTop > 0) newScrollEl.scrollTop = savedScrollTop;
+
+        var screenIdInput = listUI.querySelector("#screenIdInput");
+        var currentScreenIdLabel = listUI.querySelector("#currentScreenIdLabel");
+        function applyScreenId() {
+            var val = (screenIdInput.value || "").trim();
+            if (!val) {
+                screenIdInput.value = currentScreenId;
+                return;
+            }
+            currentScreenId = val;
+            screenIdInput.value = val;
+            if (currentScreenIdLabel) currentScreenIdLabel.textContent = val;
+            if (!collectedScreens[currentScreenId]) {
+                collectedScreens[currentScreenId] = {
+                    screenId: currentScreenId,
+                    page: pageUrl,
+                    title: getPageTitle(),
+                    label: getPageLabelFallback(),
+                    elements: []
+                };
+            } else {
+                collectedScreens[currentScreenId].page = pageUrl;
+                collectedScreens[currentScreenId].title = getPageTitle();
+                collectedScreens[currentScreenId].label = getPageLabelFallback();
+            }
+            persistScreensOrAlert("Set Screen ID");
+            var pathEl = listUI.querySelector("#parentPathInput");
+            savePanelSettings({ lastScreenId: currentScreenId, parentPath: (pathEl && pathEl.value || "").trim() || persistedParentPath });
+            updateListUI();
+        }
+        screenIdInput.onblur = function () {
+            screenIdInput.value = currentScreenId;
+            if (currentScreenIdLabel) currentScreenIdLabel.textContent = currentScreenId;
+        };
+        screenIdInput.onkeydown = function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+                applyScreenId();
+            }
+            e.stopPropagation();
+        };
+        screenIdInput.onkeyup = screenIdInput.oninput = function (e) { e.stopPropagation(); };
+        var setScreenIdBtn = listUI.querySelector("#setScreenIdBtn");
+        if (setScreenIdBtn) setScreenIdBtn.onclick = applyScreenId;
+
+        if (screenIdHadFocus && preservedScreenIdValue !== null) {
+            screenIdInput.value = preservedScreenIdValue;
+            screenIdInput.focus();
+        }
+        if (pathHadFocus && preservedPathValue !== null) {
+            var newPathInput = listUI.querySelector("#parentPathInput");
+            if (newPathInput) {
+                newPathInput.value = preservedPathValue;
+                newPathInput.focus();
+            }
+        }
+
+        listUI.querySelectorAll(".screen-row").forEach(function (row) {
+            row.onclick = function () {
+                currentScreenId = row.getAttribute("data-screen-id") || currentScreenId;
+                savePanelSettings({ lastScreenId: currentScreenId, parentPath: persistedParentPath });
+                persistScreensOrAlert("Switch screen");
+                updateListUI();
+            };
+        });
+
+        listUI.querySelectorAll(".saved-element-row").forEach(function (row) {
+            row.onclick = function (e) {
+                if (e.target.closest(".editElementBtn, .deleteElementBtn")) return;
+                var idx = parseInt(row.getAttribute("data-element-idx"), 10);
+                if (isNaN(idx)) return;
+                var useRecorded = Object.keys(recordedScreens).length > 0;
+                var screenData = useRecorded && recordedScreens[currentScreenId] ? recordedScreens[currentScreenId] : getCurrentScreen();
+                var elements = screenData.elements || [];
+                var savedEl = elements[idx];
+                if (!savedEl) return;
+                var domEl = resolveElementBySelector(savedEl.selectorType || "xpath", savedEl.selectorValue);
+                clearSavedHighlight();
+                if (domEl && domEl.nodeType === 1) {
+                    domEl.classList.add("webio-saved-highlight");
+                    lastHighlightedSavedElement = domEl;
+                    try { domEl.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (err) {}
+                }
+            };
+        });
+
+        var parentPathInput = listUI.querySelector("#parentPathInput");
+        var exportLocationDisplay = listUI.querySelector("#exportLocationDisplay");
+        function updateExportLocationDisplay() {
+            var folder = (parentPathInput && parentPathInput.value || "generated").trim() || "generated";
+            var pathSegment = folder === "generated" ? "generated" : ("generated/" + folder);
+            if (exportLocationDisplay) exportLocationDisplay.innerHTML = "pages/" + pathSegment + "/<br>features/" + pathSegment + "/";
+        }
+        if (parentPathInput) {
+            parentPathInput.oninput = parentPathInput.onchange = function () {
+                persistedParentPath = (parentPathInput.value || "").trim() || "generated";
+                savePanelSettings({ lastScreenId: currentScreenId, parentPath: persistedParentPath });
+                updateExportLocationDisplay();
+            };
+            updateExportLocationDisplay();
+        }
+        listUI.querySelector("#generateJsonBtn").onclick = function () {
+            var folder = (parentPathInput && parentPathInput.value || "generated").trim() || "generated";
+            var screensArray = getScreensForGeneration();
+            var jsonData = { screens: screensArray, __mode: "json", __folder: folder };
+            downloadBlobAsFile(JSON.stringify(jsonData, null, 2), "webio-screens-" + Date.now() + ".json", "application/json");
+            alert("JSON downloaded. Run: node webio/generate-locators-and-features.js <path-to-downloaded.json>");
+        };
+        listUI.querySelector("#generateFeatureBtn").onclick = function () {
+            var folder = (parentPathInput && parentPathInput.value || "generated").trim() || "generated";
+            var screensArray = getScreensForGeneration();
+            if (typeof window.webioWriteGeneratedFiles === "function") {
+                window.webioWriteGeneratedFiles({ screens: screensArray, folder: folder }).then(function (result) {
+                    if (result && result.ok) {
+                        alert("Files generated successfully.\n\n" + (result.paths ? result.paths.join("\n") : ""));
+                    } else {
+                        alert("Generation failed: " + (result && result.message ? result.message : "unknown error"));
+                    }
+                }).catch(function (err) {
+                    alert("Generation failed: " + (err && err.message ? err.message : String(err)));
+                });
+            } else {
+                var jsonData = { screens: screensArray, __mode: "feature", __folder: folder };
+                downloadBlobAsFile(JSON.stringify(jsonData, null, 2), "webio-screens-" + Date.now() + ".json", "application/json");
+                alert("JSON downloaded. Run: node webio/generate-locators-and-features.js <path-to-downloaded.json>");
+            }
+        };
+
+        const elementList = listUI.querySelector("#elementList");
+        filteredSelectable.forEach((el, i) => {
+            const label = (getControlLabel(el) || el.innerText || "").trim() || el.tagName.toLowerCase();
+            const btn = document.createElement("button");
+            btn.innerText = `${label.slice(0, 30)}`;
+            btn.style.display = "block";
+            btn.style.marginBottom = "6px";
+            btn.style.width = "100%";
+            btn.onclick = () => {
+                var selectorEl = el;
+                var ctrlInput = getControlInput(el);
+                if (ctrlInput && (ctrlInput.id || ctrlInput.tagName === "INPUT" || ctrlInput.tagName === "SELECT")) selectorEl = ctrlInput;
+                const css = getCssSelector(selectorEl);
+                const xpath = getXPath(selectorEl);
+                const confidence = getConfidence(selectorEl);
+
+                showPopup(el, {
+                    logicalName: label,
+                    css,
+                    xpath,
+                    confidence,
+                    objectType: determineObjectType(el)
+                }, (userInput) => {
+                    el.style.outline = '2px solid green';
+                    var ctrlInput = getControlInput(el);
+                    var exportId = (ctrlInput && ctrlInput.id) ? ctrlInput.id : (el.id || "");
+                    var objType = userInput.objectType || determineObjectType(el);
+                    var payload = {
+                        tag: (ctrlInput && ctrlInput.tagName) ? ctrlInput.tagName.toLowerCase() : el.tagName.toLowerCase(),
+                        id: exportId,
+                        class: el.className,
+                        text: label,
+                        logicalName: userInput.logicalName,
+                        objectType: objType,
+                        selectorType: userInput.selectorType,
+                        selectorValue: userInput.selectorValue,
+                        value: userInput.value,
+                        css: userInput.css,
+                        xpath: userInput.xpath,
+                        confidence: userInput.confidence
+                    };
+                    if ((objType === "Radio" || objType === "Checkbox") && label) payload.labelText = label;
+                    getCurrentScreen().elements.push(payload);
+                    persistScreensOrAlert("Persist locator");
+                    updateListUI();
+                });
+            };
+            elementList.appendChild(btn);
+        });
+        var listEl = listUI.querySelector("#elementList");
+        var chevronEl = listUI.querySelector("#elementListChevron");
+        if (listEl) listEl.style.display = elementListCollapsed ? "none" : "block";
+        if (chevronEl) chevronEl.textContent = elementListCollapsed ? "▶" : "▼";
+    }
+    
+    function exportJSON() {
+        const { jsonData, jsonString } = getExportDataCurrent();
+        
+        // Close existing export popup if any
+        const existingExportPopup = document.querySelector('[data-export-popup]');
+        if (existingExportPopup) {
+            document.body.removeChild(existingExportPopup);
+        }
+        
+        const exportPopup = document.createElement("div");
+        exportPopup.setAttribute("data-export-popup", "true");
+        exportPopup.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #fff; color: #000; border: 1px solid #ccc; padding: 20px;
+            font-family: sans-serif; box-shadow: 2px 2px 20px rgba(0,0,0,0.5);
+            z-index: 999999; max-width: 600px; max-height: 80vh; overflow: auto;
+            color-scheme: light;
+        `;
+        
+        exportPopup.innerHTML = `
+            <style>[data-export-popup] textarea,[data-export-popup] h3{color:#000!important;background-color:#fff!important;border-color:#ccc!important}[data-export-popup] button{color:#000!important;background-color:#f5f5f5!important;border:1px solid #ccc!important}</style>
+            <div class="webio-export-drag-handle" style="cursor:move;user-select:none;margin:-20px -20px 12px -20px;padding:12px 20px;border-bottom:1px solid #eee;"><h3 style="margin: 0;">Export JSON</h3></div>
+            <textarea id="jsonOutput" style="width: 100%; height: 300px; font-family: monospace; padding: 10px; box-sizing: border-box; border: 1px solid #ccc;">${jsonString}</textarea>
+            <div style="margin-top: 15px; text-align: right;">
+                <button id="copyBtn" style="padding: 8px 15px; margin-right: 10px; cursor: pointer;">Copy to Clipboard</button>
+                <button id="downloadBtn" style="padding: 8px 15px; margin-right: 10px; cursor: pointer;">Download JSON</button>
+                <button id="closeExportBtn" style="padding: 8px 15px; cursor: pointer;">Close</button>
+            </div>
+        `;
+        
+            document.body.appendChild(exportPopup);
+        makePopupDraggable(exportPopup, ".webio-export-drag-handle");
+        
+        exportPopup.querySelector("#copyBtn").onclick = () => {
+            const textarea = exportPopup.querySelector("#jsonOutput");
+            textarea.select();
+            document.execCommand("copy");
+            alert("JSON copied to clipboard!");
+        };
+        
+        exportPopup.querySelector("#downloadBtn").onclick = () => {
+            const blob = new Blob([jsonString], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "locator-" + (String(currentScreenId || "screen").replace(/\s+/g, "-")) + "-" + Date.now() + ".json";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+        
+        exportPopup.querySelector("#closeExportBtn").onclick = () => {
+            document.body.removeChild(exportPopup);
+        };
+    }
+    
+    // Area selection functionality
+    let selectionOverlay = null;
+    let startX = 0, startY = 0;
+    
+    function startAreaSelection(e) {
+        if (!areaSelectionMode) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        isSelecting = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        
+        if (selectionOverlay) {
+            document.body.removeChild(selectionOverlay);
+        }
+        
+        selectionOverlay = document.createElement("div");
+        selectionOverlay.style.cssText = `
+            position: fixed; border: 2px dashed #0066ff;
+            background: rgba(0, 102, 255, 0.1); pointer-events: none;
+            z-index: 999997;
+        `;
+        document.body.appendChild(selectionOverlay);
+    }
+    
+    function updateAreaSelection(e) {
+        if (!isSelecting || !areaSelectionMode) return;
+        
+        const currentX = e.clientX;
+        const currentY = e.clientY;
+        
+        const left = Math.min(startX, currentX);
+        const top = Math.min(startY, currentY);
+        const width = Math.abs(currentX - startX);
+        const height = Math.abs(currentY - startY);
+        
+        selectionOverlay.style.left = left + "px";
+        selectionOverlay.style.top = top + "px";
+        selectionOverlay.style.width = width + "px";
+        selectionOverlay.style.height = height + "px";
+    }
+    
+    function endAreaSelection(e) {
+        if (!isSelecting || !areaSelectionMode) return;
+        
+        isSelecting = false;
+        
+        if (selectionOverlay) {
+            const rect = selectionOverlay.getBoundingClientRect();
+            selectionRect = {
+                left: rect.left + window.scrollX,
+                top: rect.top + window.scrollY,
+                right: rect.right + window.scrollX,
+                bottom: rect.bottom + window.scrollY
+            };
+            
+            document.body.removeChild(selectionOverlay);
+            selectionOverlay = null;
+        }
+        
+        filterSelectableByArea();
+        updateListUI();
+    }
+    
+    // Run when DOM is ready so detected elements exist and can be highlighted in red
+    const listUI = document.createElement("div");
+    listUI.setAttribute("data-webio-panel", "true");
+    var panelMinimized = false;
+    var panelHeight = Math.min(500, Math.max(300, (window.innerHeight || 600) * 0.6));
+    listUI.style.cssText = `
+        position: fixed; top: 20px; right: 20px;
+        width: 320px; max-width: 95vw; height: ` + panelHeight + `px; max-height: 90vh;
+        background: #fafafa; color: #000; border: 1px solid #ccc; border-radius: 10px; z-index: 99999;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        display: flex; flex-direction: column;
+        box-shadow: -2px 0 12px rgba(0,0,0,0.08);
+        color-scheme: light;
+    `;
+    var elementListCollapsed = true;
+    var lastHighlightedSavedElement = null;
+    function clearSavedHighlight() {
+        if (lastHighlightedSavedElement) {
+            lastHighlightedSavedElement.classList.remove("webio-saved-highlight");
+            lastHighlightedSavedElement = null;
+        }
+    }
+    function resolveElementBySelector(selectorType, selectorValue) {
+        if (!selectorType || !selectorValue) return null;
+        try {
+            if (selectorType === "id") return document.getElementById(selectorValue);
+            if (selectorType === "css") return document.querySelector(selectorValue);
+            if (selectorType === "xpath") {
+                var r = document.evaluate(selectorValue, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                return r && r.singleNodeValue;
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    // Event delegation so drag still works after updateListUI() replaces innerHTML
+    var panelDragging = false, panelStartX = 0, panelStartY = 0, panelStartLeft = 0, panelStartTop = 0;
+    var resizing = false, resizeStartY = 0, resizeStartHeight = 0;
+    var justDraggedBubble = false;
+    var panelDragMoved = false;
+    function makePanelDraggable(panel) {
+        panel.addEventListener("mousedown", function (e) {
+            if (!e.target.closest(".webio-drag-handle")) return;
+            if (e.target.closest("input, button, select")) return;
+            panelDragging = true;
+            var rect = panel.getBoundingClientRect();
+            panelStartX = e.clientX;
+            panelStartY = e.clientY;
+            panelStartLeft = rect.right - rect.width;
+            panelStartTop = rect.top;
+            e.preventDefault();
+        });
+    }
+    document.addEventListener("mousemove", function (e) {
+        if (resizing) {
+            var dy = e.clientY - resizeStartY;
+            var newH = Math.max(200, Math.min(window.innerHeight - 40, resizeStartHeight + dy));
+            panelHeight = newH;
+            listUI.style.height = newH + "px";
+            return;
+        }
+        if (!panelDragging || !listUI.parentNode) return;
+        var dx = e.clientX - panelStartX;
+        var dy = e.clientY - panelStartY;
+        if (dx !== 0 || dy !== 0) panelDragMoved = true;
+        listUI.style.right = "auto";
+        listUI.style.left = (panelStartLeft + dx) + "px";
+        listUI.style.top = Math.max(0, panelStartTop + dy) + "px";
+        listUI.style.bottom = "auto";
+    });
+    document.addEventListener("mouseup", function () {
+        if (panelDragging && panelMinimized && panelDragMoved) justDraggedBubble = true;
+        panelDragging = false;
+        panelDragMoved = false;
+        resizing = false;
+    });
+
+    function showBubbleView() {
+        panelMinimized = true;
+        var rect = listUI.getBoundingClientRect();
+        listUI.style.left = rect.left + "px";
+        listUI.style.top = rect.top + "px";
+        listUI.style.right = "auto";
+        listUI.style.width = "auto";
+        listUI.style.height = "auto";
+        listUI.style.minWidth = "120px";
+        listUI.innerHTML = "<div class=\"webio-bubble webio-drag-handle\" style=\"padding:10px 46px;background:#2563eb;color:#fff;border-radius:50px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.2);\" title=\"Click to show Assign Screen ID panel\">Webio</div>";
+        listUI.querySelector(".webio-bubble").addEventListener("click", function (e) {
+            if (justDraggedBubble) { justDraggedBubble = false; return; }
+            panelMinimized = false;
+            listUI.style.width = "320px";
+            listUI.style.maxWidth = "95vw";
+            listUI.style.height = panelHeight + "px";
+            listUI.style.minWidth = "";
+            updateListUI();
+        });
+    }
+
+    function runHighlightScan() {
+        if (document.body && listUI && !document.body.contains(listUI)) {
+            document.body.appendChild(listUI);
+        }
+        injectHighlightStyle();
+        initializeSelectable();
+        if (panelMinimized) return;
+        // Do not replace panel DOM while user is typing in Screen ID or Parent Path (avoids wiping input)
+        if (!listUI.contains(document.activeElement)) {
+            updateListUI();
+        }
+    }
+
+    function init() {
+        if (!document.body) {
+            if (document.readyState === "loading") {
+                document.addEventListener("DOMContentLoaded", init);
+                return;
+            }
+            setTimeout(init, 50);
+            return;
+        }
+        if (listUI.parentNode) return;
+        injectHighlightStyle();
+        document.body.appendChild(listUI);
+        makePanelDraggable(listUI);
+        listUI.addEventListener("mousedown", function (e) {
+            var resizeHandle = e.target.closest(".webio-resize-handle");
+            if (resizeHandle && !panelMinimized) {
+                e.preventDefault();
+                resizing = true;
+                resizeStartY = e.clientY;
+                resizeStartHeight = panelHeight;
+            }
+        });
+        listUI.addEventListener("click", function (e) {
+            var hideBtn = e.target.closest("#webioHideBtn");
+            if (hideBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                showBubbleView();
+                return;
+            }
+            var elementListHeader = e.target.closest("#elementListHeader");
+            if (elementListHeader) {
+                e.preventDefault();
+                e.stopPropagation();
+                elementListCollapsed = !elementListCollapsed;
+                var listEl = listUI.querySelector("#elementList");
+                var chevronEl = listUI.querySelector("#elementListChevron");
+                if (listEl) listEl.style.display = elementListCollapsed ? "none" : "block";
+                if (chevronEl) chevronEl.textContent = elementListCollapsed ? "▶" : "▼";
+                return;
+            }
+            var recordingBtn = e.target.closest("#recordingToggleBtn");
+            if (recordingBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (isRecording) {
+                    isRecording = false;
+                } else {
+                    isRecording = true;
+                    recordedScreens = {};
+                }
+                updateListUI();
+                return;
+            }
+            var areaBtn = e.target.closest("#areaSelectBtn");
+            if (areaBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                areaSelectionMode = !areaSelectionMode;
+                if (!areaSelectionMode) {
+                    selectionRect = null;
+                    filterSelectableByArea();
+                    runHighlightScan();
+                } else {
+                    updateListUI();
+                }
+                return;
+            }
+            var editBtn = e.target.closest(".editElementBtn");
+            if (editBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                var idx = parseInt(editBtn.getAttribute("data-idx"), 10);
+                var useRecorded = Object.keys(recordedScreens).length > 0;
+                var screenData = useRecorded && recordedScreens[currentScreenId]
+                    ? recordedScreens[currentScreenId]
+                    : getCurrentScreen();
+                var elements = screenData.elements || [];
+                var el = elements[idx];
+                if (!el) return;
+                showPopup(null, {
+                    logicalName: el.logicalName || el.text || "",
+                    css: el.css || "",
+                    xpath: el.xpath || "",
+                    objectType: el.objectType || "Button",
+                    selectorType: el.selectorType,
+                    selectorValue: el.selectorValue,
+                    value: el.value != null ? el.value : "",
+                    confidence: el.confidence != null ? el.confidence : 0.5
+                }, function (updated) {
+                    var merged = {};
+                    for (var k in el) if (el.hasOwnProperty(k)) merged[k] = el[k];
+                    merged.logicalName = updated.logicalName;
+                    merged.objectType = updated.objectType;
+                    merged.selectorType = updated.selectorType;
+                    merged.selectorValue = updated.selectorValue;
+                    merged.value = updated.value;
+                    merged.css = updated.css;
+                    merged.xpath = updated.xpath;
+                    merged.confidence = updated.confidence;
+                    elements[idx] = merged;
+                    // keep collectedScreens in sync and persist to localStorage
+                    var current = getCurrentScreen();
+                    current.elements = elements.slice();
+                    persistScreensOrAlert("Update saved locator");
+                    updateListUI();
+                });
+                return;
+            }
+            var delBtn = e.target.closest(".deleteElementBtn");
+            if (delBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                var idx = parseInt(delBtn.getAttribute("data-idx"), 10);
+                var useRecorded = Object.keys(recordedScreens).length > 0;
+                var screenData = useRecorded && recordedScreens[currentScreenId]
+                    ? recordedScreens[currentScreenId]
+                    : getCurrentScreen();
+                var elements = screenData.elements || [];
+                if (idx >= 0 && idx < elements.length) {
+                    elements.splice(idx, 1);
+                    var current = getCurrentScreen();
+                    current.elements = elements.slice();
+                    persistScreensOrAlert("Delete saved locator");
+                    updateListUI();
+                }
+            }
+        });
+        runHighlightScan();
+        setTimeout(runHighlightScan, 300);
+        setTimeout(runHighlightScan, 1500);
+        setTimeout(runHighlightScan, 3000);
+        setTimeout(runHighlightScan, 5000);
+        window.addEventListener("load", function onLoad() {
+            window.removeEventListener("load", onLoad);
+            runHighlightScan();
+        });
+        // Re-scan when DOM changes (SPA / dynamic content) so radios and inputs added later are detected
+        var scanTimer = null;
+        function debouncedScan() {
+            if (scanTimer) clearTimeout(scanTimer);
+            scanTimer = setTimeout(function () {
+                scanTimer = null;
+                // Re-append panel if DOM was refreshed (e.g. SPA replaced body) so we don't rely on re-injecting script
+                if (document.body && !document.body.contains(listUI)) {
+                    document.body.appendChild(listUI);
+                }
+                runHighlightScan();
+            }, 600);
+        }
+        try {
+            var observer = new MutationObserver(debouncedScan);
+            observer.observe(document.body, { childList: true, subtree: true });
+        } catch (e) {}
+    }
+
+    document.addEventListener("mousedown", (e) => {
+        if (e.target.closest("[data-webio-panel], [data-locator-popup], [data-export-popup]")) return;
+        if (areaSelectionMode && e.button === 0) {
+            startAreaSelection(e);
+        }
+    });
+    document.addEventListener("mousemove", (e) => {
+        updateAreaSelection(e);
+    });
+    document.addEventListener("mouseup", (e) => {
+        endAreaSelection(e);
+    });
+
+    init();
+})();

@@ -1,0 +1,14 @@
+{
+  "Email Address": [
+    "xpath",
+    "//*[@id=\"email\"]"
+  ],
+  "Password": [
+    "xpath",
+    "//*[@id=\"password\"]"
+  ],
+  "Login": [
+    "xpath",
+    "//button[normalize-space(.)=\"Login\"]"
+  ]
+}

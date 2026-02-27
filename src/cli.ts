@@ -55,7 +55,7 @@ async function main(): Promise<void> {
       force: options.force === true,
     });
     console.log(
-      'E2E structure created. Edit e2e/config/config.yaml, e2e/locators, and e2e/features, then run: npx ui-auto run'
+      'E2E structure created. Edit e2e/config/config.yaml, e2e/web/locators, and e2e/web/features, then run: npx ui-auto run'
     );
     process.exit(0);
     return;

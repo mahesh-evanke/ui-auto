@@ -17,6 +17,11 @@ export class CheckboxHelper {
     }
 
     static async markCheckboxWithWaitDisplay(elementt: WebdriverIO.Element, markChecked: boolean) {
+        try {
+            await elementt.scrollIntoView();
+        } catch {
+            /* ignore if scroll not supported */
+        }
         await WaitHelper.getInstance().waitForElementToBeDisplayed(elementt);
         let attempts = 0;
         while (attempts++ < Constants.MAX_RETRY_ATTEMPTS) {

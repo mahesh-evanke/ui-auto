@@ -1,10 +1,10 @@
 /**
  * Locator provider for consumer projects.
  *
- * Consumers own locators under:
- * - e2e/locators/common.json
- * - e2e/locators/pages.json
- * - e2e/locators/pages/*.json
+ * Consumers own locators under (e.g. e2e/web/locators or e2e/webui-api/locators):
+ * - <locators-root>/common.json
+ * - <locators-root>/pages.json
+ * - <locators-root>/pages/*.json
  *
  * The SDK resolves these from the consumer root (cwd by default).
  */
@@ -37,7 +37,14 @@ function getCachedJson(filePath: string): Record<string, any> {
 
 export function resolveLocatorsDir(opts?: LocatorOpts): string {
   const root = opts?.consumerRoot ? path.resolve(opts.consumerRoot) : getConsumerRoot();
-  return path.join(root, 'e2e', 'locators');
+  const override = process.env.UI_AUTO_LOCATORS_ROOT;
+  if (override && override.trim().length > 0) {
+    // Allow either absolute or project-relative override (e.g. "./e2e/web/locators").
+    return path.isAbsolute(override)
+      ? override
+      : path.join(root, override);
+  }
+  return path.join(root, 'e2e', 'web', 'locators');
 }
 
 export function resolveCommonLocatorsPath(opts?: LocatorOpts): string {
@@ -60,13 +67,39 @@ function normalizeLocatorValue(val: unknown): [string, string] | undefined {
   return undefined;
 }
 
+function normalizeKeyForLookup(name: string): string {
+  // Backward-compatible, minimal normalization for generated keys:
+  // - Ignore whitespace differences (e.g., "Type of Service *" vs "TypeofService*")
+  // - Ignore case
+  return String(name ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, '');
+}
+
+function getLocatorByFuzzyKey(
+  json: Record<string, any>,
+  elementName: string
+): [string, string] | undefined {
+  const norm = normalizeKeyForLookup(elementName);
+  if (!norm) return undefined;
+  const keys = Object.keys(json);
+  for (const k of keys) {
+    if (normalizeKeyForLookup(k) === norm) {
+      return normalizeLocatorValue(json[k]) ?? (json[k] as [string, string] | undefined);
+    }
+  }
+  return undefined;
+}
+
 export function getElementLocator(elementName: string, opts: LocatorOpts & { common?: boolean; pageName?: string }): [string, string] | undefined {
   const common = Boolean(opts.common);
   const pageName = opts.pageName;
   if (common) {
     const filePath = resolveCommonLocatorsPath(opts);
     const json = getCachedJson(filePath);
-    return normalizeLocatorValue(json[elementName]) ?? (json[elementName] as [string, string] | undefined);
+    const direct = normalizeLocatorValue(json[elementName]) ?? (json[elementName] as [string, string] | undefined);
+    if (direct) return direct;
+    return getLocatorByFuzzyKey(json, elementName);
   }
   const pagesPath = resolvePageLocatorsPath(String(pageName ?? ''), opts);
   if (fs.existsSync(pagesPath)) {
@@ -74,7 +107,9 @@ export function getElementLocator(elementName: string, opts: LocatorOpts & { com
     const val = json[elementName];
     const normalized = normalizeLocatorValue(val);
     if (normalized) return normalized;
-    return val as [string, string] | undefined;
+    const direct = val as [string, string] | undefined;
+    if (direct) return direct;
+    return getLocatorByFuzzyKey(json, elementName);
   }
   throw new Error(`Locator JSON not found: ${pagesPath}`);
 }

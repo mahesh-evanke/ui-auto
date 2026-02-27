@@ -1,5 +1,7 @@
 import {Options} from '@wdio/types';
 import { PageConfigHelper } from "../support/misc-utils/PageHelper";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { getViewport } = require('./devicePresets.js');
 import { generate } from 'multiple-cucumber-html-reporter';
 import { removeSync } from 'fs-extra';
 import cucumberJson from 'wdio-cucumberjs-json-reporter';
@@ -79,9 +81,84 @@ const openBrowserFromConfig: boolean = Boolean(e2eConfig.openBrowser);
 // `wdio-chromedriver-service` / `wdio-edgedriver-service` are not compatible with v9.
 // We keep services empty by default and rely on local driver binaries (if provided)
 // via capabilities to avoid downloads.
+// For Web UI + API (CDP network capture), add @wdio/devtools-service and use Chrome.
 let runServices: string[] = [];
 let baseUrl = null;
 let browserName = e2eConfig.browserName.toUpperCase();
+
+// Determine logical test suite (web, webui-api, api, db, all).
+const rawSuite = (process.env.TEST_SUITE || 'all').toString().toLowerCase();
+type SuiteName = 'web' | 'webuiapi' | 'api' | 'db' | 'all';
+const suite: SuiteName =
+    rawSuite === 'web' ? 'web' :
+    rawSuite === 'webui-api' || rawSuite === 'webuiapi' ? 'webuiapi' :
+    rawSuite === 'api' ? 'api' :
+    rawSuite === 'db' ? 'db' :
+    'all';
+
+function getCliSpecsEarly(): string[] {
+    const specs: string[] = [];
+    const argv = process.argv || [];
+    for (let i = 0; i < argv.length; i++) {
+        const arg = argv[i];
+        if (arg === '--spec' && argv[i + 1]) {
+            specs.push(argv[i + 1].replace(/\\/g, '/'));
+            i++;
+        } else if (arg.startsWith('--spec=')) {
+            specs.push(arg.substring('--spec='.length).replace(/\\/g, '/'));
+        }
+    }
+    return specs;
+}
+
+// Infer locator root from spec path when running with --spec (no TEST_SUITE). Ensures generated features work without manual env.
+function inferLocatorRootFromSpecPath(specPath: string): string | null {
+    const p = specPath.toLowerCase();
+    if (p.includes('end-to-end') || p.includes('webui-api')) return './e2e/generated/end-to-end/locators';
+    if (p.includes('generated/web') || p.includes('features/web')) return './e2e/generated/web/locators';
+    if (p.includes('generated/api') || p.includes('features/api')) return './e2e/generated/web/locators';
+    if (p.includes('generated/db') || p.includes('features/db')) return './e2e/generated/web/locators';
+    if (p.includes('generated/mobile') || p.includes('features/mobile')) return './e2e/generated/mobile/locators';
+    return null;
+}
+
+// Resolve feature globs and tags from new suites block when available, otherwise fall back.
+function resolveFeaturesAndTags(): { featurePaths: string[]; tags: string[] } {
+    const suitesCfg = e2eConfig.suites || {};
+    const suiteKey =
+        suite === 'web' ? 'web' :
+        suite === 'webuiapi' ? 'webuiApi' :
+        suite === 'api' ? 'api' :
+        suite === 'db' ? 'db' :
+        null;
+
+    let featureGlobs: string | string[] = e2eConfig.features;
+    let tagsCsv: string = e2eConfig.tags || '';
+
+    if (suiteKey && suitesCfg[suiteKey]) {
+        const cfg = suitesCfg[suiteKey];
+        if (cfg.features) featureGlobs = cfg.features;
+        if (cfg.tags) tagsCsv = cfg.tags;
+    }
+
+    const globsArr = Array.isArray(featureGlobs) ? featureGlobs : [featureGlobs];
+    const paths: string[] = [];
+    for (const patternRaw of globsArr) {
+        if (!patternRaw) continue;
+        const pattern = String(patternRaw);
+        const matches = glob.sync(pattern);
+        for (const m of matches) {
+            if (!paths.includes(m)) paths.push(m);
+        }
+    }
+
+    const tags = String(tagsCsv || '')
+        .split(/[, ]+/)
+        .map((t: string) => t.trim())
+        .filter((t: string) => !!t);
+
+    return { featurePaths: paths, tags };
+}
 
 if (environment == 'VAL')
     baseUrl = e2eConfig.valUrl;
@@ -100,13 +177,34 @@ if (browserName == 'IE') {
     browserName = 'internet explorer';
 } else if (browserName == 'CHROME') {
     browserName = 'chrome';
-    if(e2eConfig.chromedriverpath != '<path>' && e2eConfig.chromedriverpath != '')
+    if (e2eConfig.chromedriverpath && e2eConfig.chromedriverpath !== '<path>' && e2eConfig.chromedriverpath !== '')
         process.env['CHROMEDRIVER_FILEPATH'] = e2eConfig.chromedriverpath;
 } else if (browserName == 'EDGE') {
     browserName = 'MicrosoftEdge';
-    if(e2eConfig.edgedriverpath != '<path>' && e2eConfig.edgedriverpath != '')
+    if (e2eConfig.edgedriverpath && e2eConfig.edgedriverpath !== '<path>' && e2eConfig.edgedriverpath !== '')
         process.env['EDGEDRIVER_PATH'] = e2eConfig.edgedriverpath;
+} else if (browserName == 'FIREFOX') {
+    browserName = 'firefox';
+    if (e2eConfig.geckodriverpath && e2eConfig.geckodriverpath !== '<path>' && e2eConfig.geckodriverpath !== '')
+        process.env['GECKODRIVER_FILEPATH'] = e2eConfig.geckodriverpath;
+} else if (browserName == 'SAFARI') {
+    browserName = 'safari';
+} else if (browserName == 'BRAVE') {
+    browserName = 'chrome'; // Brave is Chromium-based; use ChromeDriver
+    if (e2eConfig.chromedriverpath && e2eConfig.chromedriverpath !== '<path>' && e2eConfig.chromedriverpath !== '')
+        process.env['CHROMEDRIVER_FILEPATH'] = e2eConfig.chromedriverpath;
 }
+
+const isBrave = (e2eConfig.browserName || '').toString().toUpperCase() === 'BRAVE';
+function getDefaultBravePath(): string | null {
+    if (process.platform === 'win32') return 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe';
+    if (process.platform === 'darwin') return '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
+    return null;
+}
+const braveBrowserPath = isBrave
+    ? (e2eConfig.braveBrowserPath && e2eConfig.braveBrowserPath !== '<path>' ? e2eConfig.braveBrowserPath : getDefaultBravePath())
+    : null;
+const browserDisplayName = isBrave ? 'Brave' : browserName;
 
 let port, protocol, seleniumAddressVal;
 
@@ -123,8 +221,34 @@ if (executionMode == 'GRID') {
     protocol = 'https'
 }
 
-const paths = glob.sync(e2eConfig.features);
-const tags = e2eConfig.tags.split(/[, ]+/);
+// Enable CDP for Chrome/Brave in LOCAL mode so Web UI + API network capture works.
+if (executionMode === 'LOCAL' && (browserName === 'chrome' || isBrave)) {
+    try {
+        require.resolve('@wdio/devtools-service');
+        runServices = ['devtools'];
+    } catch {
+        // @wdio/devtools-service not installed; Web UI + API capture will no-op.
+    }
+}
+
+const { featurePaths: paths, tags } = resolveFeaturesAndTags();
+
+// Configure locators root. When running with --spec and no TEST_SUITE, infer from spec path so generated features work without env vars.
+if (!process.env.UI_AUTO_LOCATORS_ROOT) {
+    const cliSpecsEarly = getCliSpecsEarly();
+    const inferredRoot = suite === 'all' && cliSpecsEarly.length > 0
+        ? inferLocatorRootFromSpecPath(cliSpecsEarly[0])
+        : null;
+    if (inferredRoot) {
+        process.env.UI_AUTO_LOCATORS_ROOT = inferredRoot;
+    } else if (suite === 'web') {
+        process.env.UI_AUTO_LOCATORS_ROOT = './e2e/generated/web/locators';
+    } else if (suite === 'webuiapi') {
+        process.env.UI_AUTO_LOCATORS_ROOT = './e2e/generated/end-to-end/locators';
+    } else {
+        process.env.UI_AUTO_LOCATORS_ROOT = './e2e/generated/web/locators';
+    }
+}
 
 type FeatureExecutionKind = 'UI' | 'API_ONLY';
 const featureExecutionKindBySpec: Record<string, FeatureExecutionKind> = {};
@@ -172,7 +296,7 @@ function isApiOnlyFeature(featurePath: string): boolean {
  */
 const isWorkerProcess = !!process.env.WDIO_WORKER_ID;
 
-// Optional CLI spec filtering (e.g. --spec "e2e/features/api.feature").
+// Optional CLI spec filtering (e.g. --spec "e2e/web/features/login.feature" or "e2e/api/features/api.feature").
 function getCliSpecs(): string[] {
     const specs: string[] = [];
     const argv = process.argv || [];
@@ -265,14 +389,20 @@ let userOpenBrowserChoice: boolean;
 const envChoice = process.env.WDIO_OPEN_BROWSER;
 
 if (!isWorkerProcess) {
-    // Launcher process: always prompt user.
-    const answer = promptYesNo(
-        'Do you want to open the browser? (yes/no)',
-        openBrowserFromConfig
-    );
-    userOpenBrowserChoice = answer;
-    // Propagate to workers via environment variable.
-    process.env.WDIO_OPEN_BROWSER = answer ? 'true' : 'false';
+    // Launcher process:
+    // - If WDIO_OPEN_BROWSER is already provided (CI/non-interactive), do NOT prompt.
+    // - Otherwise prompt user (legacy behavior).
+    if (envChoice === 'true' || envChoice === 'false') {
+        userOpenBrowserChoice = envChoice === 'true';
+    } else {
+        const answer = promptYesNo(
+            'Do you want to open the browser? (yes/no)',
+            openBrowserFromConfig
+        );
+        userOpenBrowserChoice = answer;
+        // Propagate to workers via environment variable.
+        process.env.WDIO_OPEN_BROWSER = answer ? 'true' : 'false';
+    }
 } else if (envChoice === 'true' || envChoice === 'false') {
     // Worker process: reuse user's choice from launcher, no prompt here.
     userOpenBrowserChoice = envChoice === 'true';
@@ -295,7 +425,7 @@ const runHeadless = isApiOnlyRun && !userOpenBrowserChoice;
 
 if (!isWorkerProcess && hasUiFeatures && !userOpenBrowserChoice) {
     console.log(
-        '[Runner] UI steps detected in selected features – overriding user choice and starting browser.'
+        '[Runner] UI steps detected in selected features  overriding user choice and starting browser.'
     );
 }
 let startTime;
@@ -320,6 +450,9 @@ const baseCapability: any = {
     ...(browserName === 'chrome' && e2eConfig.chromedriverpath && e2eConfig.chromedriverpath !== '<path>' ? {
         'wdio:chromedriverOptions': { binary: e2eConfig.chromedriverpath }
     } : {}),
+    ...(browserName === 'firefox' && e2eConfig.geckodriverpath && e2eConfig.geckodriverpath !== '<path>' ? {
+        'wdio:geckodriverOptions': { binary: e2eConfig.geckodriverpath }
+    } : {}),
     'e34:l_testName': e2eConfig.seleniumBoxTestName,
     'e34:video': e2eConfig.seleniumBoxVideoSw,
     'e34:userId': e2eConfig.seleniumBoxId,
@@ -328,10 +461,18 @@ const baseCapability: any = {
     'e34:credential': e2eConfig.seleniumBoxCredential,
     // For API-only runs where the user selected "no", run the browser headless so
     // there is no visible window but WDIO still has a valid capability.
-    ...(runHeadless && browserName === 'chrome'
+    ...(runHeadless && browserName === 'chrome' && !isBrave
         ? {
             'goog:chromeOptions': {
                 args: ['--headless=new', '--disable-gpu', '--window-size=1280,720'],
+            },
+        }
+        : {}),
+    ...(isBrave && braveBrowserPath
+        ? {
+            'goog:chromeOptions': {
+                binary: braveBrowserPath,
+                ...(runHeadless ? { args: ['--headless=new', '--disable-gpu', '--window-size=1280,720'] } : {}),
             },
         }
         : {}),
@@ -339,6 +480,13 @@ const baseCapability: any = {
         ? {
             'ms:edgeOptions': {
                 args: ['--headless=new', '--disable-gpu', '--window-size=1280,720'],
+            },
+        }
+        : {}),
+    ...(runHeadless && browserName === 'firefox'
+        ? {
+            'moz:firefoxOptions': {
+                args: ['-headless', '--width=1280', '--height=720'],
             },
         }
         : {}),
@@ -477,8 +625,7 @@ export const config: any = {
         retry: 0,
         // <string[]> (file/dir) require files before executing features
         require: [
-            './e2e/stepdefinitions/**/*.ts',
-            './e2e/api-step-definitions/**/*.ts'
+            './e2e/stepdefinitions/**/*.ts'
         ],
         // <boolean> show full backtrace for errors
         backtrace: false,
@@ -545,14 +692,26 @@ export const config: any = {
     // beforeSession: function (config, capabilities, specs, cid) {
     // },
     /**
-     * Gets executed before test execution begins. At this point you can access to all global
-     * variables like `browser`. It is the perfect place to define custom commands.
+     * Gets executed before test execution begins. Sets viewport from config.viewportDevice when set.
      * @param {Array.<Object>} capabilities list of capabilities details
      * @param {Array.<String>} specs        List of spec file paths that are to be run
      * @param {Object}         browser      instance of created browser/device session
      */
-    // before: function (capabilities, specs) {
-    // },
+    before: async function (this: any, capabilities: any, specs: string[]) {
+        if (!shouldOpenBrowser) return;
+        const viewport = getViewport(e2eConfig.viewportDevice);
+        if (viewport) {
+            try {
+                const b = (typeof globalThis !== 'undefined' ? globalThis : global) as any;
+                if (b.browser && typeof b.browser.setWindowSize === 'function') {
+                    await b.browser.setWindowSize(viewport.width, viewport.height);
+                    console.log('[wdio] Viewport set to ' + viewport.width + 'x' + viewport.height + ' (' + e2eConfig.viewportDevice + ')');
+                }
+            } catch (e) {
+                console.warn('[wdio] setWindowSize failed:', (e as Error).message);
+            }
+        }
+    },
     /**
      * Runs before a WebdriverIO command gets executed.
      * @param {String} commandName hook command name
@@ -581,7 +740,7 @@ export const config: any = {
             return;
         }
         global.environment = environment;
-        global.browseName = browserName;
+        global.browseName = browserDisplayName;
         PageConfigHelper.sameScenarioSwitch = false;
         const scenarioName = world.pickle.name;
         if (scenarioName.trim() === PageConfigHelper.getScenarioName()) {
@@ -703,13 +862,19 @@ export const config: any = {
         let time = moment(startTime).format("YYYY_MM_DD_dddd_HH_mm");
         let repost = "e2e/reportHtml/" + time;
         try {
+            // If the run failed before the cucumber json reporter wrote files (e.g. session creation error),
+            // avoid throwing noisy report-generation errors.
+            const jsonDir = reportFolder + '/json/';
+            if (!fs.existsSync(jsonDir) || fs.readdirSync(jsonDir).filter(f => f.endsWith('.json')).length === 0) {
+                return;
+            }
             generate({
-                jsonDir: reportFolder + '/json/',
+                jsonDir: jsonDir,
                 reportPath: repost + '/',
 
                 metadata: {
                     browser: {
-                        name: browserName
+                        name: browserDisplayName
                     },
                     device: 'Local test machine',
                     platform: {
@@ -720,7 +885,7 @@ export const config: any = {
                     title: 'Run info',
                     data: [
                         { label: 'Project', value: e2eConfig.appName },
-                        { label: 'Browser', value: browserName },
+                        { label: 'Browser', value: browserDisplayName },
                         { label: 'Environment', value: environment.toUpperCase() },
                         { label: 'Execution Start Time', value: moment(startTime).format("dddd h:mma D MMM YYYY") },
                         { label: 'Execution End Time', value: moment(endTime).format("dddd h:mma D MMM YYYY") }

@@ -24,7 +24,9 @@ function generateFeatureForScreen(data) {
     (data.elements || []).forEach((el) => {
         const logicalName = (el.logicalName || "").trim() || "Element";
         const objectType = (el.objectType || "").toLowerCase();
-        const value = (el.value != null && el.value !== "") ? String(el.value).trim() : "";
+        // Recorder stores captured values as `inputValue` (newer), older exports may use `value`.
+        const valueRaw = (el && (el.inputValue != null ? el.inputValue : el.value));
+        const value = (valueRaw != null && valueRaw !== "") ? String(valueRaw).trim() : "";
         if (objectType === "textbox") {
             lines.push(`    And enters "12345" text in "${esc(logicalName)}" textbox`);
         } else if (objectType === "button") {

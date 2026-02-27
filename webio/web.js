@@ -46,23 +46,55 @@
     return "";
   }
 
+  function xpathLiteral(str) {
+    const s = String(str == null ? "" : str);
+    if (s.indexOf('"') === -1) return '"' + s + '"';
+    if (s.indexOf("'") === -1) return "'" + s + "'";
+    const parts = s.split('"');
+    return "concat(" + parts.map((p) => '"' + p + '"').join(', \'"\', ') + ")";
+  }
+
   function getXPath(el) {
     if (!el || el.nodeType !== 1) return "";
-    if (el.id) return '//*[@id="' + el.id.replace(/"/g, '\\"') + '"]';
+    const attr = (n) => {
+      try { return el.getAttribute ? el.getAttribute(n) : null; } catch (e) { return null; }
+    };
+
+    // Prefer stable attribute-based XPaths over absolute DOM paths.
+    const id = el.id ? String(el.id).trim() : "";
+    if (id) return "//*[@id=" + xpathLiteral(id) + "]";
+
+    const dataTestId = attr("data-testid");
+    if (dataTestId && String(dataTestId).trim()) return "//*[@data-testid=" + xpathLiteral(String(dataTestId).trim()) + "]";
+
+    const name = attr("name");
+    if (name && String(name).trim()) return "//*[@name=" + xpathLiteral(String(name).trim()) + "]";
+
+    const aria = attr("aria-label");
+    if (aria && String(aria).trim()) return "//*[@aria-label=" + xpathLiteral(String(aria).trim()) + "]";
+
+    const placeholder = attr("placeholder");
+    const tag = (el.tagName || "").toLowerCase();
+    if ((tag === "input" || tag === "textarea") && placeholder && String(placeholder).trim()) {
+      return "//" + tag + "[@placeholder=" + xpathLiteral(String(placeholder).trim()) + "]";
+    }
+
+    const text = String((el.innerText || el.textContent || "")).trim().replace(/\s+/g, " ");
+    if ((tag === "button" || tag === "a") && text && text.length <= 80) {
+      return "//" + tag + "[normalize-space(.)=" + xpathLiteral(text) + "]";
+    }
+
+    // Fallback: absolute (brittle) XPath.
     const parts = [];
     let node = el;
     while (node && node.nodeType === 1 && node !== document.documentElement) {
       let index = 1;
       let sibling = node.previousSibling;
       while (sibling) {
-        if (sibling.nodeType === 1 && sibling.nodeName === node.nodeName) {
-          index++;
-        }
+        if (sibling.nodeType === 1 && sibling.nodeName === node.nodeName) index++;
         sibling = sibling.previousSibling;
       }
-      const tagName = node.nodeName.toLowerCase();
-      const part = tagName + "[" + index + "]";
-      parts.unshift(part);
+      parts.unshift(node.nodeName.toLowerCase() + "[" + index + "]");
       node = node.parentNode;
     }
     return "/html/" + parts.join("/");
@@ -70,14 +102,28 @@
 
   function getCssSelector(el) {
     if (!el || el.nodeType !== 1) return "";
-    if (el.id) return "#" + String(el.id).replace(/\s/g, "\\ ");
+    const attr = (n) => {
+      try { return el.getAttribute ? el.getAttribute(n) : null; } catch (e) { return null; }
+    };
+
+    const id = el.id ? String(el.id).trim() : "";
+    if (id) return "#" + id.replace(/([ !\"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1");
+
+    const dataTestId = attr("data-testid");
+    if (dataTestId && String(dataTestId).trim()) return '[data-testid="' + String(dataTestId).trim().replace(/"/g, '\\"') + '"]';
+
+    const name = attr("name");
+    if (name && String(name).trim()) return '[name="' + String(name).trim().replace(/"/g, '\\"') + '"]';
+
+    const aria = attr("aria-label");
+    if (aria && String(aria).trim()) return '[aria-label="' + String(aria).trim().replace(/"/g, '\\"') + '"]';
+
+    // Fallback: tag + classes chain (can still be brittle).
     const path = [];
     let node = el;
     while (node && node.nodeType === 1 && node !== document.documentElement) {
       let selector = node.nodeName.toLowerCase();
-      if (node.classList && node.classList.length) {
-        selector += "." + Array.from(node.classList).join(".");
-      }
+      if (node.classList && node.classList.length) selector += "." + Array.from(node.classList).join(".");
       path.unshift(selector);
       node = node.parentElement;
     }
@@ -345,23 +391,50 @@
     return "";
   }
 
+  // Reuse same stable selector strategy in the panel script (duplicate definitions kept in-file by design).
+  function xpathLiteral(str) {
+    const s = String(str == null ? "" : str);
+    if (s.indexOf('"') === -1) return '"' + s + '"';
+    if (s.indexOf("'") === -1) return "'" + s + "'";
+    const parts = s.split('"');
+    return "concat(" + parts.map((p) => '"' + p + '"').join(', \'"\', ') + ")";
+  }
+
   function getXPath(el) {
     if (!el || el.nodeType !== 1) return "";
-    if (el.id) return '//*[@id="' + el.id.replace(/"/g, '\\"') + '"]';
+    const attr = (n) => {
+      try { return el.getAttribute ? el.getAttribute(n) : null; } catch (e) { return null; }
+    };
+
+    const id = el.id ? String(el.id).trim() : "";
+    if (id) return "//*[@id=" + xpathLiteral(id) + "]";
+    const dataTestId = attr("data-testid");
+    if (dataTestId && String(dataTestId).trim()) return "//*[@data-testid=" + xpathLiteral(String(dataTestId).trim()) + "]";
+    const name = attr("name");
+    if (name && String(name).trim()) return "//*[@name=" + xpathLiteral(String(name).trim()) + "]";
+    const aria = attr("aria-label");
+    if (aria && String(aria).trim()) return "//*[@aria-label=" + xpathLiteral(String(aria).trim()) + "]";
+
+    const placeholder = attr("placeholder");
+    const tag = (el.tagName || "").toLowerCase();
+    if ((tag === "input" || tag === "textarea") && placeholder && String(placeholder).trim()) {
+      return "//" + tag + "[@placeholder=" + xpathLiteral(String(placeholder).trim()) + "]";
+    }
+    const text = String((el.innerText || el.textContent || "")).trim().replace(/\s+/g, " ");
+    if ((tag === "button" || tag === "a") && text && text.length <= 80) {
+      return "//" + tag + "[normalize-space(.)=" + xpathLiteral(text) + "]";
+    }
+
     const parts = [];
     let node = el;
     while (node && node.nodeType === 1 && node !== document.documentElement) {
       let index = 1;
       let sibling = node.previousSibling;
       while (sibling) {
-        if (sibling.nodeType === 1 && sibling.nodeName === node.nodeName) {
-          index++;
-        }
+        if (sibling.nodeType === 1 && sibling.nodeName === node.nodeName) index++;
         sibling = sibling.previousSibling;
       }
-      const tagName = node.nodeName.toLowerCase();
-      const part = tagName + "[" + index + "]";
-      parts.unshift(part);
+      parts.unshift(node.nodeName.toLowerCase() + "[" + index + "]");
       node = node.parentNode;
     }
     return "/html/" + parts.join("/");
@@ -369,14 +442,24 @@
 
   function getCssSelector(el) {
     if (!el || el.nodeType !== 1) return "";
-    if (el.id) return "#" + String(el.id).replace(/\s/g, "\\ ");
+    const attr = (n) => {
+      try { return el.getAttribute ? el.getAttribute(n) : null; } catch (e) { return null; }
+    };
+
+    const id = el.id ? String(el.id).trim() : "";
+    if (id) return "#" + id.replace(/([ !\"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1");
+    const dataTestId = attr("data-testid");
+    if (dataTestId && String(dataTestId).trim()) return '[data-testid="' + String(dataTestId).trim().replace(/"/g, '\\"') + '"]';
+    const name = attr("name");
+    if (name && String(name).trim()) return '[name="' + String(name).trim().replace(/"/g, '\\"') + '"]';
+    const aria = attr("aria-label");
+    if (aria && String(aria).trim()) return '[aria-label="' + String(aria).trim().replace(/"/g, '\\"') + '"]';
+
     const path = [];
     let node = el;
     while (node && node.nodeType === 1 && node !== document.documentElement) {
       let selector = node.nodeName.toLowerCase();
-      if (node.classList && node.classList.length) {
-        selector += "." + Array.from(node.classList).join(".");
-      }
+      if (node.classList && node.classList.length) selector += "." + Array.from(node.classList).join(".");
       path.unshift(selector);
       node = node.parentElement;
     }
@@ -604,11 +687,23 @@
     var recordedScreens = {};
     window.webioRecordedScreens = function () { return recordedScreens; };
 
+    // Flat action log for recording mode (used by Web UI + API step grouping).
+    // Each entry includes selector + action so we can generate UI steps automatically.
+    var recordedActionsLog = [];
+    window.webioRecordedActionsLog = function () { return recordedActionsLog; };
+
     var apiMethodFilter = "";
     var apiUrlKeyword = "";
     var apiStatusFilter = "";
     var selectedApiIds = {};
     var webioActiveTab = "webui";
+
+    // Web UI + API tab: steps with captured APIs per step
+    var webuiApiSteps = [];
+    var webuiApiStepCaptureStartIndex = null;
+    var webuiApiStepActionsStartIndex = null;
+    var webuiApiStepCaptureName = "";
+    var webuiApiUseTableFormat = true;
 
     function getLogicalName(el) {
         var label = getControlLabel(el);
@@ -677,6 +772,22 @@
             inputValue: inputValue != null ? String(inputValue) : ""
         };
 
+        function pushRecordedAction(r) {
+            try {
+                recordedActionsLog.push({
+                    screenId: currentScreenId,
+                    page: window.location.href || "",
+                    timestamp: new Date().toISOString(),
+                    logicalName: r.logicalName,
+                    objectType: r.objectType,
+                    selectorType: r.selectorType,
+                    selectorValue: r.selectorValue,
+                    actionType: r.actionType,
+                    inputValue: r.inputValue
+                });
+            } catch (e) {}
+        }
+
         if (!recordedScreens[currentScreenId]) {
             recordedScreens[currentScreenId] = {
                 screenId: currentScreenId,
@@ -691,10 +802,12 @@
             var existing = elements.find(function (r) { return r.selectorValue === selectorValue; });
             if (existing) {
                 existing.inputValue = record.inputValue;
+                pushRecordedAction(record);
                 return;
             }
         }
         elements.push(record);
+        pushRecordedAction(record);
     }
 
     function initRecordingListeners() {
@@ -1079,17 +1192,49 @@
         onTableClickToggle(e);
     }, true);
     
+    function xpathLiteral(str) {
+        const s = String(str == null ? "" : str);
+        if (s.indexOf('"') === -1) return '"' + s + '"';
+        if (s.indexOf("'") === -1) return "'" + s + "'";
+        const parts = s.split('"');
+        return "concat(" + parts.map((p) => '"' + p + '"').join(', \'"\', ') + ")";
+    }
+
     function getXPath(el) {
-        if (el.id) return `//*[@id="${el.id}"]`;
-        if (el === document.body) return '/html/body';
+        if (!el || el.nodeType !== 1) return "";
+        const attr = (n) => {
+            try { return el.getAttribute ? el.getAttribute(n) : null; } catch (e) { return null; }
+        };
+
+        const id = el.id ? String(el.id).trim() : "";
+        if (id) return "//*[@id=" + xpathLiteral(id) + "]";
+        const dataTestId = attr("data-testid");
+        if (dataTestId && String(dataTestId).trim()) return "//*[@data-testid=" + xpathLiteral(String(dataTestId).trim()) + "]";
+        const name = attr("name");
+        if (name && String(name).trim()) return "//*[@name=" + xpathLiteral(String(name).trim()) + "]";
+        const aria = attr("aria-label");
+        if (aria && String(aria).trim()) return "//*[@aria-label=" + xpathLiteral(String(aria).trim()) + "]";
+
+        const placeholder = attr("placeholder");
+        const tag = (el.tagName || "").toLowerCase();
+        if ((tag === "input" || tag === "textarea") && placeholder && String(placeholder).trim()) {
+            return "//" + tag + "[@placeholder=" + xpathLiteral(String(placeholder).trim()) + "]";
+        }
+        const text = String((el.innerText || el.textContent || "")).trim().replace(/\s+/g, " ");
+        if ((tag === "button" || tag === "a") && text && text.length <= 80) {
+            return "//" + tag + "[normalize-space(.)=" + xpathLiteral(text) + "]";
+        }
+
+        // Fallback absolute path
+        if (el === document.body) return "/html/body";
         let ix = 0;
-        const siblings = el.parentNode.childNodes;
+        const siblings = el.parentNode ? el.parentNode.childNodes : [];
         for (let i = 0; i < siblings.length; i++) {
             const sibling = siblings[i];
-            
-            if (sibling === el) return getXPath(el.parentNode) + '/' + el.tagName.toLowerCase() + `[${ix + 1}]`;
-            if (sibling.nodeType === 1 && sibling.tagName === el.tagName) ix++;
+            if (sibling === el) return getXPath(el.parentNode) + "/" + el.tagName.toLowerCase() + "[" + (ix + 1) + "]";
+            if (sibling && sibling.nodeType === 1 && sibling.tagName === el.tagName) ix++;
         }
+        return "";
     }
     
     function getCssSelector(el) {
@@ -1870,7 +2015,215 @@
         return lines.join("\n").replace(/\n+$/, "\n");
     }
 
-    function showApiFeatureEditPopup(initialContent) {
+    function requestBodyToTableRows(requestBody) {
+        if (requestBody == null) return [];
+        var obj = requestBody;
+        if (typeof requestBody === "string") {
+            var s = (requestBody || "").trim();
+            if (!s) return [];
+            try { obj = JSON.parse(s); } catch (e) { return []; }
+        }
+        if (typeof obj !== "object" || obj === null) return [];
+        var rows = [];
+        Object.keys(obj).forEach(function (path) {
+            var v = obj[path];
+            var valueCell;
+            if (typeof v === "string") valueCell = '"' + String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+            else if (typeof v === "number") valueCell = String(v);
+            else if (typeof v === "boolean") valueCell = v ? "true" : "false";
+            else if (v !== null && typeof v === "object") valueCell = '"' + JSON.stringify(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+            else valueCell = '""';
+            rows.push({ path: path, value: valueCell });
+        });
+        return rows;
+    }
+
+    function buildWebuiApiFeatureContent(steps, useTableFormat) {
+        function esc(s) { return (s == null ? "" : String(s)).replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
+        function pathFromUrl(url) {
+            if (!url) return "";
+            try { var u = new URL(url, window.location.origin); return u.pathname || url; } catch (e) { return url; }
+        }
+        if (useTableFormat) {
+            var lines = ["# Web UI + API — True E2E (table validation)", "Feature: Web UI + API Integration", ""];
+            lines.push("  @webui-api @smoke");
+            lines.push("  Scenario: E2E flow with UI actions and API validations");
+            steps.forEach(function (step) {
+                var stepName = esc(step.name || "Step");
+                lines.push('    Given user performs "' + stepName + '"');
+                lines.push('    When APIs triggered for "' + stepName + '" are captured');
+                var selectedApis = (step.apiEntries || []).filter(function (e) { return e.selected !== false; });
+                lines.push("    Then validate the following APIs:");
+                lines.push("      | Method | URL | Status |");
+                if (selectedApis.length > 0) {
+                    selectedApis.forEach(function (e) {
+                        var method = (e.method || "GET").toUpperCase();
+                        var url = pathFromUrl(e.url) || e.url || "";
+                        if (url.length > 60) url = url.slice(0, 57) + "...";
+                        lines.push("      | " + method + " | " + url + " | " + (e.responseStatus != null ? e.responseStatus : 200) + " |");
+                    });
+                } else {
+                    lines.push("      | GET | (no APIs captured) | 200 |");
+                }
+                lines.push("");
+            });
+            return lines.join("\n").replace(/\n+$/, "\n");
+        }
+        var lines = ["# Web UI + API — combined UI + API (same Gherkin as Screen.feature + api-tests)", "Feature: Web UI + API Integration", ""];
+        lines.push("  @webui-api @smoke");
+        lines.push("  Scenario: E2E flow with UI actions and API validations");
+        var isFirstStep = true;
+        steps.forEach(function (step) {
+            var selectedApis = (step.apiEntries || []).filter(function (e) { return e.selected !== false; });
+            var selectedUi = (step.uiActions || []).filter(function (a) { return a.selected !== false; });
+            var hasTimestamps = selectedUi.some(function (a) { return a.timestamp; }) && selectedApis.some(function (e) { return e.timestamp; });
+            var safeStepName = String(step.name || "Step").replace(/[\\\/:\*\?"<>\|]/g, "_").replace(/\s+/g, " ").trim().replace(/[\. ]+$/g, "") || "Step";
+            var screenRef = "generated/" + safeStepName;
+
+            function emitGroupedUiForSegment(uiSegment) {
+                var textboxByKey = {};
+                var textboxOrder = [];
+                var buttonByKey = {};
+                var buttonOrder = [];
+                var linkByKey = {};
+                var linkOrder = [];
+                var checkboxByKey = {};
+                var checkboxOrder = [];
+                var radioByKey = {};
+                var radioOrder = [];
+                var dropdownByKey = {};
+                var dropdownOrder = [];
+                uiSegment.forEach(function (a) {
+                    var logicalName = (a.logicalName || "Element").trim();
+                    var key = logicalName + "|" + (a.selectorValue || "");
+                    var objType = (a.objectType || "").toLowerCase();
+                    var val = (a.inputValue != null && String(a.inputValue).trim() !== "") ? String(a.inputValue).trim() : "";
+                    if (objType === "textbox") {
+                        if (!textboxByKey[key]) textboxOrder.push(key);
+                        textboxByKey[key] = { logicalName: logicalName, value: val };
+                    } else if (objType === "button") {
+                        if (!buttonByKey[key]) buttonOrder.push(key);
+                        buttonByKey[key] = logicalName;
+                    } else if (objType === "link") {
+                        if (!linkByKey[key]) linkOrder.push(key);
+                        linkByKey[key] = logicalName;
+                    } else if (objType === "checkbox") {
+                        if (!checkboxByKey[key]) checkboxOrder.push(key);
+                        checkboxByKey[key] = logicalName;
+                    } else if (objType === "radio") {
+                        if (!radioByKey[key]) radioOrder.push(key);
+                        radioByKey[key] = logicalName;
+                    } else if (objType === "dropdown") {
+                        if (!dropdownByKey[key]) dropdownOrder.push(key);
+                        dropdownByKey[key] = { logicalName: logicalName, value: val };
+                    } else {
+                        if (!buttonByKey[key]) buttonOrder.push(key);
+                        buttonByKey[key] = logicalName;
+                    }
+                });
+                textboxOrder.forEach(function (k) {
+                    var o = textboxByKey[k];
+                    var val = (o.value && o.value.trim() !== "") ? esc(o.value.trim()) : "12345";
+                    lines.push('    And enters "' + val + '" text in "' + esc(o.logicalName) + '" textbox');
+                });
+                buttonOrder.forEach(function (k) {
+                    lines.push('    When clicks on "' + esc(buttonByKey[k]) + '" button');
+                });
+                linkOrder.forEach(function (k) {
+                    lines.push('    When clicks on "' + esc(linkByKey[k]) + '" link');
+                });
+                checkboxOrder.forEach(function (k) {
+                    lines.push('    And select "' + esc(checkboxByKey[k]) + '" Checkbox');
+                });
+                radioOrder.forEach(function (k) {
+                    lines.push('    When clicks on "' + esc(radioByKey[k]) + '" Radio button');
+                });
+                dropdownOrder.forEach(function (k) {
+                    var o = dropdownByKey[k];
+                    lines.push('    When selects "' + esc(o.value || "option1") + '" from "' + esc(o.logicalName) + '" Drop-down list');
+                });
+            }
+
+            if (hasTimestamps) {
+                var events = [];
+                selectedUi.forEach(function (a) { events.push({ type: "ui", timestamp: a.timestamp || "", payload: a }); });
+                selectedApis.forEach(function (e) { events.push({ type: "api", timestamp: e.timestamp || "", payload: e }); });
+                events.sort(function (x, y) { return String(x.timestamp).localeCompare(String(y.timestamp)); });
+                var idx = 0;
+                while (idx < events.length) {
+                    if (events[idx].type === "ui") {
+                        var uiSegment = [];
+                        while (idx < events.length && events[idx].type === "ui") {
+                            uiSegment.push(events[idx].payload);
+                            idx++;
+                        }
+                        if (uiSegment.length > 0) {
+                            if (isFirstStep) {
+                                if (step.page) lines.push('    Given User navigates to "' + esc(step.page) + '" URL');
+                                lines.push('    And User is on "' + esc(screenRef) + '" screen');
+                                isFirstStep = false;
+                            }
+                            emitGroupedUiForSegment(uiSegment);
+                        }
+                    } else {
+                        if (isFirstStep) {
+                            if (step.page) lines.push('    Given User navigates to "' + esc(step.page) + '" URL');
+                            lines.push('    And User is on "' + esc(screenRef) + '" screen');
+                            isFirstStep = false;
+                        }
+                        var e = events[idx].payload;
+                        var method = (e.method || "GET").toUpperCase();
+                        var url = (e.url || "").trim() || "http://localhost/";
+                        var status = e.responseStatus != null ? e.responseStatus : 200;
+                        var methodWithBody = ["POST", "PUT", "PATCH"];
+                        var hasBody = methodWithBody.indexOf(method) >= 0 && e.requestBody != null;
+                        var bodyRows = hasBody ? requestBodyToTableRows(e.requestBody) : [];
+                        if (bodyRows.length > 0) {
+                            lines.push('    Given User sends ' + method + ' request to "' + esc(url) + '" with body:');
+                            lines.push("      | path  | value |");
+                            bodyRows.forEach(function (r) { lines.push("      | " + r.path + " | " + r.value + " |"); });
+                        } else {
+                            lines.push('    Given User sends ' + method + ' request to "' + esc(url) + '"');
+                        }
+                        lines.push("    Then User expects status code " + status);
+                        lines.push("");
+                        idx++;
+                    }
+                }
+            } else {
+                if (isFirstStep) {
+                    if (step.page) lines.push('    Given User navigates to "' + esc(step.page) + '" URL');
+                    lines.push('    And User is on "' + esc(screenRef) + '" screen');
+                    isFirstStep = false;
+                } else {
+                    lines.push('    And User is on "' + esc(screenRef) + '" screen');
+                }
+                if (selectedUi.length > 0) emitGroupedUiForSegment(selectedUi);
+                var methodWithBody = ["POST", "PUT", "PATCH"];
+                selectedApis.forEach(function (e) {
+                    var method = (e.method || "GET").toUpperCase();
+                    var url = (e.url || "").trim() || "http://localhost/";
+                    var status = e.responseStatus != null ? e.responseStatus : 200;
+                    var hasBody = methodWithBody.indexOf(method) >= 0 && e.requestBody != null;
+                    var bodyRows = hasBody ? requestBodyToTableRows(e.requestBody) : [];
+                    if (bodyRows.length > 0) {
+                        lines.push('    Given User sends ' + method + ' request to "' + esc(url) + '" with body:');
+                        lines.push("      | path  | value |");
+                        bodyRows.forEach(function (r) { lines.push("      | " + r.path + " | " + r.value + " |"); });
+                    } else {
+                        lines.push('    Given User sends ' + method + ' request to "' + esc(url) + '"');
+                    }
+                    lines.push("    Then User expects status code " + status);
+                    lines.push("");
+                });
+            }
+        });
+        return lines.join("\n").replace(/\n+$/, "\n");
+    }
+
+    function showApiFeatureEditPopup(initialContent, title, downloadPrefix) {
+        title = title || "API Feature — Edit then Save";
+        downloadPrefix = downloadPrefix || "api-tests";
         var existing = document.querySelector("[data-webio-api-feature-popup]");
         if (existing) document.body.removeChild(existing);
         var popup = document.createElement("div");
@@ -1878,7 +2231,7 @@
         popup.setAttribute("data-export-popup", "true");
         popup.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;color:#000;border:1px solid #ccc;padding:20px;font-family:sans-serif;box-shadow:2px 2px 20px rgba(0,0,0,0.5);z-index:999999;max-width:700px;width:90vw;height:85vh;max-height:85vh;overflow:hidden;color-scheme:light;display:flex;flex-direction:column;box-sizing:border-box;";
         popup.innerHTML = "<style>[data-webio-api-feature-popup] textarea,[data-webio-api-feature-popup] h3{color:#000!important;background:#fff!important}[data-webio-api-feature-popup] button{color:#000!important;background:#f5f5f5!important;border:1px solid #ccc!important}</style>"
-            + "<div class=\"webio-api-feature-drag-handle\" style=\"cursor:move;user-select:none;margin:-20px -20px 12px -20px;padding:12px 20px;border-bottom:1px solid #eee;flex-shrink:0;\"><h3 style=\"margin:0;\">API Feature — Edit then Save</h3></div>"
+            + "<div class=\"webio-api-feature-drag-handle\" style=\"cursor:move;user-select:none;margin:-20px -20px 12px -20px;padding:12px 20px;border-bottom:1px solid #eee;flex-shrink:0;\"><h3 style=\"margin:0;\">" + escapeHtml(title) + "</h3></div>"
             + "<div style=\"flex:1;min-height:0;display:flex;flex-direction:column;margin-top:8px;\">"
             + "<textarea id=\"webioApiFeatureContent\" style=\"flex:1;min-height:0;width:100%;font-family:monospace;font-size:12px;padding:10px;box-sizing:border-box;border:1px solid #ccc;overflow-y:auto;resize:none;display:block;\"></textarea>"
             + "</div>"
@@ -1901,7 +2254,7 @@
             var url = URL.createObjectURL(blob);
             var a = document.createElement("a");
             a.href = url;
-            a.download = "api-tests-" + Date.now() + ".feature";
+            a.download = downloadPrefix + "-" + Date.now() + ".feature";
             a.style.display = "none";
             document.body.appendChild(a);
             a.click();
@@ -1964,6 +2317,22 @@
             var id = cb.getAttribute("data-api-id");
             if (id) selectedApiIds[id] = cb.checked;
         });
+        if (webioActiveTab === "webui-api") {
+            listUI.querySelectorAll(".webui-api-step-api-cb").forEach(function (cb) {
+                var si = parseInt(cb.getAttribute("data-step-index"), 10);
+                var ai = parseInt(cb.getAttribute("data-api-index"), 10);
+                if (!isNaN(si) && !isNaN(ai) && webuiApiSteps[si] && webuiApiSteps[si].apiEntries && webuiApiSteps[si].apiEntries[ai]) {
+                    webuiApiSteps[si].apiEntries[ai].selected = cb.checked;
+                }
+            });
+            listUI.querySelectorAll(".webui-api-step-ui-cb").forEach(function (cb) {
+                var si = parseInt(cb.getAttribute("data-step-index"), 10);
+                var ui = parseInt(cb.getAttribute("data-ui-index"), 10);
+                if (!isNaN(si) && !isNaN(ui) && webuiApiSteps[si] && webuiApiSteps[si].uiActions && webuiApiSteps[si].uiActions[ui]) {
+                    webuiApiSteps[si].uiActions[ui].selected = cb.checked;
+                }
+            });
+        }
         var apiListEl = listUI.querySelector("#apiListContainer");
         var savedApiListScrollTop = apiListEl ? apiListEl.scrollTop : 0;
         var parentPathForTemplate = preservedPathValue !== null ? preservedPathValue : persistedParentPath;
@@ -1981,8 +2350,58 @@
                 + "<b>" + escapeHtml(entry.method || "GET") + "</b> " + escapeHtml(shortUrl) + " <span style=\"color:#666;\">" + escapeHtml(String(status)) + "</span></span></div>";
         }).join("") : "<div style=\"font-size:12px;color:#000;\">No API calls captured yet. Use the app to trigger XHR/Fetch requests.</div>";
 
+        var webuiApiStepsListHtml = "";
+        if (webioActiveTab === "webui-api") {
+            var webuiApiStepNamePreserved = listUI.querySelector("#webuiApiStepNameInput");
+            if (webuiApiStepNamePreserved && webuiApiStepNamePreserved.value) webuiApiStepCaptureName = webuiApiStepNamePreserved.value.trim();
+            var webuiApiTableFormatCb = listUI.querySelector("#webuiApiUseTableFormat");
+            if (webuiApiTableFormatCb) webuiApiUseTableFormat = webuiApiTableFormatCb.checked;
+            if (webuiApiSteps.length === 0) {
+                webuiApiStepsListHtml = "<div style=\"font-size:12px;color:#666;\">Add a step: enter a name, click <b>Start step</b>, perform the UI action in the app, then click <b>End step &amp; capture UI + APIs</b>. UI actions + APIs triggered in between will be grouped under that step.</div>";
+            } else {
+                webuiApiStepsListHtml = webuiApiSteps.map(function (step, stepIdx) {
+                    var uiHtml = (step.uiActions && step.uiActions.length)
+                        ? step.uiActions.map(function (a, uiIdx) {
+                            var checked = a.selected !== false ? " checked" : "";
+                            var label = (a.actionType || "click").toUpperCase() + " " + (a.logicalName || "Element");
+                            if ((a.objectType || "").toLowerCase() === "textbox" && a.inputValue) {
+                                label += " = " + String(a.inputValue).slice(0, 50);
+                            }
+                            return "<div style=\"margin:2px 0;padding:4px 8px;background:#fdf2f8;border-radius:4px;font-size:11px;display:flex;align-items:center;gap:6px;\">"
+                                + "<input type=\"checkbox\" class=\"webui-api-step-ui-cb\" data-step-index=\"" + stepIdx + "\" data-ui-index=\"" + uiIdx + "\"" + checked + " style=\"flex-shrink:0;\"/>"
+                                + "<span style=\"flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;\" title=\"" + escapeHtml(label) + "\">"
+                                + escapeHtml(label)
+                                + "</span></div>";
+                        }).join("")
+                        : "<div style=\"font-size:11px;color:#888;\">No UI actions recorded for this step. Turn on <b>Start Recording</b> in Web UI tab, then perform the UI action.</div>";
+                    var apisHtml = (step.apiEntries && step.apiEntries.length)
+                        ? step.apiEntries.map(function (entry, apiIdx) {
+                            var shortUrl = (entry.url || "").length > 40 ? (entry.url || "").slice(0, 37) + "..." : (entry.url || "");
+                            var status = entry.responseStatus != null ? entry.responseStatus : "-";
+                            var checked = entry.selected !== false ? " checked" : "";
+                            return "<div style=\"margin:2px 0;padding:4px 8px;background:#f8fafc;border-radius:4px;font-size:11px;display:flex;align-items:center;gap:6px;\">"
+                                + "<input type=\"checkbox\" class=\"webui-api-step-api-cb\" data-step-index=\"" + stepIdx + "\" data-api-index=\"" + apiIdx + "\"" + checked + " style=\"flex-shrink:0;\"/>"
+                                + "<span style=\"flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;\" title=\"" + escapeHtml(entry.url || "") + "\">"
+                                + "<b>" + escapeHtml((entry.method || "GET").toUpperCase()) + "</b> " + escapeHtml(shortUrl) + " <span style=\"color:#666;\">" + escapeHtml(String(status)) + "</span></span></div>";
+                        }).join("")
+                        : "<div style=\"font-size:11px;color:#888;\">No APIs captured for this step.</div>";
+                    var screenLabel = step.screenId ? " Screen: " + escapeHtml(step.screenId) : "";
+                    var elLabel = step.elementSummary ? " · " + escapeHtml(step.elementSummary) : "";
+                    return "<div class=\"webui-api-step-card\" data-step-index=\"" + stepIdx + "\" style=\"margin-bottom:12px;padding:10px;background:#fff;border:1px solid #e0e0e0;border-radius:8px;\">"
+                        + "<div style=\"font-weight:600;font-size:12px;color:#000;margin-bottom:4px;\">Step: " + escapeHtml(step.name) + "</div>"
+                        + "<div style=\"font-size:11px;color:#555;margin-bottom:8px;\">" + screenLabel + elLabel + "</div>"
+                        + "<div style=\"font-size:11px;color:#000;margin-bottom:4px;\">UI actions (check to include in feature):</div>"
+                        + "<div style=\"max-height:120px;overflow-y:auto;margin-bottom:10px;\">" + uiHtml + "</div>"
+                        + "<div style=\"font-size:11px;color:#000;margin-bottom:4px;\">APIs (check to include in feature):</div>"
+                        + "<div style=\"max-height:120px;overflow-y:auto;\">" + apisHtml + "</div>"
+                        + "<button type=\"button\" class=\"webui-api-step-remove\" data-step-index=\"" + stepIdx + "\" style=\"margin-top:8px;padding:4px 10px;font-size:11px;border:1px solid #dc2626;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer;\">Remove step</button>"
+                        + "</div>";
+                }).join("");
+            }
+        }
+
         // Preserve scroll position of the active tab so re-renders don't jump back to top
-        var scrollEl = listUI.querySelector("#webio-tab-webui .webio-scroll") || listUI.querySelector("#webio-tab-api .webio-scroll") || listUI.querySelector(".webio-scroll");
+        var scrollEl = listUI.querySelector("#webio-tab-webui .webio-scroll") || listUI.querySelector("#webio-tab-api .webio-scroll") || listUI.querySelector("#webio-tab-webui-api .webio-scroll") || listUI.querySelector(".webio-scroll");
         var savedScrollTop = scrollEl ? scrollEl.scrollTop : 0;
 
         listUI.innerHTML = `<style>[data-webio-panel] input,[data-webio-panel] select,[data-webio-panel] textarea{color:#000!important;background-color:#fff!important;border-color:#ccc!important}[data-webio-panel] button:not(#setScreenIdBtn):not(#recordingToggleBtn):not(#generateJsonBtn):not(#generateFeatureBtn):not(#generateApiFeatureBtn):not(#webioHideBtn):not(.webio-tab){color:#000!important;background-color:#fff!important;border-color:#ccc!important}</style>
@@ -2000,6 +2419,7 @@
             <div class="webio-tabs" style="flex-shrink:0;display:flex;border-bottom:1px solid #e0e0e0;background:#f5f5f5;">
                 <button type="button" id="webioTabWebui" class="webio-tab" data-tab="webui" style="flex:1;padding:10px 12px;border:none;border-bottom:3px solid ${webioActiveTab === "webui" ? "#2563eb" : "transparent"};background:${webioActiveTab === "webui" ? "#fff" : "transparent"};font-weight:600;font-size:12px;cursor:pointer;color:#000;">Web UI</button>
                 <button type="button" id="webioTabApi" class="webio-tab" data-tab="api" style="flex:1;padding:10px 12px;border:none;border-bottom:3px solid ${webioActiveTab === "api" ? "#2563eb" : "transparent"};background:${webioActiveTab === "api" ? "#fff" : "transparent"};font-weight:600;font-size:12px;cursor:pointer;color:#000;">API</button>
+                <button type="button" id="webioTabWebuiApi" class="webio-tab" data-tab="webui-api" style="flex:1;padding:10px 12px;border:none;border-bottom:3px solid ${webioActiveTab === "webui-api" ? "#2563eb" : "transparent"};background:${webioActiveTab === "webui-api" ? "#fff" : "transparent"};font-weight:600;font-size:12px;cursor:pointer;color:#000;">Web UI + API</button>
             </div>
             <div id="webio-tab-webui" class="webio-tab-pane" style="display:${webioActiveTab === "webui" ? "flex" : "none"};flex:1;flex-direction:column;min-height:0;">
                 <div class="webio-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;">
@@ -2054,12 +2474,46 @@
                     </div>
                 </div>
             </div>
+            <div id="webio-tab-webui-api" class="webio-tab-pane" style="display:${webioActiveTab === "webui-api" ? "flex" : "none"};flex:1;flex-direction:column;min-height:0;">
+                <div class="webio-scroll webio-webui-api-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;">
+                    <div style="margin-bottom:12px;padding:12px;background:#f0f9ff;border:1px solid #0ea5e9;border-radius:8px;">
+                        <div style="font-size:12px;font-weight:600;color:#000;margin-bottom:8px;">Web UI + API — True E2E integration</div>
+                        <div style="font-size:11px;color:#333;line-height:1.5;">
+                            <p style="margin:0 0 8px 0;">This tab combines <strong>UI actions</strong> and <strong>API validations</strong> in one flow.</p>
+                            <ul style="margin:0 0 8px 0;padding-left:18px;">
+                                <li>Enter a step name, click <b>Start step</b>, perform the UI action in the app, then click <b>End step &amp; capture UI + APIs</b>.</li>
+                                <li>APIs triggered in between are grouped under that step. Select which APIs to include in the generated feature.</li>
+                                <li>Click <b>Generate Web UI + API Feature</b> to create the Gherkin feature file.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:12px;padding:10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px;">
+                        <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">Add step</div>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <input id="webuiApiStepNameInput" type="text" placeholder="e.g. Login, Dashboard" value="${escapeHtml(webuiApiStepCaptureName)}" style="flex:1;min-width:120px;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:12px;box-sizing:border-box;"/>
+                            <button id="webuiApiStartStepBtn" type="button" style="padding:8px 14px;border:1px solid #16a34a;border-radius:6px;background:#16a34a;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Start step</button>
+                            <button id="webuiApiEndStepBtn" type="button" style="padding:8px 14px;border:1px solid #0ea5e9;border-radius:6px;background:#0ea5e9;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">End step &amp; capture UI + APIs</button>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <div style="font-size:11px;color:#000;margin-bottom:6px;font-weight:600;">UI steps with captured APIs</div>
+                        <div id="webuiApiStepsList" style="min-height:80px;padding:10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;color:#666;">${webuiApiStepsListHtml}</div>
+                    </div>
+                    <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="webuiApiUseTableFormat" ${webuiApiUseTableFormat ? " checked" : ""} style="flex-shrink:0;"/>
+                        <label for="webuiApiUseTableFormat" style="font-size:12px;color:#000;">Use table validation format (Given/When/Then with Method | URL | Status table)</label>
+                    </div>
+                    <button id="generateWebuiApiFeatureBtn" type="button" style="width:100%;padding:10px 12px;border:1px solid #0ea5e9;border-radius:6px;background:#0ea5e9;color:#fff;cursor:pointer;font-size:12px;font-weight:600;">Generate Web UI + API Feature</button>
+                </div>
+            </div>
             <div class="webio-resize-handle" style="height:6px;cursor:ns-resize;background:#e0e0e0;flex-shrink:0;" title="Drag to resize height"></div>
         `;
 
         var newScrollEl = webioActiveTab === "webui"
             ? listUI.querySelector("#webio-tab-webui .webio-scroll")
-            : listUI.querySelector("#webio-tab-api .webio-scroll");
+            : webioActiveTab === "api"
+            ? listUI.querySelector("#webio-tab-api .webio-scroll")
+            : listUI.querySelector("#webio-tab-webui-api .webio-scroll");
         if (newScrollEl && savedScrollTop > 0) newScrollEl.scrollTop = savedScrollTop;
         var newApiList = listUI.querySelector("#apiListContainer");
         if (newApiList && savedApiListScrollTop > 0) {
@@ -2210,6 +2664,134 @@
                 if (id) selectedApiIds[id] = cb.checked;
             };
         });
+        var generateWebuiApiFeatureBtn = listUI.querySelector("#generateWebuiApiFeatureBtn");
+        if (generateWebuiApiFeatureBtn) {
+            generateWebuiApiFeatureBtn.onclick = function () {
+                listUI.querySelectorAll(".webui-api-step-api-cb").forEach(function (cb) {
+                    var si = parseInt(cb.getAttribute("data-step-index"), 10);
+                    var ai = parseInt(cb.getAttribute("data-api-index"), 10);
+                    if (!isNaN(si) && !isNaN(ai) && webuiApiSteps[si] && webuiApiSteps[si].apiEntries && webuiApiSteps[si].apiEntries[ai]) {
+                        webuiApiSteps[si].apiEntries[ai].selected = cb.checked;
+                    }
+                });
+                listUI.querySelectorAll(".webui-api-step-ui-cb").forEach(function (cb) {
+                    var si = parseInt(cb.getAttribute("data-step-index"), 10);
+                    var ui = parseInt(cb.getAttribute("data-ui-index"), 10);
+                    if (!isNaN(si) && !isNaN(ui) && webuiApiSteps[si] && webuiApiSteps[si].uiActions && webuiApiSteps[si].uiActions[ui]) {
+                        webuiApiSteps[si].uiActions[ui].selected = cb.checked;
+                    }
+                });
+                if (webuiApiSteps.length === 0) {
+                    alert("Add at least one step: use Start step, perform the UI action, then End step & capture UI + APIs.");
+                    return;
+                }
+                var payload = {
+                    mode: "webui-api",
+                    steps: webuiApiSteps.map(function (s) {
+                        return {
+                            stepName: s.name,
+                            name: s.name,
+                            uiActions: s.uiActions || [],
+                            apis: (s.apiEntries || []).map(function (e) {
+                                return { url: e.url, method: e.method || "GET", responseStatus: e.responseStatus, requestBody: e.requestBody, timestamp: e.timestamp, selected: e.selected !== false };
+                            }),
+                            screenId: s.screenId,
+                            page: s.page,
+                            title: s.pageTitle || s.title || s.screenId,
+                            labels: (s.uiActions || []).map(function (a) { return a.logicalName || ""; }).filter(Boolean)
+                        };
+                    })
+                };
+                if (typeof window.webioWriteGeneratedFiles === "function") {
+                    window.webioWriteGeneratedFiles(payload).then(function (result) {
+                        if (result && result.ok) {
+                            alert("Files written:\n" + (result.paths && result.paths.length ? result.paths.join("\n") : result.message));
+                        } else {
+                            showApiFeatureEditPopup(buildWebuiApiFeatureContent(webuiApiSteps, listUI.querySelector("#webuiApiUseTableFormat") ? listUI.querySelector("#webuiApiUseTableFormat").checked : webuiApiUseTableFormat), "Web UI + API Feature — Edit then Save", "web-ui-api-integration");
+                        }
+                    }).catch(function () {
+                        var useTable = listUI.querySelector("#webuiApiUseTableFormat") ? listUI.querySelector("#webuiApiUseTableFormat").checked : webuiApiUseTableFormat;
+                        showApiFeatureEditPopup(buildWebuiApiFeatureContent(webuiApiSteps, useTable), "Web UI + API Feature — Edit then Save", "web-ui-api-integration");
+                    });
+                } else {
+                    var useTable = listUI.querySelector("#webuiApiUseTableFormat") ? listUI.querySelector("#webuiApiUseTableFormat").checked : webuiApiUseTableFormat;
+                    var content = buildWebuiApiFeatureContent(webuiApiSteps, useTable);
+                    showApiFeatureEditPopup(content, "Web UI + API Feature — Edit then Save (run CLI to write to disk)", "web-ui-api-integration");
+                }
+            };
+        }
+        var webuiApiStartStepBtn = listUI.querySelector("#webuiApiStartStepBtn");
+        if (webuiApiStartStepBtn) {
+            webuiApiStartStepBtn.onclick = function () {
+                var input = listUI.querySelector("#webuiApiStepNameInput");
+                var name = (input && input.value || "").trim() || "Step" + (webuiApiSteps.length + 1);
+                webuiApiStepCaptureName = name;
+                if (input) input.value = name;
+                isRecording = true;
+                var log = (window.__WEBIO__ && window.__WEBIO__.networkLog) ? window.__WEBIO__.networkLog : [];
+                webuiApiStepCaptureStartIndex = log.length;
+                webuiApiStepActionsStartIndex = recordedActionsLog.length;
+                alert("Step \"" + name + "\" started. Recording is ON. Perform the UI action in the app, then click \"End step & capture UI + APIs\".");
+                updateListUI();
+            };
+        }
+        var webuiApiEndStepBtn = listUI.querySelector("#webuiApiEndStepBtn");
+        if (webuiApiEndStepBtn) {
+            webuiApiEndStepBtn.onclick = function () {
+                var input = listUI.querySelector("#webuiApiStepNameInput");
+                var name = (input && input.value || "").trim() || webuiApiStepCaptureName || "Step" + (webuiApiSteps.length + 1);
+                var log = (window.__WEBIO__ && window.__WEBIO__.networkLog) ? window.__WEBIO__.networkLog : [];
+                var start = webuiApiStepCaptureStartIndex != null ? webuiApiStepCaptureStartIndex : log.length;
+                var entries = log.slice(start).map(function (e) {
+                    return {
+                        id: e.id,
+                        url: e.url,
+                        method: e.method,
+                        responseStatus: e.responseStatus,
+                        requestBody: e.requestBody,
+                        responseBody: e.responseBody,
+                        timestamp: e.timestamp || new Date().toISOString(),
+                        selected: true
+                    };
+                });
+                var uiStart = webuiApiStepActionsStartIndex != null ? webuiApiStepActionsStartIndex : recordedActionsLog.length;
+                var uiActions = recordedActionsLog.slice(uiStart).map(function (a) {
+                    return {
+                        logicalName: a.logicalName,
+                        objectType: a.objectType,
+                        selectorType: a.selectorType,
+                        selectorValue: a.selectorValue,
+                        actionType: a.actionType,
+                        inputValue: a.inputValue,
+                        timestamp: a.timestamp || new Date().toISOString(),
+                        selected: true
+                    };
+                });
+                webuiApiSteps.push({
+                    name: name,
+                    screenId: currentScreenId,
+                    page: window.location.href || "",
+                    pageTitle: typeof getPageTitle === "function" ? getPageTitle() : (document && document.title ? document.title.trim() : ""),
+                    elementSummary: "",
+                    uiActions: uiActions,
+                    apiEntries: entries
+                });
+                webuiApiStepCaptureStartIndex = null;
+                webuiApiStepActionsStartIndex = null;
+                webuiApiStepCaptureName = "";
+                if (input) input.value = "";
+                updateListUI();
+            };
+        }
+        listUI.querySelectorAll(".webui-api-step-remove").forEach(function (btn) {
+            btn.onclick = function () {
+                var si = parseInt(btn.getAttribute("data-step-index"), 10);
+                if (!isNaN(si) && si >= 0 && si < webuiApiSteps.length) {
+                    webuiApiSteps.splice(si, 1);
+                    updateListUI();
+                }
+            };
+        });
         var generateApiFeatureBtn = listUI.querySelector("#generateApiFeatureBtn");
         if (generateApiFeatureBtn) {
             generateApiFeatureBtn.onclick = function () {
@@ -2233,7 +2815,7 @@
         listUI.querySelectorAll(".webio-tab").forEach(function (tabBtn) {
             tabBtn.onclick = function () {
                 var tab = tabBtn.getAttribute("data-tab");
-                if (tab && (tab === "webui" || tab === "api")) {
+                if (tab && (tab === "webui" || tab === "api" || tab === "webui-api")) {
                     webioActiveTab = tab;
                     updateListUI();
                 }
@@ -2557,8 +3139,8 @@
         injectHighlightStyle();
         initializeSelectable();
         if (panelMinimized) return;
-        if (webioActiveTab === "api") {
-            updateApiListOnly();
+        if (webioActiveTab === "api" || webioActiveTab === "webui-api") {
+            if (webioActiveTab === "api") updateApiListOnly();
             return;
         }
         if (!listUI.contains(document.activeElement)) {

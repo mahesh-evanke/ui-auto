@@ -1,4 +1,23 @@
 executionMode: local
+# Viewport device for recording and testing. When set, both webio recording and WDIO runs use this
+# device's screen size. Leave unset (null) or empty for desktop/full window.
+# Supported: iPhone SE, iPhone XR, iPhone 12 Pro, iPhone 14 Pro Max, Pixel 7, Samsung Galaxy S8+,
+#   Samsung Galaxy S20 Ultra, iPad Mini, iPad Air, iPad Pro, Surface Pro 7, Surface Duo,
+#   Galaxy Z Fold 5, Asus Zenbook Fold, Samsung Galaxy A51/71, Nest Hub, Nest Hub Max.
+viewportDevice: "Nest Hub"
+# Browser to use for E2E runs. Supported: chrome, brave, firefox, safari, edge (or MicrosoftEdge).
+# Optional driver paths (leave unset or use <path> to use WDIO-managed drivers):
+#   chromedriverpath: <path>   # for Chrome / Brave (WDIO uses ChromeDriver for Brave)
+#   edgedriverpath: <path>     # for Edge (WDIO: path to msedgedriver.exe)
+# Optional webio recorder browser paths (path to browser .exe/.app, not driver):
+#   edgeBrowserPath: <path>   # Edge (msedge.exe)
+#   braveBrowserPath: <path>  # Brave (brave.exe)
+#   firefoxBrowserPath: <path> # Firefox (firefox.exe)
+#   safariBrowserPath: <path>  # Safari (macOS only; or Playwright WebKit on Windows)
+#   geckodriverpath: <path>    # for Firefox WDIO (geckodriver)
+# edgeBrowserPath: "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+# braveBrowserPath: "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
+braveBrowserPath: "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
 browserName: chrome
 # Optional: pages that use iframes. singleFrame = switch to one iframe; doubleFrame = switch to nested iframes
 pagesWithIframe:
@@ -10,14 +29,82 @@ screensNeedingExtraWait: {}
 # Example: {"126909900": "08/06/1955", "042569705": "06/19/1948"}
 ssnToDob: {}
 environment: val
-tags: "@smoke"
+tags: "@smoke or @api"
 maxInstances: 1
 reportFolder: ./reports/integrationTests
 allScriptsTimeout: 11000
 getPageTimeout: 90000
-# UI features + generated API features (e2e/api/Generate/)
-features: "./e2e/{features,api/Generate}/**/*.feature"
-valUrl: http://127.0.0.1:5500/e2e/features/support/sample-form.html
+
+# Per-suite feature globs. Generated files go in each area's "generated" folder.
+# - web:       e2e/web/features, e2e/web/locators (generated -> features/generated, locators/pages/generated)
+# - webuiApi:  e2e/webui-api/features and locators (generated subfolders)
+# - api:       e2e/api/features (Swagger -> api/features/generated)
+# - webuiApi:  Web UI + API “true E2E” flows
+# - api:       API-only features (Swagger-generated + manual)
+# - db:        database verification features
+suites:
+  web:
+    features:
+      - "./e2e/features/web/features/**/*.feature"
+      - "./e2e/generated/web/features/**/*.feature"
+    tags: "@smoke and not @api"
+  webuiApi:
+    features:
+      - "./e2e/features/end-to-end/features/**/*.feature"
+      - "./e2e/generated/end-to-end/features/**/*.feature"
+    tags: "@webui-api"
+  api:
+    features:
+      - "./e2e/features/api/features/**/*.feature"
+      - "./e2e/generated/api/features/**/*.feature"
+    tags: "@api"
+  db:
+    features:
+      - "./e2e/features/db/features/**/*.feature"
+      - "./e2e/generated/db/features/**/*.feature"
+    tags: "@database"
+
+# Fallback glob when TEST_SUITE is not set.
+features:
+  - "./e2e/features/**/features/**/*.feature"
+  - "./e2e/generated/**/features/**/*.feature"
+valUrl: http://127.0.0.1:5500/e2e/support/sample-form.html
 devUrl: http://localhost:4200/
 standaloneUrl: http://localhost:4200/
 openBrowser: false
+# Database for Gherkin SQL verification steps (Then the database table ... should have ...).
+# PostgreSQL connection is read only from this config – credentials are never hardcoded in code.
+db:
+  type: pgsql
+  host: localhost
+  port: 5432
+  user: postgres
+  password: surya
+  database: house_billing
+
+# Mobile (Appium) settings for `e2e/config/wdio.mobile.conf.ts`
+# Android is fully supported; "Could not connect to Bidi protocol" in logs is expected and harmless.
+# You can also override via env vars:
+# - MOBILE_PLATFORM (Android|iOS)
+# - MOBILE_BROWSER (Chrome|Safari)
+# - MOBILE_DEVICE_NAME, MOBILE_UDID, MOBILE_PLATFORM_VERSION, MOBILE_AUTOMATION
+# - APPIUM_HOST, APPIUM_PORT, APPIUM_PATH
+# - ANDROID_SDK_ROOT or ANDROID_HOME (required for Android); or set mobile.androidSdkRoot below
+mobile:
+  platformName: Android
+  browserName: Chrome
+  automationName: UiAutomator2
+  deviceName: Android Emulator
+  # Android SDK path (required for Android). Uncomment and set to your SDK location if env vars are not set.
+  androidSdkRoot: "C:\\Users\\ksvreddy\\AppData\\Local\\Android\\Sdk"
+  # udid: "<udid>"
+  # platformVersion: "14"
+  appiumHost: 127.0.0.1
+  appiumPort: 4723
+  # Appium 2 default base path is "/"
+  appiumPath: /
+  newCommandTimeout: 120
+  noReset: true
+  # Optional: override URL on mobile when the step uses localhost/127.0.0.1. Leave unset to use the
+  # step URL (e.g. Vite app on 3000 → emulator will open http://10.0.2.2:3000/).
+  # baseUrl: http://127.0.0.1:5500/e2e/support/sample-form.html

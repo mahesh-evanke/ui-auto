@@ -332,6 +332,6 @@ export class FeatureFileReport {
 
 
 const featureFileReport = new FeatureFileReport();
-const featureFileFolder: string = 'e2e/features';
+const featureFileFolder: string = 'e2e/web/features';
 const tagNames = ["@CCEWe ~@Smoketest", "@NewClaim ~@dev-deploy @Smoketest"]
 featureFileReport.checkReport(featureFileFolder, tagNames);

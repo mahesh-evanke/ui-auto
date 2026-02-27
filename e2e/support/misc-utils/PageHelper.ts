@@ -240,8 +240,15 @@ export class PageConfigHelper {
         await ElementHelper.click(await PageConfigHelper.findElement('Next', true));
     }
 
+    /** On Appium/mobile, Bidi is disabled so browsingContextGetTree is missing; skip frame switch to avoid errors. */
+    static async safeSwitchToParentFrame() {
+        if (typeof (browser as any).browsingContextGetTree === 'function') {
+            await browser.switchToParentFrame();
+        }
+    }
+
     public     static async changeFrame() {
-        await browser.switchToParentFrame();
+        await PageConfigHelper.safeSwitchToParentFrame();
         try {
             const configPath = path.join(process.cwd(), 'e2e', 'config', 'config.yaml');
             if (fs.existsSync(configPath)) {

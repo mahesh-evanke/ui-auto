@@ -89,7 +89,7 @@ async function main() {
             consumerRoot: typeof options.consumerRoot === 'string' ? path.resolve(options.consumerRoot) : undefined,
             force: options.force === true,
         });
-        console.log('E2E structure created. Edit e2e/config/config.yaml, e2e/locators, and e2e/features, then run: npx ui-auto run');
+        console.log('E2E structure created. Edit e2e/config/config.yaml, e2e/web/locators, and e2e/web/features, then run: npx ui-auto run');
         process.exit(0);
         return;
     }

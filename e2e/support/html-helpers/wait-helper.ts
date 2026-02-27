@@ -74,7 +74,7 @@ export class WaitHelper {
                     timeout: timeout
                 }).then(() => true, () => false);
 
-                await browser.switchToParentFrame();
+                await PageConfigHelper.safeSwitchToParentFrame();
 
                 if (isDisplayed) {
                     return true;
@@ -143,7 +143,7 @@ export class WaitHelper {
             let isClickable = await browser.waitUntil(EC.elementToBeClickable(targetElement), {
                 timeout: timeout
             }).then(() => true, () => false);
-            await browser.switchToParentFrame();
+            await PageConfigHelper.safeSwitchToParentFrame();
 
             if (isClickable) {
                 return true;
@@ -243,13 +243,13 @@ export class WaitHelper {
         message = CommonPageValidations.shouldBeVisible) {
         for (var i = 0; i < attempts; ++i) {
             try {
-                await browser.switchToParentFrame();
+                await PageConfigHelper.safeSwitchToParentFrame();
                 await WaitHelper.getInstance().waitForElement($(frame));
                 await browser.switchToFrame(await $(frame));
                 let isDisplayed = browser.waitUntil(EC.visibilityOf($("//*[text()[contains(.,'" + targetElementText + "')]]")), {
                     timeout: timeout
                 }).then(() => true, () => false);
-                await browser.switchToParentFrame();
+                await PageConfigHelper.safeSwitchToParentFrame();
                 if (isDisplayed) {
                     return true;
                 } else {
@@ -264,16 +264,19 @@ export class WaitHelper {
     public async waitForPageTitle(screenName: string) {
         let title = await PageConfigHelper.findTitle(screenName);
         if (title != 'Element not found in JSON') {
-            await browser.switchToParentFrame();
+            const useClassicOnly = typeof (browser as any).browsingContextGetTree !== 'function';
+            if (!useClassicOnly) {
+                await PageConfigHelper.safeSwitchToParentFrame();
+            }
             await this.waitForTitle(Object.values(title)[0]);
-            if (Object.keys(title).length == 2) {
+            if (Object.keys(title).length == 2 && !useClassicOnly) {
                 if (screenName == "Person Info" || screenName == "Contact Info" || screenName == "Marriage" || screenName == "Add Marriage"|| screenName == "Advance Designation") {
                     await WaitHelper.getInstance().waitForFrameElementToBeVisible(Object.values(title)[1], '<iframe />');
-                    await browser.switchToParentFrame();
+                    await PageConfigHelper.safeSwitchToParentFrame();
                     await browser.switchToFrame(await $('<iframe />'));
                 }
                 await this.waitForPageLabel(Object.values(title)[1]);
-                await browser.switchToParentFrame();
+                await PageConfigHelper.safeSwitchToParentFrame();
             }
             const expectedTitle = Object.values(title)[0] as string;
             const actualTitle = await browser.getTitle();

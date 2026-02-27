@@ -1,7 +1,0 @@
-{
-  "Help": [
-    "xpath",
-    "//*[@id=\"help-link\"]"
-  ],
-  "Page Heading": ["id", "page-heading"]
-}

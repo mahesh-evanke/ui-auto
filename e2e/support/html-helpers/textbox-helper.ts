@@ -34,6 +34,10 @@ export class TextboxHelper {
     public static async sendKeys(locator: WebdriverIO.Element,
         value: string,
         sendEnter = false) {
+        // Mobile friendly: ensure the input is in view before interacting.
+        try {
+            await locator.scrollIntoView();
+        } catch { /* ignore */ }
         await WaitHelper.getInstance().waitForElementToBeDisplayed(locator);
         await this.clearText(locator);
         await locator.setValue(value);

@@ -60,8 +60,14 @@ function resolveBrowserName(cfg, browserOverride) {
         return 'internet explorer';
     if (browserName === 'CHROME')
         return 'chrome';
+    if (browserName === 'BRAVE')
+        return 'chrome'; // Brave is Chromium-based; use ChromeDriver
     if (browserName === 'EDGE')
         return 'MicrosoftEdge';
+    if (browserName === 'FIREFOX')
+        return 'firefox';
+    if (browserName === 'SAFARI')
+        return 'safari';
     return browserName.toLowerCase();
 }
 function applyDriverEnv(cfg, browserName) {
@@ -74,6 +80,11 @@ function applyDriverEnv(cfg, browserName) {
         const p = String(cfg.edgedriverpath ?? '');
         if (p && p !== '<path>')
             process.env['EDGEDRIVER_PATH'] = p;
+    }
+    if (browserName === 'firefox') {
+        const p = String(cfg.geckodriverpath ?? '');
+        if (p && p !== '<path>')
+            process.env['GECKODRIVER_FILEPATH'] = p;
     }
 }
 function selectFeaturesByTags(featureGlob, tagsCsv, consumerRoot) {
@@ -126,7 +137,7 @@ function buildWdioConfig(opts = {}) {
     if (!baseUrl) {
         throw new Error(`Invalid environment '${environment}'. Could not resolve baseUrl from config.yaml.`);
     }
-    const featureGlob = String(cfg.features ?? './e2e/features/**/*.feature');
+    const featureGlob = String(cfg.features ?? './e2e/web/features/**/*.feature');
     const tagsCsv = String(opts.overrides?.tags ?? cfg.tags ?? '');
     const featuresFiles = selectFeaturesByTags(featureGlob, tagsCsv, consumerRoot);
     const maxInstances = Number(opts.overrides?.maxInstances ?? cfg.maxInstances ?? 1);
@@ -142,6 +153,14 @@ function buildWdioConfig(opts = {}) {
         protocol = 'https';
     }
     const stepdefsGlob = path.join(path.resolve(__dirname, '..'), 'stepdefinitions', '**', '*.js');
+    const isBrave = String(cfg.browserName ?? '').toUpperCase() === 'BRAVE';
+    const braveBrowserPath = isBrave && cfg.braveBrowserPath && cfg.braveBrowserPath !== '<path>'
+        ? cfg.braveBrowserPath
+        : isBrave && process.platform === 'win32'
+            ? 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe'
+            : isBrave && process.platform === 'darwin'
+                ? '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser'
+                : null;
     const baseCapability = {
         maxInstances,
         browserName,
@@ -152,8 +171,17 @@ function buildWdioConfig(opts = {}) {
             : {}),
         ...(browserName === 'chrome' &&
             cfg.chromedriverpath &&
-            cfg.chromedriverpath !== '<path>'
+            cfg.chromedriverpath !== '<path>' &&
+            !isBrave
             ? { 'wdio:chromedriverOptions': { binary: cfg.chromedriverpath } }
+            : {}),
+        ...(browserName === 'chrome' && isBrave && braveBrowserPath
+            ? { 'goog:chromeOptions': { binary: braveBrowserPath } }
+            : {}),
+        ...(browserName === 'firefox' &&
+            cfg.geckodriverpath &&
+            cfg.geckodriverpath !== '<path>'
+            ? { 'wdio:geckodriverOptions': { binary: cfg.geckodriverpath } }
             : {}),
         'e34:l_testName': cfg.seleniumBoxTestName,
         'e34:video': cfg.seleniumBoxVideoSw,

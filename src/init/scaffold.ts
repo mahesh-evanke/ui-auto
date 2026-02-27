@@ -16,7 +16,7 @@ maxInstances: 1
 reportFolder: ./reports/integrationTests
 allScriptsTimeout: 11000
 getPageTimeout: 40000
-features: "./e2e/features/**/*.feature"
+features: "./e2e/web/features/**/*.feature"
 valUrl: http://localhost:4200/
 devUrl: http://localhost:4200/
 standaloneUrl: http://localhost:4200/
@@ -61,9 +61,9 @@ export function scaffold(opts: ScaffoldOptions = {}): void {
 
   const dirs = [
     path.join(root, 'e2e', 'config'),
-    path.join(root, 'e2e', 'features'),
-    path.join(root, 'e2e', 'locators'),
-    path.join(root, 'e2e', 'locators', 'pages'),
+    path.join(root, 'e2e', 'web', 'features'),
+    path.join(root, 'e2e', 'web', 'locators'),
+    path.join(root, 'e2e', 'web', 'locators', 'pages'),
   ];
 
   for (const d of dirs) {
@@ -72,10 +72,10 @@ export function scaffold(opts: ScaffoldOptions = {}): void {
 
   const files: Array<{ path: string; content: string }> = [
     { path: path.join(root, 'e2e', 'config', 'config.yaml'), content: DEFAULT_CONFIG_YAML },
-    { path: path.join(root, 'e2e', 'locators', 'common.json'), content: DEFAULT_COMMON_JSON },
-    { path: path.join(root, 'e2e', 'locators', 'pages.json'), content: DEFAULT_PAGES_JSON },
-    { path: path.join(root, 'e2e', 'locators', 'pages', 'Login Page.json'), content: DEFAULT_LOGIN_PAGE_JSON },
-    { path: path.join(root, 'e2e', 'features', 'login.feature'), content: DEFAULT_LOGIN_FEATURE },
+    { path: path.join(root, 'e2e', 'web', 'locators', 'common.json'), content: DEFAULT_COMMON_JSON },
+    { path: path.join(root, 'e2e', 'web', 'locators', 'pages.json'), content: DEFAULT_PAGES_JSON },
+    { path: path.join(root, 'e2e', 'web', 'locators', 'pages', 'Login Page.json'), content: DEFAULT_LOGIN_PAGE_JSON },
+    { path: path.join(root, 'e2e', 'web', 'features', 'login.feature'), content: DEFAULT_LOGIN_FEATURE },
   ];
 
   const stepDefsContent = fs.existsSync(STEP_DEFS_PATH) ? fs.readFileSync(STEP_DEFS_PATH, 'utf8') : '';

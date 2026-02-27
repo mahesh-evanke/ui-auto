@@ -5,11 +5,14 @@
     "devDependencies": {
         "@cucumber/gherkin": "^37.0.1",
         "@cucumber/messages": "^31.2.0",
+        "@wdio/appium-service": "^9.24.0",
         "@wdio/cli": "9.23.2",
         "@wdio/cucumber-framework": "9.23.2",
         "@wdio/globals": "9.23.0",
         "@wdio/local-runner": "9.23.2",
         "@wdio/types": "9.23.2",
+        "appium": "^3.2.0",
+        "appium-uiautomator2-driver": "^6.9.0",
         "chai": "^4.5.0",
         "chai-as-promised": "^7.1.1",
         "edgedriver": "^6.1.1",
@@ -20,7 +23,10 @@
         "multiple-cucumber-html-reporter": "^1.18.3",
         "papaparse": "^5.5.2",
         "pdf-extraction": "^1.0.2",
+        "pg": "^8.18.0",
+        "playwright": "^1.49.0",
         "puppeteer": "^23.11.1",
+        "sql.js": "^1.11.0",
         "ts-node": "^10.9.2",
         "typescript": "^5.0.0",
         "underscore": "^1.13.7",
@@ -31,13 +37,16 @@
     "scripts": {
         "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"var fs=require('fs');var d='dist/src/init';fs.mkdirSync(d,{recursive:true});fs.copyFileSync('LEGACY_GHERKIN_STEP_DEFINITIONS.md',d+'/GHERKIN_STEP_DEFINITIONS.md');\"",
         "wdio": "wdio run ./e2e/config/wdio.conf.ts",
+        "wdio:mobile": "wdio run ./e2e/config/wdio.mobile.conf.ts",
         "checkNum": "ts-node e2e/support/misc-utils/FeatureFileReport.ts",
         "test": "ts-node ./e2e/config/test.ts",
         "repl": "npx wdio repl chrome",
         "webio": "node webio/cli.js",
+        "webio:record-mobile": "node webio/record-mobile.js",
         "webio:generate": "node webio/generate-feature.js",
         "webio:generate-locators": "node webio/generate-locators-and-features.js",
-        "webio:generate-api": "node webio/generate-api-feature.js"
+        "webio:generate-api": "node webio/generate-api-feature.js",
+        "webio:generate-from-swagger": "node webio/generate-from-swagger.js"
     },
     "dependencies": {
         "axios": "^1.13.5"

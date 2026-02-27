@@ -132,6 +132,11 @@ export class ElementHelper {
     }
 
     static async click(targetElement: WebdriverIO.Element) {
+        // Mobile/webview friendly: ensure element is in view before waiting/clicking.
+        // Best-effort only — failures should not change existing behavior.
+        try {
+            await this.scrollElementToMiddle(targetElement);
+        } catch { /* ignore */ }
         await WaitHelper.getInstance().waitForElementToBeClickable(targetElement);
         return targetElement.click();
     }
@@ -166,6 +171,9 @@ export class ElementHelper {
      */
     static async clickRadioOrCheckbox(element: WebdriverIO.Element) {
         const clickable = await this.getClickableTargetForRadioOrCheckbox(element) as WebdriverIO.Element;
+        try {
+            await this.scrollElementToMiddle(clickable);
+        } catch { /* ignore */ }
         await WaitHelper.getInstance().waitForElementToBeClickable(clickable);
         return clickable.click();
     }

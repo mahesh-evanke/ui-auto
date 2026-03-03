@@ -40,8 +40,8 @@ exports.sdkHooks = void 0;
 /**
  * Central WDIO+Cucumber hooks owned by the SDK.
  *
- * These are used by the SDK's generated WDIO config to ensure consistent behavior across
- * all consumer projects (logging, screenshots, injection, cookie handling).
+ * Used by the SDK's WDIO config for consistent behavior across consumer projects
+ * (logging, screenshots, injection, cookie handling).
  */
 const wdio_cucumberjs_json_reporter_1 = __importDefault(require("wdio-cucumberjs-json-reporter"));
 const moment_1 = __importDefault(require("moment"));
@@ -60,10 +60,9 @@ function getReportFolder() {
 async function takeFailureScreenshot(num) {
     const reportFolder = getReportFolder();
     const png = (await browser.takeScreenshot());
-    let dir = path.join(reportFolder, 'screenshot');
-    if (!fs.existsSync(dir)) {
+    const dir = path.join(reportFolder, 'screenshot');
+    if (!fs.existsSync(dir))
         fs.mkdirSync(dir, { recursive: true });
-    }
     const time = (0, moment_1.default)(new Date()).format('yyyy_MM_DD__HH_mm_ss_SSS');
     const filePath = path.join(dir, `failure_${time}_${num}.png`);
     fs.writeFileSync(filePath, Buffer.from(png, 'base64'));
@@ -80,11 +79,9 @@ exports.sdkHooks = {
             await browser.deleteAllCookies();
         }
         PageContext_1.PageContext.setScenarioName(scenarioName);
-        // initial injection at scenario start
         await (0, injectAutomationOverlay_1.injectAutomationOverlay)({ scenarioName, status: 'running' });
     },
     beforeCommand: async function (commandName) {
-        // Re-inject on navigations / reloads; safe to call frequently (idempotent).
         const cmd = String(commandName ?? '').toLowerCase();
         if (cmd === 'url' || cmd === 'navigateto' || cmd === 'refresh') {
             await (0, injectAutomationOverlay_1.injectAutomationOverlay)({

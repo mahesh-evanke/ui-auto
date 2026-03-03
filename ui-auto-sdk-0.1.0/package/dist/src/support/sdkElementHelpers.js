@@ -57,9 +57,6 @@ async function sdkSendKeys(element, value, sendEnter = false) {
 async function sdkClearText(element) {
     await element.clearValue();
 }
-/**
- * Wait for page to be ready using pages.json metadata (title, optional label).
- */
 async function sdkWaitForPage(screenName) {
     const meta = (0, locatorProvider_1.getPageMetadata)(screenName);
     if (!meta) {

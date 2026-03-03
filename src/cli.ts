@@ -9,6 +9,7 @@
 import * as path from 'path';
 import { runTests } from './runner/runTests';
 import { scaffold } from './init/scaffold';
+import { runInteractive } from './init/postinstallInteractive';
 import { CONSUMER_ROOT_ENV } from './config/consumerRoot';
 
 function parseArgs(argv: string[]): { command: string; options: Record<string, string | boolean> } {
@@ -49,14 +50,27 @@ async function main(): Promise<void> {
   setEnvFromOptions(options);
 
   if (command === 'init') {
-    scaffold({
-      consumerRoot:
-        typeof options.consumerRoot === 'string' ? path.resolve(options.consumerRoot) : undefined,
-      force: options.force === true,
-    });
-    console.log(
-      'E2E structure created. Edit e2e/config/config.yaml, e2e/web/locators, and e2e/web/features, then run: npx ui-auto run'
-    );
+    const root = typeof options.consumerRoot === 'string' ? path.resolve(options.consumerRoot) : process.cwd();
+    process.env.UI_AUTO_POSTINSTALL_ROOT = root;
+
+    const hasFlags = options.web !== undefined || options.api !== undefined || options.webuiApi !== undefined || options.db !== undefined || options.mobile !== undefined;
+    if (hasFlags) {
+      scaffold({
+        consumerRoot: root,
+        force: options.force === true,
+        web: options.web === true,
+        api: options.api === true,
+        webuiApi: options.webuiApi === true || options['webui-api'] === true,
+        db: options.db === true,
+        mobile: options.mobile === true,
+      });
+      console.log('E2E structure created. Run: npx ui-auto run');
+    } else if (process.stdin.isTTY) {
+      await runInteractive();
+    } else {
+      scaffold({ consumerRoot: root, force: options.force === true });
+      console.log('E2E structure created. Run: npx ui-auto init --web --api to add more, or npx ui-auto run');
+    }
     process.exit(0);
     return;
   }

@@ -37,8 +37,7 @@ exports.SdkPageHelper = void 0;
 /**
  * SDK-owned page helper.
  *
- * This replaces the repo-local `e2e/support/misc-utils/PageHelper.ts` for SDK builds.
- * It resolves locators from the consumer project via `src/locators/locatorProvider`.
+ * Resolves locators from the consumer project via locatorProvider.
  */
 const EC = __importStar(require("wdio-wait-for"));
 const locatorProvider_1 = require("../locators/locatorProvider");

@@ -44,36 +44,42 @@ exports.clearLocatorCache = clearLocatorCache;
 /**
  * Locator provider for consumer projects.
  *
- * Consumers own locators under:
- * - e2e/locators/common.json
- * - e2e/locators/pages.json
- * - e2e/locators/pages/*.json
+ * Consumers own locators under (e.g. e2e/web/locators or e2e/webui-api/locators):
+ * - <locators-root>/common.json
+ * - <locators-root>/pages.json
+ * - <locators-root>/pages/*.json
  *
  * The SDK resolves these from the consumer root (cwd by default).
  */
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const consumerRoot_1 = require("../config/consumerRoot");
+const cache = new Map();
 function readJsonFile(filePath) {
     const raw = fs.readFileSync(filePath, 'utf8');
     return JSON.parse(raw);
 }
-const cache = new Map();
 function getCachedJson(filePath) {
     const abs = path.resolve(filePath);
     const existing = cache.get(abs);
     if (existing)
         return existing;
-    if (!fs.existsSync(abs)) {
+    if (!fs.existsSync(abs))
         throw new Error(`Locator JSON not found: ${abs}`);
-    }
     const json = readJsonFile(abs);
     cache.set(abs, json);
     return json;
 }
 function resolveLocatorsDir(opts) {
     const root = opts?.consumerRoot ? path.resolve(opts.consumerRoot) : (0, consumerRoot_1.getConsumerRoot)();
-    return path.join(root, 'e2e', 'locators');
+    const override = process.env.UI_AUTO_LOCATORS_ROOT;
+    if (override && override.trim().length > 0) {
+        // Allow either absolute or project-relative override (e.g. "./e2e/web/locators").
+        return path.isAbsolute(override)
+            ? override
+            : path.join(root, override);
+    }
+    return path.join(root, 'e2e', 'web', 'locators');
 }
 function resolveCommonLocatorsPath(opts) {
     return path.join(resolveLocatorsDir(opts), 'common.json');
@@ -84,12 +90,58 @@ function resolvePagesMapPath(opts) {
 function resolvePageLocatorsPath(pageName, opts) {
     return path.join(resolveLocatorsDir(opts), 'pages', `${pageName}.json`);
 }
+function normalizeLocatorValue(val) {
+    if (!Array.isArray(val))
+        return val;
+    if (val.length >= 2 && (val.length === 2 || (val.length === 6 && val[0] && val[1]))) {
+        return [String(val[0]), String(val[1])];
+    }
+    return undefined;
+}
+function normalizeKeyForLookup(name) {
+    // Backward-compatible, minimal normalization for generated keys:
+    // - Ignore whitespace differences (e.g., "Type of Service *" vs "TypeofService*")
+    // - Ignore case
+    return String(name ?? '')
+        .toLowerCase()
+        .replace(/\s+/g, '');
+}
+function getLocatorByFuzzyKey(json, elementName) {
+    const norm = normalizeKeyForLookup(elementName);
+    if (!norm)
+        return undefined;
+    const keys = Object.keys(json);
+    for (const k of keys) {
+        if (normalizeKeyForLookup(k) === norm) {
+            return normalizeLocatorValue(json[k]) ?? json[k];
+        }
+    }
+    return undefined;
+}
 function getElementLocator(elementName, opts) {
     const common = Boolean(opts.common);
     const pageName = opts.pageName;
-    const filePath = common ? resolveCommonLocatorsPath(opts) : resolvePageLocatorsPath(String(pageName ?? ''), opts);
-    const json = getCachedJson(filePath);
-    return json[elementName];
+    if (common) {
+        const filePath = resolveCommonLocatorsPath(opts);
+        const json = getCachedJson(filePath);
+        const direct = normalizeLocatorValue(json[elementName]) ?? json[elementName];
+        if (direct)
+            return direct;
+        return getLocatorByFuzzyKey(json, elementName);
+    }
+    const pagesPath = resolvePageLocatorsPath(String(pageName ?? ''), opts);
+    if (fs.existsSync(pagesPath)) {
+        const json = getCachedJson(pagesPath);
+        const val = json[elementName];
+        const normalized = normalizeLocatorValue(val);
+        if (normalized)
+            return normalized;
+        const direct = val;
+        if (direct)
+            return direct;
+        return getLocatorByFuzzyKey(json, elementName);
+    }
+    throw new Error(`Locator JSON not found: ${pagesPath}`);
 }
 function getPageUrlByName(pageName, opts) {
     const json = getCachedJson(resolvePagesMapPath(opts));
@@ -98,10 +150,6 @@ function getPageUrlByName(pageName, opts) {
         return v;
     return '';
 }
-/**
- * Read page metadata from pages.json (title/label for "User is on X screen").
- * Expects format: "ScreenName": [{"title": "...", "label": "..."}]
- */
 function getPageMetadata(screenName, opts) {
     const json = getCachedJson(resolvePagesMapPath(opts));
     const raw = json[screenName];

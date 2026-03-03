@@ -9,8 +9,6 @@ const cucumber_framework_1 = require("@wdio/cucumber-framework");
 const PageContext_1 = require("../support/PageContext");
 const PageHelper_1 = require("../support/PageHelper");
 const sdkElementHelpers_1 = require("../support/sdkElementHelpers");
-const chai = require('chai').use(require('chai-as-promised'));
-const assert = chai.assert;
 (0, cucumber_framework_1.Given)('User navigates to {string} URL', async (url) => {
     await browser.url(url);
 });

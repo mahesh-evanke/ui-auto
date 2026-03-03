@@ -35,11 +35,35 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 /**
  * Runs on `npm install` when the SDK is added as a dependency.
- * Creates e2e folder structure and default config/locators/feature in the consumer project.
- * Uses INIT_CWD (project root where npm install was run); skips overwriting existing files.
+ * - TTY (interactive): spawns interactive setup so user can select Web, API, Web+API, Mobile.
+ * - Non-TTY (CI/IDE): scaffolds minimal structure (config + base folders only).
  */
 const path = __importStar(require("path"));
+const fs = __importStar(require("fs"));
+const child_process_1 = require("child_process");
 const scaffold_1 = require("./scaffold");
-const consumerRoot = process.env.INIT_CWD || process.cwd();
-(0, scaffold_1.scaffold)({ consumerRoot: path.resolve(consumerRoot), force: false });
+const consumerRoot = path.resolve(process.env.INIT_CWD || process.cwd());
+const opts = { consumerRoot, force: false };
+const scriptDir = __dirname;
+const interactiveScript = path.join(scriptDir, 'postinstallInteractive.js');
+const isCI = Boolean(process.env.CI || process.env.CONTINUOUS_INTEGRATION || process.env.GITHUB_ACTIONS);
+const canInteractive = (process.stdin.isTTY || process.stdout.isTTY) && !isCI;
+if (canInteractive && fs.existsSync(interactiveScript)) {
+    process.env.UI_AUTO_POSTINSTALL_ROOT = consumerRoot;
+    process.env.INIT_CWD = consumerRoot;
+    const result = (0, child_process_1.spawnSync)(process.execPath, [interactiveScript], {
+        stdio: 'inherit',
+        env: process.env,
+        cwd: consumerRoot,
+    });
+    if (result.status !== 0) {
+        (0, scaffold_1.scaffold)(opts);
+    }
+}
+else {
+    (0, scaffold_1.scaffold)(opts);
+    if (!process.stdin.isTTY) {
+        console.log('\nUI Auto: Run "npx ui-auto init" to select test types (Web, API, Web+API, Database, Mobile).\n');
+    }
+}
 //# sourceMappingURL=postinstall.js.map

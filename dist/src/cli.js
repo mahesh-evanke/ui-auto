@@ -44,6 +44,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const path = __importStar(require("path"));
 const runTests_1 = require("./runner/runTests");
 const scaffold_1 = require("./init/scaffold");
+const postinstallInteractive_1 = require("./init/postinstallInteractive");
 const consumerRoot_1 = require("./config/consumerRoot");
 function parseArgs(argv) {
     const args = argv.slice(2);
@@ -85,11 +86,28 @@ async function main() {
     const { command, options } = parseArgs(process.argv);
     setEnvFromOptions(options);
     if (command === 'init') {
-        (0, scaffold_1.scaffold)({
-            consumerRoot: typeof options.consumerRoot === 'string' ? path.resolve(options.consumerRoot) : undefined,
-            force: options.force === true,
-        });
-        console.log('E2E structure created. Edit e2e/config/config.yaml, e2e/web/locators, and e2e/web/features, then run: npx ui-auto run');
+        const root = typeof options.consumerRoot === 'string' ? path.resolve(options.consumerRoot) : process.cwd();
+        process.env.UI_AUTO_POSTINSTALL_ROOT = root;
+        const hasFlags = options.web !== undefined || options.api !== undefined || options.webuiApi !== undefined || options.db !== undefined || options.mobile !== undefined;
+        if (hasFlags) {
+            (0, scaffold_1.scaffold)({
+                consumerRoot: root,
+                force: options.force === true,
+                web: options.web === true,
+                api: options.api === true,
+                webuiApi: options.webuiApi === true || options['webui-api'] === true,
+                db: options.db === true,
+                mobile: options.mobile === true,
+            });
+            console.log('E2E structure created. Run: npx ui-auto run');
+        }
+        else if (process.stdin.isTTY) {
+            await (0, postinstallInteractive_1.runInteractive)();
+        }
+        else {
+            (0, scaffold_1.scaffold)({ consumerRoot: root, force: options.force === true });
+            console.log('E2E structure created. Run: npx ui-auto init --web --api to add more, or npx ui-auto run');
+        }
         process.exit(0);
         return;
     }

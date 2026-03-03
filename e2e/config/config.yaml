@@ -4,7 +4,7 @@ executionMode: local
 # Supported: iPhone SE, iPhone XR, iPhone 12 Pro, iPhone 14 Pro Max, Pixel 7, Samsung Galaxy S8+,
 #   Samsung Galaxy S20 Ultra, iPad Mini, iPad Air, iPad Pro, Surface Pro 7, Surface Duo,
 #   Galaxy Z Fold 5, Asus Zenbook Fold, Samsung Galaxy A51/71, Nest Hub, Nest Hub Max.
-viewportDevice: "Nest Hub"
+viewportDevice: ""
 # Browser to use for E2E runs. Supported: chrome, brave, firefox, safari, edge (or MicrosoftEdge).
 # Optional driver paths (leave unset or use <path> to use WDIO-managed drivers):
 #   chromedriverpath: <path>   # for Chrome / Brave (WDIO uses ChromeDriver for Brave)

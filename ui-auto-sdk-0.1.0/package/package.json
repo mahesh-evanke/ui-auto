@@ -5,10 +5,12 @@
     "main": "dist/src/index.js",
     "types": "dist/src/index.d.ts",
     "bin": {
-        "ui-auto": "dist/src/cli.js"
+        "ui-auto": "dist/src/cli.js",
+        "webio": "webio/cli.js"
     },
     "files": [
         "dist/src",
+        "webio",
         "README.md",
         "GHERKIN_STEP_DEFINITIONS.md"
     ],
@@ -34,7 +36,10 @@
         "underscore": "^1.13.7",
         "wdio-cucumberjs-json-reporter": "^6.0.1",
         "wdio-wait-for": "^2.2.6",
-        "edgedriver": "^6.1.1"
+        "edgedriver": "^6.1.1",
+        "puppeteer": "^23.11.1",
+        "playwright": "^1.49.0",
+        "openai": "^6.25.0"
     },
     "devDependencies": {
         "ts-node": "^10.9.2",

@@ -10,7 +10,6 @@ exports.injectAutomationOverlay = injectAutomationOverlay;
 async function injectAutomationOverlay(state = {}) {
     const scenarioName = state.scenarioName ?? '';
     const status = state.status ?? 'running';
-    // Note: function body runs in browser context; it must not reference Node globals.
     await browser.execute((sName, sStatus) => {
         const overlayId = '__ui_auto_overlay__';
         const styleId = '__ui_auto_overlay_style__';

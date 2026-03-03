@@ -3,5 +3,7 @@
 !*.*
 /e2e/report/*
 /e2e/reportHtml/*
+/reports/*
 package-lock.json
 /node_modules/*
+*.feature

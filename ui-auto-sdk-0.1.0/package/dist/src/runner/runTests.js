@@ -39,9 +39,7 @@ exports.runTests = runTests;
  */
 const path = __importStar(require("path"));
 async function runTests(opts = {}) {
-    const wdioConfigPath = opts.wdioConfigPath ?? path.join(__dirname, 'wdio.sdk.conf.js'); // compiled path in dist
-    // WebdriverIO Launcher API expects a config file path.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const wdioConfigPath = opts.wdioConfigPath ?? path.join(__dirname, 'wdio.sdk.conf.js');
     const { Launcher } = require('@wdio/cli');
     const launcher = new Launcher(wdioConfigPath, opts.wdioArgs ?? {});
     const exitCode = await launcher.run();

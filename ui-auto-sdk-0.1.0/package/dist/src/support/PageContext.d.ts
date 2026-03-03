@@ -4,8 +4,8 @@
  * Keeps only what the SDK needs across hooks and step definitions.
  */
 export declare class PageContext {
-    private static currentPage;
-    private static scenarioName;
+    static currentPage: string;
+    static scenarioName: string;
     static sameScenarioSwitch: boolean;
     static setCurrentPage(pageName: string): void;
     static getCurrentPage(): string;

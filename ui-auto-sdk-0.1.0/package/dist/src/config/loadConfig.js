@@ -52,10 +52,10 @@ let cachedConfigPath = null;
 function resolveDefaultConfigPath(consumerRoot) {
     return path.join(consumerRoot, 'e2e', 'config', 'config.yaml');
 }
-function loadFrameworkConfig(opts) {
-    const consumerRoot = opts?.consumerRoot ? path.resolve(opts.consumerRoot) : (0, consumerRoot_1.getConsumerRoot)();
-    const configPath = opts?.configPath ? path.resolve(opts.configPath) : resolveDefaultConfigPath(consumerRoot);
-    if (!opts?.bustCache && cachedConfig && cachedConfigPath === configPath) {
+function loadFrameworkConfig(opts = {}) {
+    const consumerRoot = opts.consumerRoot ? path.resolve(opts.consumerRoot) : (0, consumerRoot_1.getConsumerRoot)();
+    const configPath = opts.configPath ? path.resolve(opts.configPath) : resolveDefaultConfigPath(consumerRoot);
+    if (!opts.bustCache && cachedConfig && cachedConfigPath === configPath) {
         return cachedConfig;
     }
     if (!fs.existsSync(configPath)) {
@@ -69,7 +69,7 @@ function loadFrameworkConfig(opts) {
     }
     cachedConfig = parsed;
     cachedConfigPath = configPath;
-    return parsed;
+    return cachedConfig;
 }
 function getExecutionMode(config) {
     const mode = String(config.executionMode ?? '').toUpperCase();

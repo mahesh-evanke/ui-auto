@@ -1,14 +1,8 @@
 {
-  "Login Page": [
+  "generated/Login Page": [
     {
-      "title": "Your App",
-      "label": "Login"
-    }
-  ],
-  "Home": [
-    {
-      "title": "Your App",
-      "label": "Home"
+      "title": "Misha House Billing",
+      "label": "Misha House Billing"
     }
   ]
 }

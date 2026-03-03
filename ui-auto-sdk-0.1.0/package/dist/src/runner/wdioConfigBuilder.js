@@ -37,13 +37,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildWdioConfig = buildWdioConfig;
-/**
- * WDIO config builder for the SDK.
- *
- * This reads the consumer-owned config.yaml and produces a WDIO configuration object
- * that points to SDK-owned step definitions.
- */
-const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const glob = __importStar(require("glob"));
 const multiple_cucumber_html_reporter_1 = require("multiple-cucumber-html-reporter");
@@ -67,8 +60,14 @@ function resolveBrowserName(cfg, browserOverride) {
         return 'internet explorer';
     if (browserName === 'CHROME')
         return 'chrome';
+    if (browserName === 'BRAVE')
+        return 'chrome'; // Brave is Chromium-based; use ChromeDriver
     if (browserName === 'EDGE')
         return 'MicrosoftEdge';
+    if (browserName === 'FIREFOX')
+        return 'firefox';
+    if (browserName === 'SAFARI')
+        return 'safari';
     return browserName.toLowerCase();
 }
 function applyDriverEnv(cfg, browserName) {
@@ -81,6 +80,11 @@ function applyDriverEnv(cfg, browserName) {
         const p = String(cfg.edgedriverpath ?? '');
         if (p && p !== '<path>')
             process.env['EDGEDRIVER_PATH'] = p;
+    }
+    if (browserName === 'firefox') {
+        const p = String(cfg.geckodriverpath ?? '');
+        if (p && p !== '<path>')
+            process.env['GECKODRIVER_FILEPATH'] = p;
     }
 }
 function selectFeaturesByTags(featureGlob, tagsCsv, consumerRoot) {
@@ -113,7 +117,7 @@ function selectFeaturesByTags(featureGlob, tagsCsv, consumerRoot) {
             }
         }
         catch {
-            // ignore malformed/unparseable feature files
+            /* ignore */
         }
     }
     return Array.from(new Set(selected));
@@ -122,16 +126,18 @@ function buildWdioConfig(opts = {}) {
     const consumerRoot = opts.consumerRoot ? path.resolve(opts.consumerRoot) : (0, consumerRoot_1.getConsumerRoot)();
     const cfg = (0, loadConfig_1.loadFrameworkConfig)({ configPath: opts.configPath, consumerRoot });
     const executionMode = (0, loadConfig_1.getExecutionMode)(cfg);
-    const environment = String(opts.overrides?.env ?? (0, loadConfig_1.getEnvironment)(cfg));
+    const environment = String(opts.overrides?.env ?? (0, loadConfig_1.getEnvironment)(cfg)).toUpperCase();
     const reportFolderRaw = String(cfg.reportFolder ?? './reports/integrationTests');
-    const reportFolder = path.isAbsolute(reportFolderRaw) ? reportFolderRaw : path.join(consumerRoot, reportFolderRaw);
+    const reportFolder = path.isAbsolute(reportFolderRaw)
+        ? reportFolderRaw
+        : path.join(consumerRoot, reportFolderRaw);
     const browserName = resolveBrowserName(cfg, opts.overrides?.browser);
     applyDriverEnv(cfg, browserName);
-    const baseUrl = resolveBaseUrl(cfg, environment.toUpperCase());
+    const baseUrl = resolveBaseUrl(cfg, environment);
     if (!baseUrl) {
         throw new Error(`Invalid environment '${environment}'. Could not resolve baseUrl from config.yaml.`);
     }
-    const featureGlob = String(cfg.features ?? './e2e/features/**/*.feature');
+    const featureGlob = String(cfg.features ?? './e2e/web/features/**/*.feature');
     const tagsCsv = String(opts.overrides?.tags ?? cfg.tags ?? '');
     const featuresFiles = selectFeaturesByTags(featureGlob, tagsCsv, consumerRoot);
     const maxInstances = Number(opts.overrides?.maxInstances ?? cfg.maxInstances ?? 1);
@@ -146,17 +152,36 @@ function buildWdioConfig(opts = {}) {
         port = 443;
         protocol = 'https';
     }
-    // SDK-owned step defs (compiled JS). This file sits in dist/src/runner/*.js when built.
-    // We want dist/src/stepdefinitions/**/*.js.
     const stepdefsGlob = path.join(path.resolve(__dirname, '..'), 'stepdefinitions', '**', '*.js');
+    const isBrave = String(cfg.browserName ?? '').toUpperCase() === 'BRAVE';
+    const braveBrowserPath = isBrave && cfg.braveBrowserPath && cfg.braveBrowserPath !== '<path>'
+        ? cfg.braveBrowserPath
+        : isBrave && process.platform === 'win32'
+            ? 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe'
+            : isBrave && process.platform === 'darwin'
+                ? '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser'
+                : null;
     const baseCapability = {
         maxInstances,
         browserName,
-        ...(browserName === 'MicrosoftEdge' && cfg.edgedriverpath && cfg.edgedriverpath !== '<path>'
+        ...(browserName === 'MicrosoftEdge' &&
+            cfg.edgedriverpath &&
+            cfg.edgedriverpath !== '<path>'
             ? { 'wdio:edgedriverOptions': { binary: cfg.edgedriverpath } }
             : {}),
-        ...(browserName === 'chrome' && cfg.chromedriverpath && cfg.chromedriverpath !== '<path>'
+        ...(browserName === 'chrome' &&
+            cfg.chromedriverpath &&
+            cfg.chromedriverpath !== '<path>' &&
+            !isBrave
             ? { 'wdio:chromedriverOptions': { binary: cfg.chromedriverpath } }
+            : {}),
+        ...(browserName === 'chrome' && isBrave && braveBrowserPath
+            ? { 'goog:chromeOptions': { binary: braveBrowserPath } }
+            : {}),
+        ...(browserName === 'firefox' &&
+            cfg.geckodriverpath &&
+            cfg.geckodriverpath !== '<path>'
+            ? { 'wdio:geckodriverOptions': { binary: cfg.geckodriverpath } }
             : {}),
         'e34:l_testName': cfg.seleniumBoxTestName,
         'e34:video': cfg.seleniumBoxVideoSw,
@@ -181,12 +206,7 @@ function buildWdioConfig(opts = {}) {
         connectionRetryCount: 3,
         ...(executionMode === 'LOCAL'
             ? {}
-            : {
-                hostname,
-                port,
-                path: '/wd/hub/',
-                protocol,
-            }),
+            : { hostname, port, path: '/wd/hub/', protocol }),
         framework: 'cucumber',
         reporters: [['cucumberjs-json', { jsonFolder: reportFolder + '/json/', language: 'en' }]],
         cucumberOpts: {
@@ -199,7 +219,7 @@ function buildWdioConfig(opts = {}) {
             snippets: true,
             source: true,
             strict: false,
-            tagExpression: '', // feature selection handled above
+            tagExpression: '',
             timeout: cfg.getPageTimeout ?? 60000,
             ignoreUndefinedDefinitions: false,
         },
@@ -208,15 +228,6 @@ function buildWdioConfig(opts = {}) {
         afterScenario: hooks_1.sdkHooks.afterScenario,
         onPrepare: function () {
             startTime = new Date();
-            // Clear report folder json/screenshot on run start (optional)
-            try {
-                if (fs.existsSync(reportFolder)) {
-                    // intentionally no recursive delete by default; keep consumer artifacts unless they configure cleanup
-                }
-            }
-            catch {
-                // ignore
-            }
         },
         onComplete: function () {
             endTime = new Date();
@@ -236,16 +247,21 @@ function buildWdioConfig(opts = {}) {
                         data: [
                             { label: 'Project', value: cfg.appName },
                             { label: 'Browser', value: browserName },
-                            { label: 'Environment', value: environment.toUpperCase() },
-                            { label: 'Execution Start Time', value: (0, moment_1.default)(startTime).format('dddd h:mma D MMM YYYY') },
-                            { label: 'Execution End Time', value: (0, moment_1.default)(endTime).format('dddd h:mma D MMM YYYY') },
+                            { label: 'Environment', value: environment },
+                            {
+                                label: 'Execution Start Time',
+                                value: (0, moment_1.default)(startTime).format('dddd h:mma D MMM YYYY'),
+                            },
+                            {
+                                label: 'Execution End Time',
+                                value: (0, moment_1.default)(endTime).format('dddd h:mma D MMM YYYY'),
+                            },
                         ],
                     },
                 });
             }
             catch (error) {
-                // eslint-disable-next-line no-console
-                console.log('Error in results report generation:' + error);
+                console.log('Error in results report generation:' + error.message);
             }
         },
     };

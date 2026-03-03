@@ -15,12 +15,14 @@
         "appium-uiautomator2-driver": "^6.9.0",
         "chai": "^4.5.0",
         "chai-as-promised": "^7.1.1",
+        "chromedriver": "^145.0.6",
         "edgedriver": "^6.1.1",
         "fs-extra": "^11.3.0",
         "glob": "^11.0.1",
         "js-yaml": "^4.1.0",
         "moment": "^2.30.1",
         "multiple-cucumber-html-reporter": "^1.18.3",
+        "openai": "^6.25.0",
         "papaparse": "^5.5.2",
         "pdf-extraction": "^1.0.2",
         "pg": "^8.18.0",
@@ -35,7 +37,7 @@
         "webdriverio": "9.23.2"
     },
     "scripts": {
-        "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"var fs=require('fs');var d='dist/src/init';fs.mkdirSync(d,{recursive:true});fs.copyFileSync('LEGACY_GHERKIN_STEP_DEFINITIONS.md',d+'/GHERKIN_STEP_DEFINITIONS.md');\"",
+        "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"var fs=require('fs');var d='dist/src/init';fs.mkdirSync(d,{recursive:true});var g='e2e/docs/GHERKIN_STEP_DEFINITIONS.md';if(fs.existsSync(g))fs.copyFileSync(g,d+'/GHERKIN_STEP_DEFINITIONS.md');var s='e2e/docs/SETUP_GUIDE.md';if(fs.existsSync(s))fs.copyFileSync(s,d+'/SETUP_GUIDE.md');var c='src/init/config-template.yaml';if(fs.existsSync(c))fs.copyFileSync(c,d+'/config-template.yaml');\"",
         "wdio": "wdio run ./e2e/config/wdio.conf.ts",
         "wdio:mobile": "wdio run ./e2e/config/wdio.mobile.conf.ts",
         "checkNum": "ts-node e2e/support/misc-utils/FeatureFileReport.ts",
@@ -46,7 +48,9 @@
         "webio:generate": "node webio/generate-feature.js",
         "webio:generate-locators": "node webio/generate-locators-and-features.js",
         "webio:generate-api": "node webio/generate-api-feature.js",
-        "webio:generate-from-swagger": "node webio/generate-from-swagger.js"
+        "webio:generate-from-swagger": "node webio/generate-from-swagger.js",
+        "webio:generate-from-url": "node webio/generate-from-url.js",
+        "pack:sdk": "npm run build && node scripts/pack-sdk.js"
     },
     "dependencies": {
         "axios": "^1.13.5"

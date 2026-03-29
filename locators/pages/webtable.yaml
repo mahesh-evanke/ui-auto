@@ -1,0 +1,12 @@
+Email Addresssss:
+  - xpath
+  - //*[@id='email']
+Login:
+  - xpath
+  - //button[normalize-space(.)='Login']
+Password:
+  - xpath
+  - //*[@id='password']
+webtable:
+  - xpath
+  - (//table[.//tr[1][contains(.,'Name')]][contains(.,'DOB')][.//td])[1]

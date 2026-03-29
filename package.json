@@ -1,0 +1,21 @@
+{
+  "name": "playwright-cucumber-framework",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright + Cucumber with custom recorder (no codegen inspector UI)",
+  "scripts": {
+    "pw": "ts-node utils/recorder.ts",
+    "generate": "node scripts/generate.js",
+    "cucumber": "cucumber-js"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^11.3.0",
+    "@playwright/test": "^1.53.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.10.0",
+    "js-yaml": "^4.1.0",
+    "playwright": "^1.53.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  }
+}

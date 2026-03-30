@@ -47,8 +47,18 @@ type QuickAssertPayload = {
   text?: string;
   /** Table logical name/id for web table assertions */
   objName?: string;
+  /** Page locator for the &lt;table&gt; (xpath tuple); written to page YAML on generate */
+  locator?: [string, string];
   /** Structured table verification config (headers + rows) */
-  tableConfig?: { tableName?: string; headers?: string[]; rows?: string[][] };
+  tableConfig?: {
+    tableName?: string;
+    headers?: string[];
+    rows?: string[][];
+    selectedColumns?: number[];
+    selectedRows?: number[];
+    /** Full matrix: row 0 = header cells, rest = data (same as Gherkin DataTable) */
+    data?: string[][];
+  };
   href?: string;
 };
 
@@ -78,6 +88,22 @@ function getInjectScript(resetOnStart: boolean): string {
   let currentHoverEl = null;
   let hoverReqSeq = 0;
   let hoverTooltipText = '';
+  let pwRecSuppressTableClickOnce = false;
+  let pwRecTableModalCleanup = null;
+
+  function cleanupWebTableModalInteraction() {
+    try {
+      if (typeof pwRecTableModalCleanup === 'function') pwRecTableModalCleanup();
+    } catch (e) {}
+    pwRecTableModalCleanup = null;
+    window.__pw_rec_activeTableEl = null;
+    try {
+      delete window.__pwRecTableCellToggle;
+    } catch (e) {
+      window.__pwRecTableCellToggle = null;
+    }
+    pwRecSuppressTableClickOnce = false;
+  }
 
   function sanitizeFileName(raw) {
     const v = String(raw || '').trim();
@@ -354,10 +380,11 @@ function getInjectScript(resetOnStart: boolean): string {
       'style',
       [
         'position:fixed',
-        'top:0',
-        'right:0',
+        'top:8px',
+        'right:8px',
+        'left:auto',
         'width:400px',
-        'height:100vh',
+        'height:calc(100vh - 16px)',
         'z-index:2147483647',
         'background:rgba(2,6,23,0.92)',
         'border-left:1px solid rgba(148,163,184,0.35)',
@@ -373,8 +400,11 @@ function getInjectScript(resetOnStart: boolean): string {
     panelHeader.setAttribute('style', ['display:flex', 'align-items:center', 'justify-content:space-between', 'gap:10px'].join(';'));
 
     const panelTitle = document.createElement('div');
-    panelTitle.textContent = 'Feature (Editable)';
-    panelTitle.setAttribute('style', ['font-weight:800', 'font-size:13px', 'color:#e5e7eb'].join(';'));
+    panelTitle.textContent = 'Feature (Editable) — drag to move';
+    panelTitle.setAttribute(
+      'style',
+      ['font-weight:800', 'font-size:12px', 'color:#e5e7eb', 'cursor:move', 'user-select:none', 'line-height:1.3'].join(';'),
+    );
 
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
@@ -409,7 +439,8 @@ function getInjectScript(resetOnStart: boolean): string {
       [
         'margin-top:10px',
         'width:100%',
-        'height:calc(100vh - 70px)',
+        'height:calc(100% - 76px)',
+        'min-height:160px',
         'resize:vertical',
         'padding:10px',
         'border-radius:12px',
@@ -459,9 +490,10 @@ function getInjectScript(resetOnStart: boolean): string {
       'style',
       [
         'position:fixed',
-        'top:64px',
-        'left:50%',
-        'transform:translateX(-50%)',
+        'top:72px',
+        'left:24px',
+        'right:auto',
+        'transform:none',
         'width:560px',
         'max-width:calc(100vw - 32px)',
         'max-height:calc(100vh - 96px)',
@@ -479,10 +511,16 @@ function getInjectScript(resetOnStart: boolean): string {
     );
 
     const objectPanelHeader = document.createElement('div');
-    objectPanelHeader.setAttribute('style', ['display:flex', 'align-items:center', 'justify-content:space-between', 'gap:10px', 'margin-bottom:10px'].join(';'));
+    objectPanelHeader.setAttribute(
+      'style',
+      ['display:flex', 'align-items:center', 'justify-content:space-between', 'gap:10px', 'margin-bottom:10px'].join(';'),
+    );
     const objectPanelTitle = document.createElement('div');
-    objectPanelTitle.textContent = 'Captured Objects';
-    objectPanelTitle.setAttribute('style', ['font-weight:800', 'font-size:13px', 'color:#e5e7eb'].join(';'));
+    objectPanelTitle.textContent = 'Captured Objects — drag to move';
+    objectPanelTitle.setAttribute(
+      'style',
+      ['font-weight:800', 'font-size:12px', 'color:#e5e7eb', 'cursor:move', 'user-select:none', 'line-height:1.3'].join(';'),
+    );
     const objectPanelClose = document.createElement('button');
     objectPanelClose.type = 'button';
     objectPanelClose.textContent = 'Close';
@@ -537,6 +575,9 @@ function getInjectScript(resetOnStart: boolean): string {
     objectPanel.appendChild(objectList);
     objectPanel.appendChild(objectFooter);
     wrapper.appendChild(objectPanel);
+
+    wireDraggableResizable(panel, panelTitle, { minW: 300, minH: 220 });
+    wireDraggableResizable(objectPanel, objectPanelTitle, { minW: 360, minH: 220 });
 
     const objectInspectorState = { rows: [] };
 
@@ -759,6 +800,79 @@ function getInjectScript(resetOnStart: boolean): string {
     return '';
   }
 
+  /** Drag handle + CSS resize (overflow:auto) for recorder popups. */
+  function wireDraggableResizable(panel, dragHandle, opts) {
+    const o = opts || {};
+    const minW = o.minW != null ? o.minW : 220;
+    const minH = o.minH != null ? o.minH : 100;
+    const enableResize = o.resize !== false;
+    if (!panel || !dragHandle || panel.getAttribute('data-pw-rec-drag-wired') === '1') return;
+    panel.setAttribute('data-pw-rec-drag-wired', '1');
+    if (enableResize) {
+      panel.style.resize = 'both';
+      panel.style.overflow = 'auto';
+      panel.style.minWidth = minW + 'px';
+      panel.style.minHeight = minH + 'px';
+      panel.style.maxWidth = o.maxW != null ? o.maxW : 'calc(100vw - 16px)';
+      panel.style.maxHeight = o.maxH != null ? o.maxH : 'calc(100vh - 16px)';
+    }
+    let dragging = false;
+    let sx = 0;
+    let sy = 0;
+    let sl = 0;
+    let st = 0;
+    const onDocMove = (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      const r = panel.getBoundingClientRect();
+      const w = r.width;
+      const h = r.height;
+      let nl = sl + dx;
+      let nt = st + dy;
+      nl = Math.max(8, nl);
+      nt = Math.max(8, nt);
+      if (nl + w > window.innerWidth - 8) nl = Math.max(8, window.innerWidth - 8 - w);
+      if (nt + h > window.innerHeight - 8) nt = Math.max(8, window.innerHeight - 8 - h);
+      panel.style.left = nl + 'px';
+      panel.style.top = nt + 'px';
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      panel.style.transform = 'none';
+    };
+    const onDocUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      document.removeEventListener('pointermove', onDocMove, true);
+      document.removeEventListener('pointerup', onDocUp, true);
+      document.removeEventListener('pointercancel', onDocUp, true);
+    };
+    dragHandle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      const t = e.target;
+      if (t && t.closest && t.closest('button,a,input,textarea,select')) return;
+      dragging = true;
+      sx = e.clientX;
+      sy = e.clientY;
+      const r = panel.getBoundingClientRect();
+      sl = r.left;
+      st = r.top;
+      panel.style.left = sl + 'px';
+      panel.style.top = st + 'px';
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      panel.style.transform = 'none';
+      if (panel.id === '__pw_rec_inspector_panel__') {
+        panel.style.width = r.width + 'px';
+        panel.style.height = Math.min(window.innerHeight - 16, r.height) + 'px';
+      }
+      document.addEventListener('pointermove', onDocMove, true);
+      document.addEventListener('pointerup', onDocUp, true);
+      document.addEventListener('pointercancel', onDocUp, true);
+      e.preventDefault();
+    });
+  }
+
   function ensureQuickAssertMenu() {
     if (document.getElementById('__pw_rec_quick_assert__')) return;
     const menu = document.createElement('div');
@@ -776,10 +890,30 @@ function getInjectScript(resetOnStart: boolean): string {
       'font-family:system-ui,Segoe UI,Roboto,sans-serif',
     ].join(';'));
 
-    const title = document.createElement('div');
-    title.textContent = 'Quick Verify';
-    title.setAttribute('style', ['font-weight:800', 'font-size:12px', 'color:#e5e7eb', 'margin:2px 6px 8px'].join(';'));
-    menu.appendChild(title);
+    const dragBar = document.createElement('div');
+    dragBar.id = '__pw_rec_quick_assert_drag__';
+    dragBar.textContent = 'Quick Verify — drag to move · resize corner to adjust';
+    dragBar.setAttribute(
+      'style',
+      [
+        'cursor:move',
+        'user-select:none',
+        'font-weight:800',
+        'font-size:11px',
+        'color:#e5e7eb',
+        'padding:8px 10px',
+        'margin:-8px -8px 8px -8px',
+        'border-radius:12px 12px 0 0',
+        'background:rgba(0,0,0,0.28)',
+        'border-bottom:1px solid rgba(148,163,184,0.2)',
+        'line-height:1.35',
+      ].join(';'),
+    );
+    menu.appendChild(dragBar);
+    const hint = document.createElement('div');
+    hint.textContent = 'Inside a table: verify this cell’s text, or open Web table verification.';
+    hint.setAttribute('style', ['font-size:10px', 'color:#94a3b8', 'margin:0 6px 8px', 'line-height:1.3'].join(';'));
+    menu.appendChild(hint);
 
     const mkBtn = (label) => {
       const b = document.createElement('button');
@@ -803,9 +937,9 @@ function getInjectScript(resetOnStart: boolean): string {
       return b;
     };
 
-    const btnText = mkBtn('Verify selected text');
+    const btnText = mkBtn('Verify text');
     btnText.id = '__pw_rec_quick_assert_text__';
-    const btnTable = mkBtn('Verify web table (requires id)');
+    const btnTable = mkBtn('Web table verification');
     btnTable.id = '__pw_rec_quick_assert_table__';
     const btnClose = mkBtn('Close');
     btnClose.id = '__pw_rec_quick_assert_close__';
@@ -815,6 +949,8 @@ function getInjectScript(resetOnStart: boolean): string {
     menu.appendChild(btnClose);
     const uiRoot = document.getElementById('pw-recorder-ui-root') || document.body;
     uiRoot.appendChild(menu);
+
+    wireDraggableResizable(menu, dragBar, { minW: 220, minH: 160 });
 
     const hide = () => { try { menu.style.display = 'none'; } catch (e) {} };
     btnClose.addEventListener('click', hide);
@@ -826,7 +962,7 @@ function getInjectScript(resetOnStart: boolean): string {
     }, true);
   }
 
-  function showQuickAssertMenu(x, y, selectedText, tableName) {
+  function showQuickAssertMenu(x, y, selectedText, opts) {
     ensureQuickAssertMenu();
     const menu = document.getElementById('__pw_rec_quick_assert__');
     if (!menu) return;
@@ -834,25 +970,38 @@ function getInjectScript(resetOnStart: boolean): string {
     const btnTable = document.getElementById('__pw_rec_quick_assert_table__');
     const btnClose = document.getElementById('__pw_rec_quick_assert_close__');
 
+    const o = opts && typeof opts === 'object' ? opts : {};
+    const tableForMenu = o.tableEl || null;
+    const cellTextForAssert = String(o.cellText || '').trim();
     const st = String(selectedText || '').trim();
-    const tn = String(tableName || '').trim();
+    const suggestedName = String(o.suggestedName || '').trim();
 
-    if (btnText) btnText.disabled = !(st && st.length);
-    if (btnTable) btnTable.disabled = !(tn && tn.length);
+    const textToRecord = cellTextForAssert || st;
+    const canVerifyText = !!(textToRecord && textToRecord.length);
+    const canWebTable = !!(tableForMenu && tableForMenu.tagName && String(tableForMenu.tagName).toLowerCase() === 'table');
 
     if (btnText) {
-      btnText.onclick = async () => {
-        try {
-          if (window.pwRecorderAddAssertion) await window.pwRecorderAddAssertion({ kind: 'text', text: st, href: location.href });
-        } catch (e) {}
+      btnText.textContent = cellTextForAssert ? 'Verify cell text' : 'Verify selected text';
+      btnText.disabled = !canVerifyText;
+      btnText.onclick = () => {
+        if (!canVerifyText) return;
         menu.style.display = 'none';
+        const mx = parseFloat(menu.style.left);
+        const my = parseFloat(menu.style.top);
+        const px = Number.isFinite(mx) ? mx + 8 : x;
+        const py = Number.isFinite(my) ? my + 36 : y;
+        showTextConfirmTooltip(px, py, textToRecord);
       };
     }
 
     if (btnTable) {
-      btnTable.onclick = async () => {
+      btnTable.disabled = !canWebTable;
+      btnTable.onclick = () => {
         try {
-          if (window.pwRecorderAddAssertion) await window.pwRecorderAddAssertion({ kind: 'web_table', objName: tn, href: location.href });
+          if (canWebTable) {
+            const sug = suggestedName || (tableForMenu.id ? String(tableForMenu.id) : '');
+            openTableConfigModal(tableForMenu, sug);
+          }
         } catch (e) {}
         menu.style.display = 'none';
       };
@@ -906,7 +1055,7 @@ function getInjectScript(resetOnStart: boolean): string {
         'z-index:2147483647',
         'display:none',
         'min-width:260px',
-        'max-width:340px',
+        'max-width:min(560px,92vw)',
         'padding:10px',
         'border-radius:12px',
         'background:rgba(2,6,23,0.95)',
@@ -914,17 +1063,35 @@ function getInjectScript(resetOnStart: boolean): string {
         'box-shadow:0 10px 30px rgba(0,0,0,0.35)',
         'font-family:system-ui,Segoe UI,Roboto,sans-serif',
         'color:#e5e7eb',
+        'box-sizing:border-box',
       ].join(';'),
     );
 
-    const msg = document.createElement('div');
-    msg.id = '__pw_rec_text_confirm_msg__';
-    msg.setAttribute('style', ['font-weight:800', 'font-size:12px', 'margin-bottom:8px'].join(';'));
-    msg.textContent = 'Add verification for this text?';
+    const dragBar = document.createElement('div');
+    dragBar.id = '__pw_rec_text_confirm_drag__';
+    dragBar.textContent = 'Add verification for this text? — drag to move · resize to adjust';
+    dragBar.setAttribute(
+      'style',
+      [
+        'cursor:move',
+        'user-select:none',
+        'font-weight:800',
+        'font-size:12px',
+        'margin:-10px -10px 10px -10px',
+        'padding:10px 12px',
+        'border-radius:12px 12px 0 0',
+        'background:rgba(0,0,0,0.35)',
+        'border-bottom:1px solid rgba(148,163,184,0.22)',
+        'line-height:1.35',
+      ].join(';'),
+    );
 
     const preview = document.createElement('div');
     preview.id = '__pw_rec_text_confirm_preview__';
-    preview.setAttribute('style', ['font-size:12px', 'opacity:0.92', 'margin-bottom:10px', 'white-space:pre-wrap'].join(';'));
+    preview.setAttribute(
+      'style',
+      ['font-size:12px', 'opacity:0.92', 'margin-bottom:10px', 'white-space:pre-wrap', 'word-break:break-word'].join(';'),
+    );
 
     const row = document.createElement('div');
     row.setAttribute('style', ['display:flex', 'gap:8px', 'justify-content:flex-end'].join(';'));
@@ -958,12 +1125,14 @@ function getInjectScript(resetOnStart: boolean): string {
     row.appendChild(cancel);
     row.appendChild(yes);
 
-    tip.appendChild(msg);
+    tip.appendChild(dragBar);
     tip.appendChild(preview);
     tip.appendChild(row);
 
     const uiRoot = document.getElementById('pw-recorder-ui-root') || document.body;
     uiRoot.appendChild(tip);
+
+    wireDraggableResizable(tip, dragBar, { minW: 260, minH: 170 });
   }
 
   function showTextConfirmTooltip(x, y, capturedText) {
@@ -1018,6 +1187,130 @@ function getInjectScript(resetOnStart: boolean): string {
     const slash2 = String(dd) + '/' + String(mm) + '/' + String(yyyy);
     if (t === iso || t === slash || t === slash2) return '<CURRENT_DATE>';
     return t;
+  }
+
+  function listBodyTrs(te) {
+    if (!te) return [];
+    try {
+      const tb = te.querySelectorAll('tbody tr');
+      if (tb && tb.length) return Array.prototype.slice.call(tb);
+      const all = Array.prototype.slice.call(te.querySelectorAll('tr'));
+      return all.length > 1 ? all.slice(1) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function isHeaderTr(te, tr) {
+    if (!te || !tr) return false;
+    try {
+      if (tr.closest && tr.closest('thead')) return true;
+      const first = te.querySelector('tr');
+      return first === tr;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function bodyRowIndexFromTr(te, tr) {
+    if (!tr || isHeaderTr(te, tr)) return -1;
+    const list = listBodyTrs(te);
+    const idx = list.indexOf(tr);
+    return idx;
+  }
+
+  function buildTableLocatorTuple(te) {
+    if (!te) return ['xpath', ''];
+    try {
+      const tag = String(te.tagName || '').toLowerCase();
+      if (tag !== 'table') return ['xpath', ''];
+      const id = String(te.id || '').trim();
+      if (id) return ['xpath', '//*[@id=' + JSON.stringify(id) + ']'];
+      const tables = document.querySelectorAll('table');
+      for (let i = 0; i < tables.length; i++) {
+        if (tables[i] === te) return ['xpath', '(//table)[' + String(i + 1) + ']'];
+      }
+    } catch (e) {}
+    return ['xpath', '//table'];
+  }
+
+  function findTableCellAtPoint(te, clientX, clientY) {
+    if (!te || !te.querySelectorAll) return null;
+    try {
+      const cells = te.querySelectorAll('td,th');
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        const r = cell.getBoundingClientRect();
+        if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) return cell;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function tableSelectionKeyFromCell(te, cell) {
+    const tr = cell && cell.closest ? cell.closest('tr') : null;
+    if (!tr || !te || !te.contains(tr)) return null;
+    const ci = cell.cellIndex;
+    if (ci === undefined || ci === null || ci < 0) return null;
+    const br = bodyRowIndexFromTr(te, tr);
+    return String(br) + ',' + String(ci);
+  }
+
+  function getTableCellBySelectionKey(te, key) {
+    const parts = String(key || '').split(',');
+    const r = Number(parts[0]);
+    const c = Number(parts[1]);
+    if (!Number.isFinite(r) || !Number.isFinite(c) || c < 0) return null;
+    try {
+      if (r === -1) {
+        const hr = te.querySelector('thead tr') || te.querySelector('tr');
+        if (!hr || !hr.cells || !hr.cells[c]) return null;
+        return hr.cells[c];
+      }
+      const body = listBodyTrs(te);
+      const tr = body[r];
+      if (!tr || !tr.cells || !tr.cells[c]) return null;
+      return tr.cells[c];
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearTableSelectionHighlights(te) {
+    if (!te || !te.querySelectorAll) return;
+    try {
+      const els = te.querySelectorAll('td[data-pw-rec-tsel],th[data-pw-rec-tsel]');
+      for (let i = 0; i < els.length; i++) {
+        const el = els[i];
+        el.removeAttribute('data-pw-rec-tsel');
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+        el.style.backgroundColor = '';
+      }
+    } catch (e) {}
+  }
+
+  function applyTableSelectionHighlights(te, selectedCells) {
+    clearTableSelectionHighlights(te);
+    if (!te || !selectedCells || !selectedCells.forEach) return;
+    const outline = '2px solid rgba(37,99,235,0.95)';
+    const bg = 'rgba(59,130,246,0.24)';
+    selectedCells.forEach((k) => {
+      const cell = getTableCellBySelectionKey(te, k);
+      if (!cell) return;
+      cell.setAttribute('data-pw-rec-tsel', '1');
+      cell.style.outline = outline;
+      cell.style.outlineOffset = '-2px';
+      cell.style.backgroundColor = bg;
+    });
+  }
+
+  function escapeHtmlTablePreview(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function extractTableData(tableEl) {
@@ -1107,8 +1400,9 @@ function getInjectScript(resetOnStart: boolean): string {
       [
         'position:fixed',
         'top:56px',
-        'left:50%',
-        'transform:translateX(-50%)',
+        'left:24px',
+        'right:auto',
+        'transform:none',
         'z-index:2147483647',
         'display:none',
         'width:760px',
@@ -1122,12 +1416,33 @@ function getInjectScript(resetOnStart: boolean): string {
         'padding:14px',
         'font-family:system-ui,Segoe UI,Roboto,sans-serif',
         'color:#0f172a',
+        'box-sizing:border-box',
       ].join(';'),
     );
 
     const title = document.createElement('div');
-    title.textContent = 'Web Table Verification';
-    title.setAttribute('style', ['font-weight:900', 'font-size:18px', 'margin-bottom:10px'].join(';'));
+    title.textContent = 'Web Table Verification — drag title to move';
+    title.setAttribute(
+      'style',
+      [
+        'font-weight:900',
+        'font-size:17px',
+        'margin:-14px -14px 8px -14px',
+        'padding:12px 14px',
+        'cursor:move',
+        'user-select:none',
+        'background:rgba(15,23,42,0.06)',
+        'border-bottom:1px solid rgba(0,0,0,0.08)',
+        'border-radius:14px 14px 0 0',
+      ].join(';'),
+    );
+    const blurb = document.createElement('div');
+    blurb.textContent =
+      'Click cells on the page table to toggle selection, or left-drag across a rectangle (adds to selection). Selected cells are highlighted on the table. The generated step uses your table’s column titles for the first line (so the test knows which columns to check); only the cell values you selected appear as data rows below. Reset clears selection. Drag this panel’s title to move; resize from the corner.';
+    blurb.setAttribute(
+      'style',
+      ['font-size:12px', 'color:#475569', 'line-height:1.35', 'margin-bottom:10px', 'max-width:720px'].join(';'),
+    );
 
     const error = document.createElement('div');
     error.id = '__pw_rec_table_error__';
@@ -1156,30 +1471,22 @@ function getInjectScript(resetOnStart: boolean): string {
     nameRow.appendChild(nameLabel);
     nameRow.appendChild(nameInput);
 
-    const selectorsWrap = document.createElement('div');
-    selectorsWrap.setAttribute('style', ['display:grid', 'grid-template-columns:1fr 1fr', 'gap:12px', 'margin-top:8px'].join(';'));
-
-    const makeBox = (headingText, listId) => {
-      const box = document.createElement('div');
-      box.setAttribute('style', ['border:1px solid rgba(0,0,0,0.12)', 'border-radius:12px', 'padding:10px', 'min-height:180px'].join(';'));
-      const heading = document.createElement('div');
-      heading.textContent = headingText;
-      heading.setAttribute('style', ['font-weight:900', 'font-size:13px', 'margin-bottom:8px'].join(';'));
-      const list = document.createElement('div');
-      list.id = listId;
-      list.setAttribute('style', ['display:flex', 'flex-direction:column', 'gap:6px', 'max-height:260px', 'overflow:auto'].join(';'));
-      box.appendChild(heading);
-      box.appendChild(list);
-      return box;
-    };
-
-    const colBox = makeBox('Column Selection (required)', '__pw_rec_table_cols__');
-    const rowBox = makeBox('Row Selection (required)', '__pw_rec_table_rows__');
-    selectorsWrap.appendChild(colBox);
-    selectorsWrap.appendChild(rowBox);
+    const selectionSection = document.createElement('div');
+    selectionSection.setAttribute(
+      'style',
+      ['border:1px solid rgba(0,0,0,0.12)', 'border-radius:12px', 'padding:10px', 'margin-top:8px', 'background:#fafafa'].join(';'),
+    );
+    const selectionHeading = document.createElement('div');
+    selectionHeading.textContent = 'Your selection';
+    selectionHeading.setAttribute('style', ['font-weight:900', 'font-size:13px', 'margin-bottom:8px', 'color:#0f172a'].join(';'));
+    const selectionVisual = document.createElement('div');
+    selectionVisual.id = '__pw_rec_table_selection_visual__';
+    selectionVisual.setAttribute('style', ['max-height:220px', 'overflow:auto'].join(';'));
+    selectionSection.appendChild(selectionHeading);
+    selectionSection.appendChild(selectionVisual);
 
     const previewTitle = document.createElement('div');
-    previewTitle.textContent = 'Gherkin Preview';
+    previewTitle.textContent = 'Generated step (Gherkin)';
     previewTitle.setAttribute('style', ['font-weight:900', 'font-size:13px', 'margin-top:12px', 'margin-bottom:8px'].join(';'));
     const preview = document.createElement('pre');
     preview.id = '__pw_rec_table_preview__';
@@ -1219,7 +1526,7 @@ function getInjectScript(resetOnStart: boolean): string {
       );
       return b;
     };
-    const saveBtn = makeBtn('Save');
+    const saveBtn = makeBtn('Confirm');
     saveBtn.id = '__pw_rec_table_confirm__';
     const resetBtn = makeBtn('Reset');
     resetBtn.id = '__pw_rec_table_reset__';
@@ -1230,15 +1537,18 @@ function getInjectScript(resetOnStart: boolean): string {
     actions.appendChild(saveBtn);
 
     panel.appendChild(title);
+    panel.appendChild(blurb);
     panel.appendChild(error);
     panel.appendChild(nameRow);
-    panel.appendChild(selectorsWrap);
+    panel.appendChild(selectionSection);
     panel.appendChild(previewTitle);
     panel.appendChild(preview);
     panel.appendChild(actions);
 
     const uiRoot = document.getElementById('pw-recorder-ui-root') || document.body;
     uiRoot.appendChild(panel);
+
+    wireDraggableResizable(panel, title, { minW: 400, minH: 320 });
   }
 
   function openTableConfigModal(tableEl, suggestedName) {
@@ -1246,52 +1556,108 @@ function getInjectScript(resetOnStart: boolean): string {
     const modal = document.getElementById('__pw_rec_table_panel__');
     const nameInput = document.getElementById('__pw_rec_table_name__');
     const error = document.getElementById('__pw_rec_table_error__');
-    const colList = document.getElementById('__pw_rec_table_cols__');
-    const rowList = document.getElementById('__pw_rec_table_rows__');
+    const selectionVisual = document.getElementById('__pw_rec_table_selection_visual__');
     const preview = document.getElementById('__pw_rec_table_preview__');
     const confirm = document.getElementById('__pw_rec_table_confirm__');
     const reset = document.getElementById('__pw_rec_table_reset__');
     const cancel = document.getElementById('__pw_rec_table_cancel__');
-    if (!modal || !nameInput || !error || !colList || !rowList || !preview || !confirm || !reset || !cancel) return;
+    if (!modal || !nameInput || !error || !selectionVisual || !preview || !confirm || !reset || !cancel) return;
+
+    cleanupWebTableModalInteraction();
 
     const tableData = extractTableData(tableEl);
     const headers = Array.isArray(tableData.headers) ? tableData.headers : [];
     const rows = Array.isArray(tableData.rows) ? tableData.rows : [];
-    const selectedCols = new Set();
-    const selectedRows = new Set();
+    const selectedCells = new Set();
 
     nameInput.value = String(suggestedName || '').trim() || String((tableEl && tableEl.id) || '').trim() || '';
     error.style.display = 'none';
     error.textContent = '';
 
     const hide = () => {
+      cleanupWebTableModalInteraction();
       modal.style.display = 'none';
     };
     cancel.onclick = hide;
 
-    const selectedIndicesSorted = (setObj) =>
-      Array.from(setObj)
-        .map((v) => Number(v))
-        .filter((n) => Number.isFinite(n))
-        .sort((a, b) => a - b);
+    const readDomCellNormalized = (rowKey, ci) => {
+      const cell = getTableCellBySelectionKey(tableEl, String(rowKey) + ',' + String(ci));
+      if (!cell) return '';
+      return normalizeTableCellText(cell.innerText || cell.textContent || '');
+    };
 
     const getSelectedProjection = () => {
-      const colIdx = selectedIndicesSorted(selectedCols);
-      const rowIdx = selectedIndicesSorted(selectedRows);
-      const selHeaders = colIdx.map((i) => headers[i]).filter((h) => h !== undefined);
-      const selRowsRaw = rowIdx.map((ri) => {
-        const row = rows[ri] || [];
-        return colIdx.map((ci) => normalizeTableCellText(row[ci] !== undefined ? row[ci] : ''));
+      const parsed = [];
+      selectedCells.forEach((k) => {
+        const p = String(k).split(',');
+        const r = Number(p[0]);
+        const c = Number(p[1]);
+        if (Number.isFinite(r) && Number.isFinite(c) && c >= 0) parsed.push({ r, c });
       });
-      const normalizedHeaders = selHeaders.map((h) => normalizeTableCellText(h));
-      const selRows = selRowsRaw.filter((row) => {
-        if (row.length !== normalizedHeaders.length) return true;
-        for (let i = 0; i < normalizedHeaders.length; i++) {
-          if (normalizeTableCellText(row[i] ?? '') !== normalizeTableCellText(normalizedHeaders[i] ?? '')) return true;
+      if (!parsed.length) {
+        return { colIdx: [], rowIdx: [], selHeaders: [], selRows: [] };
+      }
+      const bodyPoints = parsed.filter((x) => x.r >= 0);
+      if (!bodyPoints.length) {
+        return { colIdx: [], rowIdx: [], selHeaders: [], selRows: [] };
+      }
+      const colIdx = [...new Set(bodyPoints.map((x) => x.c))].sort((a, b) => a - b);
+      const selHeaders = colIdx.map((ci) => readDomCellNormalized(-1, ci) || (headers[ci] !== undefined ? headers[ci] : ''));
+      const bodyRowIndexes = [...new Set(bodyPoints.map((x) => x.r))].sort((a, b) => a - b);
+      const selRows = bodyRowIndexes.map((br) =>
+        colIdx.map((ci) => {
+          const k = String(br) + ',' + String(ci);
+          if (!selectedCells.has(k)) return '';
+          return readDomCellNormalized(br, ci);
+        }),
+      );
+      return { colIdx, rowIdx: bodyRowIndexes, selHeaders, selRows };
+    };
+
+    const renderSelectionVisual = () => {
+      if (!selectedCells.size) {
+        selectionVisual.innerHTML =
+          '<div style="font-size:12px;color:#64748b;padding:8px 4px;">Click or drag on the table on the page to select cells. Highlights show on the table.</div>';
+        return;
+      }
+      const parsed = [];
+      selectedCells.forEach((k) => {
+        const p = String(k).split(',');
+        const r = Number(p[0]);
+        const c = Number(p[1]);
+        if (Number.isFinite(r) && Number.isFinite(c) && c >= 0) parsed.push({ r, c });
+      });
+      const colIdx = [...new Set(parsed.map((x) => x.c))].sort((a, b) => a - b);
+      const rowOrder = [...new Set(parsed.map((x) => x.r))].sort((a, b) => a - b);
+      let html = '<table style="border-collapse:collapse;width:100%;font-size:12px;">';
+      for (let ri = 0; ri < rowOrder.length; ri++) {
+        const r = rowOrder[ri];
+        html += '<tr>';
+        const rowLabel = r === -1 ? 'Header' : 'Row ' + String(r + 1);
+        html +=
+          '<td style="border:1px solid #cbd5e1;padding:4px 8px;background:#e2e8f0;font-weight:700;white-space:nowrap;">' +
+          escapeHtmlTablePreview(rowLabel) +
+          '</td>';
+        for (let ci = 0; ci < colIdx.length; ci++) {
+          const c = colIdx[ci];
+          const k = String(r) + ',' + String(c);
+          const on = selectedCells.has(k);
+          let txt = '';
+          if (on) {
+            const raw = readDomCellNormalized(r, c);
+            txt = raw || (r === -1 && headers[c] != null ? String(headers[c]) : '');
+          }
+          html +=
+            '<td style="border:1px solid #cbd5e1;padding:6px 8px;' +
+            (on ? 'background:#dbeafe;' : 'background:#f8fafc;') +
+            '">' +
+            escapeHtmlTablePreview(txt) +
+            '</td>';
         }
-        return false;
-      });
-      return { colIdx, rowIdx, selHeaders, selRows };
+        html += '</tr>';
+      }
+      html += '</table>';
+      selectionVisual.innerHTML = html;
     };
 
     const renderPreview = () => {
@@ -1300,36 +1666,19 @@ function getInjectScript(resetOnStart: boolean): string {
       const pipe = (cells) => '| ' + cells.map((c) => String(c ?? '')).join(' | ') + ' |';
       const lines = [];
       lines.push('When verify data from "' + (tableName || 'TableName') + '" web table');
-      if (selHeaders.length) {
+      if (selHeaders.length && selRows.length) {
         lines.push('  ' + pipe(selHeaders));
         for (const row of selRows) lines.push('  ' + pipe(row));
       }
       preview.textContent = lines.join('\\n');
+      renderSelectionVisual();
     };
 
-    const mkCheckRow = (id, label, onToggle) => {
-      const row = document.createElement('label');
-      row.setAttribute('style', ['display:flex', 'align-items:center', 'gap:8px', 'font-size:12px', 'cursor:pointer'].join(';'));
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.value = String(id);
-      cb.addEventListener('change', () => onToggle(cb.checked));
-      const txt = document.createElement('span');
-      txt.textContent = label;
-      row.appendChild(cb);
-      row.appendChild(txt);
-      return row;
-    };
-
-    colList.innerHTML = '';
-    rowList.innerHTML = '';
+    selectionVisual.innerHTML = '';
 
     if (!headers.length || !rows.length) {
-      const msg = document.createElement('div');
-      msg.textContent = 'No data found';
-      msg.setAttribute('style', ['font-size:12px', 'font-weight:800', 'color:#64748b'].join(';'));
-      colList.appendChild(msg.cloneNode(true));
-      rowList.appendChild(msg);
+      selectionVisual.innerHTML =
+        '<div style="font-size:12px;font-weight:800;color:#64748b;">No data found</div>';
       preview.textContent = 'No data found';
       modal.style.display = 'block';
       confirm.onclick = () => {
@@ -1342,36 +1691,168 @@ function getInjectScript(resetOnStart: boolean): string {
       return;
     }
 
-    for (let i = 0; i < headers.length; i++) {
-      const item = mkCheckRow(i, String(headers[i] || ('Column ' + String(i + 1))), (checked) => {
-        if (checked) selectedCols.add(String(i));
-        else selectedCols.delete(String(i));
-        error.style.display = 'none';
-        renderPreview();
-      });
-      colList.appendChild(item);
-    }
+    window.__pw_rec_activeTableEl = tableEl;
+    const prevTableUserSelect = tableEl.style.userSelect;
+    try {
+      tableEl.style.userSelect = 'none';
+    } catch (e) {}
 
-    for (let i = 0; i < rows.length; i++) {
-      const item = mkCheckRow(i, 'Row ' + String(i + 1), (checked) => {
-        if (checked) selectedRows.add(String(i));
-        else selectedRows.delete(String(i));
-        error.style.display = 'none';
-        renderPreview();
-      });
-      rowList.appendChild(item);
-    }
-
-    reset.onclick = () => {
-      selectedCols.clear();
-      selectedRows.clear();
-      const cbs = modal.querySelectorAll('input[type="checkbox"]');
-      for (let i = 0; i < cbs.length; i++) {
-        const cb = cbs[i];
-        cb.checked = false;
-      }
+    const refreshSelectionUi = () => {
+      applyTableSelectionHighlights(tableEl, selectedCells);
       error.style.display = 'none';
       renderPreview();
+    };
+
+    window.__pwRecTableCellToggle = function (cell) {
+      try {
+        if (!cell || !tableEl.contains(cell)) return;
+        const k = tableSelectionKeyFromCell(tableEl, cell);
+        if (!k) return;
+        if (selectedCells.has(k)) selectedCells.delete(k);
+        else selectedCells.add(k);
+        refreshSelectionUi();
+      } catch (e) {}
+    };
+
+    let dragActive = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragStartCell = null;
+    let tableDragPointerId = null;
+    let tableDragDocMove = null;
+    let tableDragDocUp = null;
+    const DRAG_THRESH = 5;
+
+    const getCellGridPos = (te, cell) => {
+      const tr = cell.closest('tr');
+      if (!tr || !te.contains(tr)) return null;
+      const ci = cell.cellIndex;
+      if (ci === undefined || ci === null || ci < 0) return null;
+      return { col: ci, bodyRow: bodyRowIndexFromTr(te, tr) };
+    };
+
+    const mergeRectCells = (cellA, cellB) => {
+      if (!cellA || !cellB) return;
+      const posA = getCellGridPos(tableEl, cellA);
+      const posB = getCellGridPos(tableEl, cellB);
+      if (!posA || !posB) return;
+      const trA = cellA.closest('tr');
+      const trB = cellB.closest('tr');
+      if (!trA || !trB) return;
+      let allTr;
+      try {
+        allTr = Array.prototype.slice.call(tableEl.querySelectorAll('tr'));
+      } catch (e) {
+        return;
+      }
+      const riA = allTr.indexOf(trA);
+      const riB = allTr.indexOf(trB);
+      if (riA < 0 || riB < 0) return;
+      const rLo = Math.min(riA, riB);
+      const rHi = Math.max(riA, riB);
+      const cMin = Math.min(posA.col, posB.col);
+      const cMax = Math.max(posA.col, posB.col);
+      for (let ri = rLo; ri <= rHi; ri++) {
+        const tr = allTr[ri];
+        if (!tr || !tr.cells) continue;
+        for (let ci = cMin; ci <= cMax; ci++) {
+          const cell = tr.cells[ci];
+          if (!cell) continue;
+          const k = tableSelectionKeyFromCell(tableEl, cell);
+          if (k) selectedCells.add(k);
+        }
+      }
+    };
+
+    const detachTableDragDocListeners = () => {
+      if (tableDragDocMove) {
+        try {
+          document.removeEventListener('pointermove', tableDragDocMove, true);
+        } catch (e) {}
+        tableDragDocMove = null;
+      }
+      if (tableDragDocUp) {
+        try {
+          document.removeEventListener('pointerup', tableDragDocUp, true);
+          document.removeEventListener('pointercancel', tableDragDocUp, true);
+        } catch (e) {}
+        tableDragDocUp = null;
+      }
+    };
+
+    const onTablePointerDown = (e) => {
+      if (modal.style.display !== 'block') return;
+      if (e.button !== 0) return;
+      const cell = e.target && e.target.closest && e.target.closest('td,th');
+      if (!cell || !tableEl.contains(cell)) return;
+      if (getCellGridPos(tableEl, cell) === null) return;
+      detachTableDragDocListeners();
+      try {
+        e.preventDefault();
+      } catch (err) {}
+      dragActive = false;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      dragStartCell = cell;
+      tableDragPointerId = e.pointerId;
+
+      tableDragDocMove = (ev) => {
+        if (dragStartCell === null || ev.pointerId !== tableDragPointerId) return;
+        const dx = ev.clientX - dragStartX;
+        const dy = ev.clientY - dragStartY;
+        if (Math.sqrt(dx * dx + dy * dy) > DRAG_THRESH) dragActive = true;
+      };
+
+      tableDragDocUp = (ev) => {
+        if (tableDragPointerId !== null && ev.pointerId !== tableDragPointerId) return;
+        tableDragPointerId = null;
+        detachTableDragDocListeners();
+        const start = dragStartCell;
+        dragStartCell = null;
+        if (!start) {
+          dragActive = false;
+          return;
+        }
+        if (dragActive) {
+          let endCell = null;
+          const raw = document.elementFromPoint(ev.clientX, ev.clientY);
+          if (raw) {
+            const c = raw.closest && raw.closest('td,th');
+            if (c && tableEl.contains(c) && getCellGridPos(tableEl, c)) endCell = c;
+          }
+          if (!endCell) endCell = findTableCellAtPoint(tableEl, ev.clientX, ev.clientY);
+          if (endCell && getCellGridPos(tableEl, endCell)) {
+            mergeRectCells(start, endCell);
+            refreshSelectionUi();
+            pwRecSuppressTableClickOnce = true;
+          }
+        }
+        dragActive = false;
+      };
+
+      document.addEventListener('pointermove', tableDragDocMove, true);
+      document.addEventListener('pointerup', tableDragDocUp, true);
+      document.addEventListener('pointercancel', tableDragDocUp, true);
+    };
+
+    tableEl.addEventListener('pointerdown', onTablePointerDown, true);
+
+    pwRecTableModalCleanup = function () {
+      detachTableDragDocListeners();
+      dragStartCell = null;
+      tableDragPointerId = null;
+      dragActive = false;
+      clearTableSelectionHighlights(tableEl);
+      try {
+        tableEl.style.userSelect = prevTableUserSelect || '';
+      } catch (e) {}
+      tableEl.removeEventListener('pointerdown', onTablePointerDown, true);
+    };
+
+    reset.onclick = () => {
+      selectedCells.clear();
+      error.style.display = 'none';
+      refreshSelectionUi();
     };
 
     nameInput.oninput = () => {
@@ -1381,30 +1862,58 @@ function getInjectScript(resetOnStart: boolean): string {
 
     confirm.onclick = async () => {
       const tableName = String(nameInput.value || '').trim();
-      const { selHeaders, selRows } = getSelectedProjection();
+      const { colIdx, rowIdx, selHeaders, selRows } = getSelectedProjection();
 
       if (!tableName) {
         error.textContent = 'Table name is required.';
         error.style.display = 'block';
         return;
       }
-      if (!selHeaders.length) {
-        error.textContent = 'Select at least 1 column.';
+      if (!selectedCells.size) {
+        error.textContent = 'Select at least one cell on the table (click or drag).';
         error.style.display = 'block';
         return;
       }
-      if (!selRows.length) {
-        error.textContent = 'Select at least 1 row.';
+      const hasBodyCell = Array.from(selectedCells).some((k) => {
+        const r = Number(String(k).split(',')[0]);
+        return Number.isFinite(r) && r >= 0;
+      });
+      if (!hasBodyCell) {
+        error.textContent = 'Select at least one data cell (body row), not only the header.';
+        error.style.display = 'block';
+        return;
+      }
+      if (!colIdx.length || !selRows.length) {
+        error.textContent = 'Could not build rows from selection.';
         error.style.display = 'block';
         return;
       }
 
       try {
+        const selectedColumnIndexes = colIdx.slice();
+        const selectedBodyRowIndexes = rowIdx.slice();
+        const dataMatrix = [selHeaders.slice(), ...selRows.map((r) => r.slice())];
+        window.__WEBIO__ = window.__WEBIO__ || {};
+        window.__WEBIO__.selectedTable = {
+          name: tableName,
+          selectedColumns: selectedColumnIndexes,
+          selectedRows: selectedBodyRowIndexes,
+          data: dataMatrix,
+        };
+        const locatorTuple = buildTableLocatorTuple(tableEl);
         if (window.pwRecorderAddAssertion) {
           await window.pwRecorderAddAssertion({
             kind: 'web_table',
             objName: tableName,
-            tableConfig: { tableName, headers: selHeaders, rows: selRows },
+            locator: locatorTuple,
+            tableConfig: {
+              tableName,
+              headers: selHeaders,
+              rows: selRows,
+              selectedColumns: selectedColumnIndexes,
+              selectedRows: selectedBodyRowIndexes,
+              data: dataMatrix,
+            },
             href: location.href,
           });
         }
@@ -1412,7 +1921,7 @@ function getInjectScript(resetOnStart: boolean): string {
       hide();
     };
 
-    renderPreview();
+    refreshSelectionUi();
     modal.style.display = 'block';
   }
 
@@ -1534,8 +2043,22 @@ function getInjectScript(resetOnStart: boolean): string {
     try {
       const el = raw && raw.nodeType === 1 ? raw : raw && raw.parentElement ? raw.parentElement : null;
       if (el && !isHoverIgnored(el)) {
+        if (pwRecSuppressTableClickOnce) {
+          pwRecSuppressTableClickOnce = false;
+          return;
+        }
+        const panelTbl = document.getElementById('__pw_rec_table_panel__');
+        const activeTbl = window.__pw_rec_activeTableEl;
+        const maybeTable = el.closest && el.closest('table');
+        if (panelTbl && panelTbl.style.display === 'block' && activeTbl && maybeTable === activeTbl) {
+          const cell = el.closest && el.closest('td,th');
+          if (cell && activeTbl.contains(cell) && window.__pwRecTableCellToggle) {
+            window.__pwRecTableCellToggle(cell);
+            return;
+          }
+        }
         const tableEl = el.closest && el.closest('table');
-      if (tableEl) {
+        if (tableEl) {
         const suggested = findNearestTableName(el) || (tableEl.id ? String(tableEl.id) : '');
         const cellText = getVisibleTextFromElement(el);
         showTableClickChooser(e.clientX || 10, e.clientY || 10, cellText, tableEl, suggested);
@@ -1573,8 +2096,16 @@ function getInjectScript(resetOnStart: boolean): string {
     if (isHoverIgnored(el)) return;
     e.preventDefault();
     const st = getSelectedText();
-    const tn = findNearestTableName(el);
-    showQuickAssertMenu(e.clientX || 10, e.clientY || 10, st, tn);
+    const tableElCtx = el.closest && el.closest('table');
+    const cellElCtx = el.closest && el.closest('td,th');
+    const cellInTable = !!(tableElCtx && cellElCtx && tableElCtx.contains(cellElCtx));
+    const cellTextCtx = cellInTable ? cleanInlineText(cellElCtx.innerText || cellElCtx.textContent || '') : '';
+    const suggested = findNearestTableName(el) || (tableElCtx && tableElCtx.id ? String(tableElCtx.id) : '');
+    showQuickAssertMenu(e.clientX || 10, e.clientY || 10, st, {
+      tableEl: tableElCtx || null,
+      cellText: cellTextCtx,
+      suggestedName: suggested,
+    });
   }, true);
 
   document.addEventListener(
@@ -1983,12 +2514,16 @@ async function main(): Promise<void> {
       if (payload.kind === 'web_table') {
         const objName = String(payload.objName || payload.tableConfig?.tableName || '').trim();
         if (!objName) return { ok: false };
+        const loc =
+          Array.isArray(payload.locator) && payload.locator.length >= 2
+            ? ([String(payload.locator[0] || 'xpath'), String(payload.locator[1] || '')] as [string, string])
+            : (['xpath', ''] as [string, string]);
         actions.push({
           type: 'assert_web_table',
           href,
           element: objName,
           value: payload.tableConfig ? JSON.stringify(payload.tableConfig) : '',
-          locator: ['xpath', ''],
+          locator: loc,
           controlKind: 'textbox',
         } as any);
         scheduleUiSync(true);

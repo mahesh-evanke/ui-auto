@@ -249,7 +249,12 @@ export function convertToArtifacts(
   const locatorEntries: Array<{ key: string; locator: [string, string] }> = [];
   for (const a of actions) {
     if (a.type === 'navigate') continue;
-    if (a.type === 'assert_text' || a.type === 'assert_web_table') continue;
+    if (a.type === 'assert_text') continue;
+    if (a.type === 'assert_web_table') {
+      const v = String((a.locator && a.locator[1]) || '').trim();
+      if (v) locatorEntries.push({ key: a.element, locator: a.locator });
+      continue;
+    }
     locatorEntries.push({ key: a.element, locator: a.locator });
   }
   const map = dedupeLocators(locatorEntries);

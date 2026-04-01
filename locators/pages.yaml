@@ -5,8 +5,14 @@ tester:
   - title: Tester
     label: Email Addresssss
 recordedflow:
-  - title: WebTable Example » Dezlearn » Learn IT Easy
-    label: post-9373
+  - title: Misha House Billing
+    label: Email Addresssss
 webtable:
+  - title: Misha House Billing
+    label: Email Addresssss
+apitesting:
+  - title: Misha House Billing
+    label: Email Addresssss
+apiuitesting:
   - title: Misha House Billing
     label: Email Addresssss

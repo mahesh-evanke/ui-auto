@@ -4,9 +4,13 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 import { launchRecorderBrowser, shutdownBrowser } from './browser';
 import { MARK_ATTR, resolveLocator, type ElementSnapshot } from './selectorEngine';
 import { capitalizeWords, convertToArtifacts, type RecordedAction } from './converter';
+import { attachApiCapture, type CapturedApi } from './capture';
+import { generateApiStepsFromCapturedApis, generateFeatureFromCapturedApis } from './formatter';
+import { ollamaGenerate, ollamaModel } from './ollamaClient';
 import {
   generatePageKey,
   registerPage,
@@ -16,9 +20,150 @@ import {
 } from './pageRegistry';
 
 const ROOT = path.resolve(__dirname, '..');
+const AI_FIX_DIR = path.join(ROOT, 'test-results', 'ai-fix');
+
+type AiFixBundleRow = {
+  id: string;
+  stamp?: string;
+  scenarioName?: string;
+  currentPageKey?: string | null;
+  featurePath?: string;
+  pageYamlPath?: string | null;
+  commonYamlPath?: string | null;
+  markdownPath?: string;
+  mtimeMs?: number;
+  broken?: boolean;
+};
 
 function ensureDir(p: string): void {
   fs.mkdirSync(p, { recursive: true });
+}
+
+function safeReadJsonFile<T>(p: string): T {
+  return JSON.parse(fs.readFileSync(p, 'utf8')) as T;
+}
+
+function listAiFixBundles(): AiFixBundleRow[] {
+  try {
+    if (!fs.existsSync(AI_FIX_DIR)) return [];
+    const files = fs.readdirSync(AI_FIX_DIR).filter((f) => f.endsWith('.bundle.json'));
+    const rows = files
+      .map((f) => {
+        const fp = path.join(AI_FIX_DIR, f);
+        const st = fs.statSync(fp);
+        return { id: f, path: fp, mtimeMs: st.mtimeMs };
+      })
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+    return rows.map((r) => {
+      try {
+        const b = safeReadJsonFile<any>(r.path);
+        return {
+          id: r.id,
+          stamp: b.stamp,
+          scenarioName: b.scenarioName,
+          currentPageKey: b.currentPageKey ?? null,
+          featurePath: b.featurePath,
+          pageYamlPath: b.pageYamlPath ?? null,
+          commonYamlPath: b.commonYamlPath ?? null,
+          markdownPath: b.markdownPath,
+          mtimeMs: r.mtimeMs,
+        } satisfies AiFixBundleRow;
+      } catch {
+        return { id: r.id, broken: true, mtimeMs: r.mtimeMs } satisfies AiFixBundleRow;
+      }
+    });
+  } catch {
+    return [];
+  }
+}
+
+function betweenTags(text: string, startTag: string, endTag: string): string | null {
+  const s = text.indexOf(startTag);
+  if (s < 0) return null;
+  const e = text.indexOf(endTag, s + startTag.length);
+  if (e < 0) return null;
+  return text
+    .slice(s + startTag.length, e)
+    .replace(/^\s*\n/, '')
+    .replace(/\n\s*$/, '') + '\n';
+}
+
+function backupAndWriteFile(targetPath: string, contents: string): void {
+  ensureDir(path.dirname(targetPath));
+  if (fs.existsSync(targetPath)) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    fs.copyFileSync(targetPath, `${targetPath}.bak.${stamp}`);
+  }
+  fs.writeFileSync(targetPath, contents, 'utf8');
+}
+
+function buildAiFixUiPrompt(markdown: string, userProblem: string): string {
+  return [
+    'You are a senior test automation engineer.',
+    'Update the failing Playwright+Cucumber test artifacts to match the CURRENT UI structure.',
+    '',
+    'User described change:',
+    userProblem || '(none provided)',
+    '',
+    'Output format rules (MANDATORY):',
+    '- Output MUST contain ONLY these XML-like sections, in this order:',
+    '  1) <FEATURE_FILE> ... </FEATURE_FILE>',
+    '  2) <PAGE_LOCATORS_YAML> ... </PAGE_LOCATORS_YAML> (include if page locators exist / are relevant)',
+    '  3) <COMMON_LOCATORS_YAML> ... </COMMON_LOCATORS_YAML> (include only if needed)',
+    '- No markdown fences. No extra commentary.',
+    '',
+    'Context bundle:',
+    markdown,
+  ].join('\n');
+}
+
+type UploadedFile = { key: string; name: string; content: string };
+
+function parseFeatureForUrlAndScreen(featureText: string): { url?: string; screen?: string } {
+  const text = String(featureText || '');
+  const urlMatch = text.match(/User navigates to\s+"([^"]+)"\s+URL/i);
+  const screenMatch = text.match(/User is on\s+"([^"]+)"\s+screen/i);
+  return { url: urlMatch?.[1], screen: screenMatch?.[1] };
+}
+
+function collectQuotedElementNames(featureText: string): string[] {
+  // For steps like: clicks on "X" link, User clicks on "X" button, enters "t" text in "X" textbox
+  const names: string[] = [];
+  const re = /"(.*?)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(String(featureText || '')))) {
+    const v = String(m[1] || '').trim();
+    if (!v) continue;
+    // ignore obvious URLs
+    if (/^https?:\/\//i.test(v)) continue;
+    names.push(v);
+  }
+  // de-dupe keep order
+  const seen = new Set<string>();
+  return names.filter((n) => {
+    const k = n.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+function parseLocatorYaml(content: string): Record<string, [string, string]> {
+  const doc = yaml.load(String(content || '')) as unknown;
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return {};
+  const out: Record<string, [string, string]> = {};
+  for (const [k, v] of Object.entries(doc as Record<string, unknown>)) {
+    if (Array.isArray(v) && v.length >= 2) out[String(k)] = [String(v[0]), String(v[1])];
+  }
+  return out;
+}
+
+function locatorFromTuple(tuple: [string, string]): { kind: string; expr: string; selectorText: string } {
+  const kind = String(tuple?.[0] || '').toLowerCase();
+  const expr = String(tuple?.[1] || '');
+  if (kind === 'xpath') return { kind, expr, selectorText: `xpath=${expr}` };
+  return { kind: 'css', expr, selectorText: expr };
 }
 
 type ReportPayload = {
@@ -78,6 +223,7 @@ function getInjectScript(resetOnStart: boolean): string {
 
   let isRecording = false;
   let isGenerating = false;
+  let captureMode = 'UI+API';
   let isInspectorOpen = false;
   let isObjectInspectorOpen = false;
   let inspectorDirty = false;
@@ -329,6 +475,35 @@ function getInjectScript(resetOnStart: boolean): string {
 
     const barRow = document.createElement('div');
     barRow.setAttribute('style', ['display:flex', 'gap:8px', 'align-items:center', 'justify-content:flex-end'].join(';'));
+    let captureSelect = document.createElement('select');
+    captureSelect.id = '__pw_rec_capture_mode__';
+    captureSelect.setAttribute(
+      'style',
+      [
+        'padding:8px 10px',
+        'border-radius:10px',
+        'border:1px solid rgba(148,163,184,0.35)',
+        'background:rgba(15,23,42,0.35)',
+        'color:#e5e7eb',
+        'outline:none',
+        'font-size:12px',
+        'font-weight:700',
+      ].join(';'),
+    );
+    const captureOptions = ['UI', 'API', 'UI+API'];
+    for (const opt of captureOptions) {
+      const o = document.createElement('option');
+      o.value = opt;
+      o.textContent = opt;
+      if (opt === captureMode) o.selected = true;
+      captureSelect.appendChild(o);
+    }
+    captureSelect.addEventListener('change', () => {
+      captureMode = String(captureSelect.value || '').trim().toUpperCase();
+      if (window.pwRecorderSetCaptureSelection) window.pwRecorderSetCaptureSelection(captureMode).catch(() => {});
+      if (isInspectorOpen) (async () => { try { await renderApiInline(); } catch {} })();
+    });
+    barRow.appendChild(captureSelect);
     barRow.appendChild(toggleBtn);
     barRow.appendChild(genBtn);
     root.appendChild(barRow);
@@ -372,7 +547,514 @@ function getInjectScript(resetOnStart: boolean): string {
       ].join(';'),
     );
     barRow.appendChild(objectInspectorBtn);
+
+    const aiFixBtn = document.createElement('button');
+    aiFixBtn.type = 'button';
+    aiFixBtn.id = '__pw_rec_btn_ai_fix__';
+    aiFixBtn.textContent = 'AI Fix';
+    aiFixBtn.setAttribute(
+      'style',
+      [
+        'padding:8px 10px',
+        'border-radius:10px',
+        'border:0',
+        'cursor:pointer',
+        'font-weight:800',
+        'font-size:12px',
+        'color:#fff',
+        'background:rgba(139,92,246,0.95)',
+        'box-shadow:0 8px 24px rgba(139,92,246,0.22)',
+      ].join(';'),
+    );
+    barRow.appendChild(aiFixBtn);
     wrapper.appendChild(root);
+
+    // AI Fix panel (local Ollama)
+    const aiPanel = document.createElement('div');
+    aiPanel.id = '__pw_ai_fix_panel__';
+    aiPanel.setAttribute(
+      'style',
+      [
+        'position:fixed',
+        'top:8px',
+        'left:8px',
+        'width:520px',
+        'height:78vh',
+        'max-height:calc(100vh - 16px)',
+        'z-index:2147483647',
+        'background:rgba(2,6,23,0.92)',
+        'border:1px solid rgba(148,163,184,0.35)',
+        'border-radius:14px',
+        'box-sizing:border-box',
+        'padding:12px',
+        'overflow:auto',
+        'display:none',
+        'font-family:system-ui,Segoe UI,Roboto,sans-serif',
+        'resize:both',
+        'min-width:360px',
+        'min-height:280px',
+      ].join(';'),
+    );
+
+    const aiHeader = document.createElement('div');
+    aiHeader.setAttribute('style', ['display:flex', 'align-items:center', 'justify-content:space-between', 'gap:10px'].join(';'));
+    const aiTitle = document.createElement('div');
+    aiTitle.textContent = 'AI Fix — feature + locators';
+    aiTitle.setAttribute('style', ['font-weight:900', 'font-size:12px', 'color:#e5e7eb'].join(';'));
+    const aiClose = document.createElement('button');
+    aiClose.type = 'button';
+    aiClose.textContent = 'Close';
+    aiClose.setAttribute(
+      'style',
+      ['border:0', 'border-radius:10px', 'padding:6px 10px', 'cursor:pointer', 'font-weight:800', 'font-size:12px', 'color:#cbd5e1', 'background:rgba(148,163,184,0.15)'].join(';'),
+    );
+    aiClose.addEventListener('click', () => { aiPanel.style.display = 'none'; });
+    aiHeader.appendChild(aiTitle);
+    aiHeader.appendChild(aiClose);
+    aiPanel.appendChild(aiHeader);
+
+    const aiMeta = document.createElement('div');
+    aiMeta.id = '__pw_ai_fix_meta__';
+    aiMeta.setAttribute('style', ['margin-top:6px', 'font-size:11px', 'color:#94a3b8'].join(';'));
+    aiMeta.textContent = 'Uses local Ollama. Ensure it is running (ollama serve).';
+    aiPanel.appendChild(aiMeta);
+
+    const aiSelectLabel = document.createElement('div');
+    aiSelectLabel.textContent = 'Failed scenario bundle';
+    aiSelectLabel.setAttribute('style', ['margin-top:12px', 'font-weight:900', 'font-size:12px', 'color:#e5e7eb'].join(';'));
+    aiPanel.appendChild(aiSelectLabel);
+
+    const aiSelect = document.createElement('select');
+    aiSelect.id = '__pw_ai_fix_bundle__';
+    aiSelect.setAttribute(
+      'style',
+      [
+        'margin-top:6px',
+        'width:100%',
+        'padding:10px 12px',
+        'border-radius:12px',
+        'border:1px solid rgba(148,163,184,0.25)',
+        'background:rgba(15,23,42,0.35)',
+        'color:#e5e7eb',
+        'outline:none',
+        'font-size:12px',
+        'font-weight:800',
+      ].join(';'),
+    );
+    aiPanel.appendChild(aiSelect);
+
+    const aiUploadLabel = document.createElement('div');
+    aiUploadLabel.textContent = 'Or upload files (feature + locator YAML)';
+    aiUploadLabel.setAttribute('style', ['margin-top:12px', 'font-weight:900', 'font-size:12px', 'color:#e5e7eb'].join(';'));
+    aiPanel.appendChild(aiUploadLabel);
+
+    const aiUploadHint = document.createElement('div');
+    aiUploadHint.textContent =
+      'Tip: to select multiple files in the file picker, hold Ctrl (or Shift). You can also drag & drop multiple files below. Upload is best when you want to fix specific files (no bundle needed).';
+    aiUploadHint.setAttribute('style', ['margin-top:6px', 'font-size:11px', 'color:#94a3b8'].join(';'));
+    aiPanel.appendChild(aiUploadHint);
+
+    const aiDrop = document.createElement('div');
+    aiDrop.id = '__pw_ai_fix_drop__';
+    aiDrop.textContent = 'Drop .feature / .yaml files here';
+    aiDrop.setAttribute(
+      'style',
+      [
+        'margin-top:10px',
+        'padding:12px',
+        'border-radius:12px',
+        'border:1px dashed rgba(148,163,184,0.35)',
+        'background:rgba(15,23,42,0.18)',
+        'color:#cbd5e1',
+        'font-size:12px',
+        'font-weight:800',
+        'text-align:center',
+        'user-select:none',
+      ].join(';'),
+    );
+    aiPanel.appendChild(aiDrop);
+
+    const aiUpload = document.createElement('input');
+    aiUpload.type = 'file';
+    aiUpload.multiple = true;
+    aiUpload.id = '__pw_ai_fix_upload__';
+    aiUpload.accept = '.feature,.yaml,.yml,text/plain';
+    aiUpload.setAttribute(
+      'style',
+      [
+        'margin-top:8px',
+        'width:100%',
+        'padding:10px 12px',
+        'border-radius:12px',
+        'border:1px solid rgba(148,163,184,0.25)',
+        'background:rgba(15,23,42,0.15)',
+        'color:#e5e7eb',
+        'outline:none',
+        'font-size:12px',
+        'font-weight:800',
+        'box-sizing:border-box',
+      ].join(';'),
+    );
+    aiPanel.appendChild(aiUpload);
+
+    const aiUploadMeta = document.createElement('div');
+    aiUploadMeta.id = '__pw_ai_fix_upload_meta__';
+    aiUploadMeta.setAttribute('style', ['margin-top:6px', 'font-size:11px', 'color:#94a3b8'].join(';'));
+    aiUploadMeta.textContent = 'No files uploaded.';
+    aiPanel.appendChild(aiUploadMeta);
+
+    const aiUploadList = document.createElement('div');
+    aiUploadList.id = '__pw_ai_fix_upload_list__';
+    aiUploadList.setAttribute(
+      'style',
+      [
+        'margin-top:8px',
+        'display:flex',
+        'flex-direction:column',
+        'gap:6px',
+        'max-height:140px',
+        'overflow:auto',
+        'padding:8px',
+        'border-radius:12px',
+        'border:1px solid rgba(148,163,184,0.12)',
+        'background:rgba(15,23,42,0.16)',
+      ].join(';'),
+    );
+    aiPanel.appendChild(aiUploadList);
+
+    const aiUploadActions = document.createElement('div');
+    aiUploadActions.setAttribute('style', ['margin-top:8px', 'display:flex', 'gap:10px', 'flex-wrap:wrap'].join(';'));
+    const aiClearUploads = document.createElement('button');
+    aiClearUploads.type = 'button';
+    aiClearUploads.textContent = 'Clear uploaded files';
+    aiClearUploads.setAttribute(
+      'style',
+      ['border:0','border-radius:10px','padding:8px 12px','cursor:pointer','font-weight:900','font-size:12px','color:#e5e7eb','background:rgba(148,163,184,0.12)','border:1px solid rgba(148,163,184,0.18)'].join(';'),
+    );
+    aiUploadActions.appendChild(aiClearUploads);
+    aiPanel.appendChild(aiUploadActions);
+
+    const aiProblemLabel = document.createElement('div');
+    aiProblemLabel.textContent = 'What changed in the UI?';
+    aiProblemLabel.setAttribute('style', ['margin-top:12px', 'font-weight:900', 'font-size:12px', 'color:#e5e7eb'].join(';'));
+    aiPanel.appendChild(aiProblemLabel);
+
+    const aiProblem = document.createElement('textarea');
+    aiProblem.id = '__pw_ai_fix_problem__';
+    aiProblem.placeholder = 'Example: Submit button moved into dialog footer and label changed to Continue';
+    aiProblem.setAttribute(
+      'style',
+      [
+        'margin-top:6px',
+        'width:100%',
+        'min-height:80px',
+        'resize:vertical',
+        'padding:10px 12px',
+        'border-radius:12px',
+        'border:1px solid rgba(148,163,184,0.25)',
+        'background:rgba(15,23,42,0.35)',
+        'color:#e5e7eb',
+        'font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace',
+        'font-size:11px',
+        'line-height:1.35',
+        'box-sizing:border-box',
+      ].join(';'),
+    );
+    aiPanel.appendChild(aiProblem);
+
+    const aiActions = document.createElement('div');
+    aiActions.setAttribute('style', ['margin-top:10px', 'display:flex', 'gap:10px', 'flex-wrap:wrap'].join(';'));
+    const aiGen = document.createElement('button');
+    aiGen.type = 'button';
+    aiGen.textContent = 'Generate fix';
+    aiGen.setAttribute('style', ['border:0','border-radius:10px','padding:8px 12px','cursor:pointer','font-weight:900','font-size:12px','color:#fff','background:rgba(139,92,246,0.85)'].join(';'));
+    const aiDiagnose = document.createElement('button');
+    aiDiagnose.type = 'button';
+    aiDiagnose.textContent = 'Diagnose with browser';
+    aiDiagnose.setAttribute('style', ['border:0','border-radius:10px','padding:8px 12px','cursor:pointer','font-weight:900','font-size:12px','color:#fff','background:rgba(2,132,199,0.85)'].join(';'));
+    const aiDownload = document.createElement('button');
+    aiDownload.type = 'button';
+    aiDownload.textContent = 'Download fixed files';
+    aiDownload.setAttribute('style', ['border:0','border-radius:10px','padding:8px 12px','cursor:pointer','font-weight:900','font-size:12px','color:#fff','background:rgba(15,23,42,0.65)','border:1px solid rgba(148,163,184,0.25)'].join(';'));
+    const aiApply = document.createElement('button');
+    aiApply.type = 'button';
+    aiApply.textContent = 'Apply (backup first)';
+    aiApply.setAttribute('style', ['border:0','border-radius:10px','padding:8px 12px','cursor:pointer','font-weight:900','font-size:12px','color:#fff','background:rgba(239,68,68,0.80)'].join(';'));
+    aiActions.appendChild(aiGen);
+    aiActions.appendChild(aiDiagnose);
+    aiActions.appendChild(aiDownload);
+    aiActions.appendChild(aiApply);
+    aiPanel.appendChild(aiActions);
+
+    const aiOutLabel = document.createElement('div');
+    aiOutLabel.textContent = 'LLM output';
+    aiOutLabel.setAttribute('style', ['margin-top:12px', 'font-weight:900', 'font-size:12px', 'color:#e5e7eb'].join(';'));
+    aiPanel.appendChild(aiOutLabel);
+
+    const aiOut = document.createElement('pre');
+    aiOut.id = '__pw_ai_fix_output__';
+    aiOut.textContent = '(nothing yet)';
+    aiOut.setAttribute(
+      'style',
+      [
+        'margin-top:6px',
+        'white-space:pre-wrap',
+        'padding:10px 12px',
+        'border-radius:12px',
+        'border:1px solid rgba(148,163,184,0.15)',
+        'background:rgba(15,23,42,0.22)',
+        'color:#e5e7eb',
+        'max-height:260px',
+        'overflow:auto',
+        'font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace',
+        'font-size:11px',
+        'line-height:1.35',
+      ].join(';'),
+    );
+    aiPanel.appendChild(aiOut);
+    wrapper.appendChild(aiPanel);
+
+    let uploadedFiles = [];
+    let lastLlmOutput = '';
+    const fileKey = (f) =>
+      String(f.name || 'file') + '|' + String(f.size || 0) + '|' + String(f.lastModified || 0);
+
+    const renderUploadList = () => {
+      aiUploadList.innerHTML = '';
+      if (!uploadedFiles.length) {
+        const empty = document.createElement('div');
+        empty.textContent = 'No uploaded files yet.';
+        empty.setAttribute('style', ['font-size:11px', 'color:#94a3b8'].join(';'));
+        aiUploadList.appendChild(empty);
+        return;
+      }
+
+      for (const f of uploadedFiles) {
+        const row = document.createElement('div');
+        row.setAttribute('style', ['display:flex','align-items:center','justify-content:space-between','gap:10px'].join(';'));
+
+        const name = document.createElement('div');
+        name.textContent = String(f.name);
+        name.setAttribute('style', ['font-size:11px', 'color:#e5e7eb', 'overflow:hidden', 'text-overflow:ellipsis', 'white-space:nowrap'].join(';'));
+
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.textContent = 'Remove';
+        rm.setAttribute(
+          'style',
+          ['border:0','border-radius:10px','padding:6px 10px','cursor:pointer','font-weight:900','font-size:11px','color:#fff','background:rgba(239,68,68,0.70)'].join(';'),
+        );
+        rm.addEventListener('click', () => {
+          uploadedFiles = uploadedFiles.filter((x) => x.key !== f.key);
+          updateUploadMeta();
+          renderUploadList();
+        });
+
+        row.appendChild(name);
+        row.appendChild(rm);
+        aiUploadList.appendChild(row);
+      }
+    };
+
+    const updateUploadMeta = () => {
+      aiUploadMeta.textContent = uploadedFiles.length
+        ? 'Uploaded (' + String(uploadedFiles.length) + '): ' + uploadedFiles.map((f) => String(f.name)).join(', ')
+        : 'No files uploaded.';
+      if (uploadedFiles.length <= 1) {
+        aiUploadMeta.textContent += ' (add more with Ctrl/Shift, or drag & drop, or pick again from another folder)';
+      }
+    };
+
+    const readFileAsText = (file) =>
+      new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onerror = () => reject(new Error('Failed to read file'));
+        r.onload = () => resolve(String(r.result || ''));
+        r.readAsText(file);
+      });
+
+    const addUploadedFiles = async (files) => {
+      try {
+        for (const f of files) {
+          const key = fileKey(f);
+          if (uploadedFiles.some((x) => x.key === key)) continue;
+          const content = await readFileAsText(f);
+          uploadedFiles.push({ key, name: String(f.name || 'file'), content });
+        }
+        updateUploadMeta();
+        renderUploadList();
+      } catch (e) {
+        aiUploadMeta.textContent = 'Upload read failed.';
+        aiOut.textContent = String(e && e.message ? e.message : e);
+      }
+    };
+
+    aiUpload.addEventListener('change', async () => {
+      const files = aiUpload.files ? Array.from(aiUpload.files) : [];
+      await addUploadedFiles(files);
+      // Important: allows selecting more files from another folder without clearing previous list.
+      aiUpload.value = '';
+    });
+
+    const isAllowedUpload = (name) => {
+      const n = String(name || '').toLowerCase();
+      return n.endsWith('.feature') || n.endsWith('.yaml') || n.endsWith('.yml') || n.endsWith('.txt');
+    };
+
+    const setDropActive = (active) => {
+      aiDrop.style.borderColor = active ? 'rgba(139,92,246,0.95)' : 'rgba(148,163,184,0.35)';
+      aiDrop.style.background = active ? 'rgba(139,92,246,0.10)' : 'rgba(15,23,42,0.18)';
+    };
+
+    aiDrop.addEventListener('dragenter', (e) => { e.preventDefault(); setDropActive(true); });
+    aiDrop.addEventListener('dragover', (e) => { e.preventDefault(); setDropActive(true); });
+    aiDrop.addEventListener('dragleave', (e) => { e.preventDefault(); setDropActive(false); });
+    aiDrop.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      setDropActive(false);
+      const dt = e.dataTransfer;
+      const files = dt && dt.files ? Array.from(dt.files).filter((f) => isAllowedUpload(f.name)) : [];
+      await addUploadedFiles(files);
+    });
+
+    aiClearUploads.addEventListener('click', () => {
+      uploadedFiles = [];
+      lastLlmOutput = '';
+      updateUploadMeta();
+      renderUploadList();
+      aiOut.textContent = '(ready)';
+    });
+
+    // Initialize list UI
+    updateUploadMeta();
+    renderUploadList();
+
+    const loadBundles = async () => {
+      try {
+        const bundles = window.pwRecorderAiFixListBundles ? await window.pwRecorderAiFixListBundles() : [];
+        aiSelect.innerHTML = '';
+        for (const b of bundles) {
+          const o = document.createElement('option');
+          o.value = b.id;
+          const k = b.currentPageKey ? ' | screen: ' + String(b.currentPageKey) : '';
+          o.textContent = (b.scenarioName || b.id) + k;
+          aiSelect.appendChild(o);
+        }
+        if (!bundles.length) {
+          const o = document.createElement('option');
+          o.value = '';
+          o.textContent = 'No failed bundles yet (run cucumber with AI_FIX_ENABLED=true)';
+          aiSelect.appendChild(o);
+        }
+      } catch (e) {
+        aiOut.textContent = String(e && e.message ? e.message : e);
+      }
+    };
+
+    aiFixBtn.addEventListener('click', async () => {
+      aiPanel.style.display = 'block';
+      aiOut.textContent = '(loading...)';
+      await loadBundles();
+      aiOut.textContent = '(ready)';
+    });
+
+    aiGen.addEventListener('click', async () => {
+      aiOut.textContent = 'Generating...';
+      try {
+        let r = null;
+        if (uploadedFiles && uploadedFiles.length) {
+          r = window.pwRecorderAiFixGenerateFromUpload
+            ? await window.pwRecorderAiFixGenerateFromUpload({ userProblem: String(aiProblem.value || ''), files: uploadedFiles })
+            : null;
+        } else {
+          const id = String(aiSelect.value || '');
+          if (!id) {
+            aiOut.textContent = 'Select a failed bundle or upload files first.';
+            return;
+          }
+          r = window.pwRecorderAiFixGenerate ? await window.pwRecorderAiFixGenerate({ id, userProblem: String(aiProblem.value || '') }) : null;
+        }
+        lastLlmOutput = r && r.output ? String(r.output) : '';
+        aiOut.textContent = lastLlmOutput || '(empty)';
+      } catch (e) {
+        aiOut.textContent = String(e && e.message ? e.message : e);
+      }
+    });
+
+    aiDiagnose.addEventListener('click', async () => {
+      aiOut.textContent = 'Diagnosing in browser...';
+      try {
+        if (!uploadedFiles || !uploadedFiles.length) {
+          aiOut.textContent = 'Upload a .feature (and optionally YAML locators) first.';
+          return;
+        }
+        const r = window.pwRecorderAiFixDiagnoseFromUpload
+          ? await window.pwRecorderAiFixDiagnoseFromUpload({ userProblem: String(aiProblem.value || ''), files: uploadedFiles })
+          : null;
+        lastLlmOutput = r && r.output ? String(r.output) : '';
+        aiOut.textContent = lastLlmOutput || '(empty)';
+      } catch (e) {
+        aiOut.textContent = String(e && e.message ? e.message : e);
+      }
+    });
+
+    const extract = (txt, a, b) => {
+      const s = txt.indexOf(a);
+      if (s < 0) return null;
+      const e = txt.indexOf(b, s + a.length);
+      if (e < 0) return null;
+      return txt.slice(s + a.length, e).replace(/^\\s*\\n/, '').replace(/\\n\\s*$/, '') + '\\n';
+    };
+
+    const downloadText = (filename, content) => {
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    };
+
+    aiDownload.addEventListener('click', () => {
+      if (!lastLlmOutput) {
+        aiOut.textContent = 'Generate a fix first.';
+        return;
+      }
+      const feature = extract(lastLlmOutput, '<FEATURE_FILE>', '</FEATURE_FILE>');
+      const pageYaml = extract(lastLlmOutput, '<PAGE_LOCATORS_YAML>', '</PAGE_LOCATORS_YAML>');
+      const commonYaml = extract(lastLlmOutput, '<COMMON_LOCATORS_YAML>', '</COMMON_LOCATORS_YAML>');
+
+      const pickByExt = (ext) => {
+        const f = (uploadedFiles || []).find((x) => String(x.name || '').toLowerCase().endsWith(ext));
+        return f ? String(f.name) : '';
+      };
+      const featureName = pickByExt('.feature') || 'fixed.feature';
+      const pageYamlName = pickByExt('.yaml') || pickByExt('.yml') || 'fixed.locators.yaml';
+
+      if (feature) downloadText(featureName, feature);
+      if (pageYaml) downloadText('fixed-' + pageYamlName, pageYaml);
+      if (commonYaml) downloadText('fixed-common.yaml', commonYaml);
+    });
+
+    aiApply.addEventListener('click', async () => {
+      if (uploadedFiles && uploadedFiles.length) {
+        aiOut.textContent = 'Apply is disabled for uploaded files. Use Download fixed files, then replace in your repo.';
+        return;
+      }
+      const id = String(aiSelect.value || '');
+      if (!id) return;
+      if (!confirm('This will overwrite files after creating .bak backups. Continue?')) return;
+      aiOut.textContent = 'Applying...';
+      try {
+        const r = window.pwRecorderAiFixApply ? await window.pwRecorderAiFixApply({ id, userProblem: String(aiProblem.value || '') }) : null;
+        lastLlmOutput = r && r.output ? String(r.output) : '';
+        aiOut.textContent = lastLlmOutput || '(empty)';
+        alert('Applied. Backups created next to edited files.');
+      } catch (e) {
+        aiOut.textContent = String(e && e.message ? e.message : e);
+      }
+    });
 
     const panel = document.createElement('div');
     panel.id = '__pw_rec_inspector_panel__';
@@ -384,7 +1066,9 @@ function getInjectScript(resetOnStart: boolean): string {
         'right:8px',
         'left:auto',
         'width:400px',
-        'height:calc(100vh - 16px)',
+        // Start shorter so resize handle is usable.
+        'height:70vh',
+        'max-height:calc(100vh - 16px)',
         'z-index:2147483647',
         'background:rgba(2,6,23,0.92)',
         'border-left:1px solid rgba(148,163,184,0.35)',
@@ -393,6 +1077,10 @@ function getInjectScript(resetOnStart: boolean): string {
         'overflow:auto',
         'display:none',
         'font-family:system-ui,Segoe UI,Roboto,sans-serif',
+        // Make inspector resizable (wireDraggableResizable also enables this, but keep it explicit).
+        'resize:both',
+        'min-width:320px',
+        'min-height:240px',
       ].join(';'),
     );
 
@@ -461,8 +1149,147 @@ function getInjectScript(resetOnStart: boolean): string {
     });
 
     panel.appendChild(panelHeader);
+
+    // Captured APIs (embedded into the existing inspector panel)
+    const apiSection = document.createElement('div');
+    apiSection.id = '__pw_rec_api_section__';
+    apiSection.setAttribute(
+      'style',
+      [
+        'margin-top:10px',
+        'padding-top:10px',
+        'border-top:1px solid rgba(148,163,184,0.20)',
+      ].join(';'),
+    );
+
+    const apiSectionTitle = document.createElement('div');
+    apiSectionTitle.textContent = 'Captured APIs';
+    apiSectionTitle.setAttribute('style', ['font-weight:900', 'font-size:12px', 'color:#e5e7eb', 'margin-bottom:6px'].join(';'));
+
+    const apiSectionHint = document.createElement('div');
+    apiSectionHint.textContent = 'Delete removes the API call from preview + generated feature.';
+    apiSectionHint.setAttribute('style', ['font-size:11px', 'color:#94a3b8', 'margin-bottom:8px'].join(';'));
+
+    const apiInlineList = document.createElement('div');
+    apiInlineList.id = '__pw_rec_api_inline_list__';
+    apiInlineList.setAttribute(
+      'style',
+      [
+        'display:flex',
+        'flex-direction:column',
+        'gap:8px',
+        'max-height:260px',
+        'overflow:auto',
+        'padding-right:6px',
+        'border-radius:10px',
+        'border:1px solid rgba(148,163,184,0.12)',
+        'background:rgba(15,23,42,0.18)',
+      ].join(';'),
+    );
+
+    apiSection.appendChild(apiSectionTitle);
+    apiSection.appendChild(apiSectionHint);
+    apiSection.appendChild(apiInlineList);
+    panel.appendChild(apiSection);
     panel.appendChild(featureEditor);
     wrapper.appendChild(panel);
+
+    const renderApiInline = async () => {
+      try {
+        const listEl = document.getElementById('__pw_rec_api_inline_list__');
+        const sectionEl = document.getElementById('__pw_rec_api_section__');
+        if (!listEl || !sectionEl) return;
+
+        // Only show this section in API / UI+API selection.
+        const cm = String(captureMode || '').toUpperCase();
+        if (cm === 'UI') {
+          sectionEl.style.display = 'none';
+          return;
+        }
+        sectionEl.style.display = 'block';
+
+        const rows = window.pwRecorderGetCapturedApis ? await window.pwRecorderGetCapturedApis().catch(() => []) : [];
+        listEl.innerHTML = '';
+        if (!rows || !rows.length) {
+          listEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;">No APIs captured yet.</div>';
+          return;
+        }
+
+        rows.forEach((r) => {
+          const card = document.createElement('div');
+          card.setAttribute(
+            'style',
+            [
+              'border:1px solid rgba(148,163,184,0.24)',
+              'border-radius:10px',
+              'padding:10px',
+              'background:rgba(15,23,42,0.30)',
+              'display:flex',
+              'gap:10px',
+              'align-items:flex-start',
+              'justify-content:space-between',
+            ].join(';'),
+          );
+
+          const left = document.createElement('div');
+          left.setAttribute('style', ['display:flex', 'flex-direction:column', 'gap:4px', 'min-width:0'].join(';'));
+          const top = document.createElement('div');
+          top.setAttribute('style', ['display:flex', 'gap:8px', 'align-items:center', 'flex-wrap:wrap'].join(';'));
+          const badge = document.createElement('span');
+          badge.textContent = String(r.method || '').toUpperCase() + ' ' + String(r.status ?? '');
+          badge.setAttribute(
+            'style',
+            [
+              'font-size:11px',
+              'font-weight:900',
+              'padding:3px 8px',
+              'border-radius:999px',
+              'color:#e5e7eb',
+              'background:rgba(37,99,235,0.25)',
+              'border:1px solid rgba(148,163,184,0.18)',
+            ].join(';'),
+          );
+          const url = document.createElement('div');
+          url.textContent = String(r.fullUrl || r.url || '');
+          url.setAttribute('style', ['font-size:12px', 'color:#e2e8f0', 'word-break:break-all'].join(';'));
+          top.appendChild(badge);
+          top.appendChild(url);
+
+          const sub = document.createElement('div');
+          sub.textContent = 'Match key: ' + String((r.method || '').toUpperCase()) + ' ' + String(r.url || '');
+          sub.setAttribute('style', ['font-size:11px', 'color:#94a3b8', 'word-break:break-all'].join(';'));
+
+          left.appendChild(top);
+          left.appendChild(sub);
+
+          const del = document.createElement('button');
+          del.type = 'button';
+          del.textContent = 'Delete';
+          del.setAttribute(
+            'style',
+            [
+              'border:0',
+              'border-radius:10px',
+              'padding:8px 10px',
+              'cursor:pointer',
+              'font-weight:900',
+              'font-size:12px',
+              'color:#fff',
+              'background:rgba(220,38,38,0.95)',
+            ].join(';'),
+          );
+          del.onclick = async () => {
+            if (!window.pwRecorderDeleteCapturedApi) return;
+            await window.pwRecorderDeleteCapturedApi({ index: Number(r.index) }).catch(() => {});
+            void renderApiInline();
+          };
+
+          card.appendChild(left);
+          card.appendChild(del);
+          listEl.appendChild(card);
+        });
+      } catch {}
+    };
 
     const setInspectorOpen = (open) => {
       isInspectorOpen = !!open;
@@ -476,6 +1303,7 @@ function getInjectScript(resetOnStart: boolean): string {
           editorEl.value = generatedFeatureContent || NO_STEPS_TEXT;
           suppressInspectorInput = false;
         }
+        void renderApiInline();
       }
     };
 
@@ -726,6 +1554,7 @@ function getInjectScript(resetOnStart: boolean): string {
 
     updateToggleUi(toggleBtn);
     ensureHoverUi();
+    try { void renderApiInline(); } catch {}
   }
 
   function ensureHoverUi() {
@@ -2284,9 +3113,27 @@ async function main(): Promise<void> {
   let previewPageKey = generatePageKey({ name: featureName }, 0);
 
   const { browser, context, page } = await launchRecorderBrowser();
+  // Keep recorder UI stable: diagnostics should run in a separate tab/page.
+  let diagnosePage: any | null = null;
+  const getDiagnosePage = async (): Promise<any> => {
+    try {
+      if (diagnosePage && typeof diagnosePage.isClosed === 'function' && !diagnosePage.isClosed()) return diagnosePage;
+    } catch {
+      // ignore
+    }
+    diagnosePage = await context.newPage();
+    return diagnosePage;
+  };
   const actions: RecordedAction[] = [];
+  const capturedApis: CapturedApi[] = [];
+  let apiCaptureStop: (() => void) | undefined;
+  let captureSelection: 'UI' | 'API' | 'UI+API' = 'UI+API';
+  let recorderIsRecording = false;
   let lastUrl = startUrl;
   const debounceMs = Number(process.env.RECORDER_INPUT_DEBOUNCE_MS || '650');
+
+  const shouldRecordUiActions = () => captureSelection === 'UI' || captureSelection === 'UI+API';
+  const shouldCaptureApi = () => captureSelection === 'API' || captureSelection === 'UI+API';
 
   type PendingInputState = {
     element: string;
@@ -2312,15 +3159,33 @@ async function main(): Promise<void> {
   const syncUi = async (forceFeature: boolean): Promise<void> => {
     try {
       const NO_STEPS_TEXT = 'No steps recorded yet...';
+      const uiEnabled = shouldRecordUiActions();
+      const apiEnabled = shouldCaptureApi();
+      const apiSteps = apiEnabled ? generateApiStepsFromCapturedApis(capturedApis) : '';
+      const uiFeature =
+        uiEnabled && actions.length
+          ? rewriteWebTableStep(
+              convertToArtifacts(actions, {
+                scenarioTitle,
+                scenarioUrl: lastUrl,
+                featureFile: '__pw_tmp.feature',
+                pageKey: previewPageKey,
+              }).featureContent,
+            )
+          : '';
+
       const featureContent =
-        actions.length === 0
-          ? NO_STEPS_TEXT
-          : rewriteWebTableStep(convertToArtifacts(actions, {
-              scenarioTitle,
-              scenarioUrl: lastUrl,
-              featureFile: '__pw_tmp.feature',
-              pageKey: previewPageKey,
-            }).featureContent);
+        uiFeature && apiSteps
+          ? `${uiFeature}\n${apiSteps}\n`
+          : uiFeature
+            ? uiFeature
+            : apiSteps
+              ? generateFeatureFromCapturedApis({
+                  capturedApis,
+                  featureName: 'Auto Generated Test',
+                  scenarioName: scenarioTitle,
+                })
+              : NO_STEPS_TEXT;
 
       await page.evaluate(
         (payload) => {
@@ -2387,6 +3252,9 @@ async function main(): Promise<void> {
 
   await page.exposeFunction('pwRecorderReport', async (payload: ReportPayload) => {
     const href = payload.href || lastUrl;
+
+    // If the user selected API-only capture, ignore UI step recording altogether.
+    if (!shouldRecordUiActions()) return;
 
     // Typing: update pending state only; emit ONE final step on debounce/blur/enter/click flush.
     if (payload.type === 'input_update') {
@@ -2559,6 +3427,27 @@ async function main(): Promise<void> {
   });
 
   await page.exposeFunction(
+    'pwRecorderGetCapturedApis',
+    async (): Promise<Array<{ index: number; method: string; url: string; fullUrl: string; status: number }>> => {
+      return capturedApis.map((c, index) => ({
+        index,
+        method: String(c.method || ''),
+        url: String(c.url || ''),
+        fullUrl: String(c.fullUrl || ''),
+        status: Number(c.status ?? 0),
+      }));
+    },
+  );
+
+  await page.exposeFunction('pwRecorderDeleteCapturedApi', async (args?: { index?: number }) => {
+    const idx = Number(args?.index);
+    if (!Number.isFinite(idx) || idx < 0 || idx >= capturedApis.length) return { ok: false };
+    capturedApis.splice(idx, 1);
+    scheduleUiSync(true);
+    return { ok: true };
+  });
+
+  await page.exposeFunction(
     'pwRecorderGenerateInspectorYaml',
     async (payload?: { fileName?: string; objects?: Array<{ element?: string; locator?: [string, string] }> }) => {
       try {
@@ -2603,11 +3492,22 @@ async function main(): Promise<void> {
   await page.exposeFunction(
     'pwRecorderGenerate',
     async (args?: { featureText?: string; useEdited?: boolean; fileName?: string }) => {
-    flushPendingInput();
+    const uiEnabled = shouldRecordUiActions();
+    const apiEnabled = shouldCaptureApi();
+    const apiSteps = apiEnabled ? generateApiStepsFromCapturedApis(capturedApis) : '';
 
-    if (actions.length === 0) {
-      await page.evaluate(() => alert('No actions recorded'));
-      return { ok: false, message: 'No actions recorded' };
+    // Stop network capture during feature generation to keep output stable.
+    apiCaptureStop?.();
+    apiCaptureStop = undefined;
+    recorderIsRecording = false;
+
+    if (uiEnabled) flushPendingInput();
+
+    const hasAnyUi = uiEnabled && actions.length > 0;
+    const hasAnyApi = apiEnabled && apiSteps.trim().length > 0;
+    if (!hasAnyUi && !hasAnyApi) {
+      await page.evaluate(() => alert('No steps recorded'));
+      return { ok: false, message: 'No steps recorded' };
     }
 
     const featureDir = path.join(ROOT, 'generated');
@@ -2622,21 +3522,38 @@ async function main(): Promise<void> {
     const pageLocatorPath = resolvePageLocatorPath(pageKey, locatorRoot);
 
     const websiteTitle = await page.title().catch(() => '');
-    const artifact = convertToArtifacts(actions, {
-      scenarioTitle,
-      scenarioUrl: lastUrl,
-      featureFile: featurePath,
-      pageKey,
-      pageStepInput: { title: websiteTitle },
-    });
+    const artifact = uiEnabled
+      ? convertToArtifacts(actions, {
+          scenarioTitle,
+          scenarioUrl: lastUrl,
+          featureFile: featurePath,
+          pageKey,
+          pageStepInput: { title: websiteTitle },
+        })
+      : undefined;
 
     try {
       const shouldUseEdited = !!(args && args.useEdited);
       const overrideText = shouldUseEdited && typeof args?.featureText === 'string' ? args.featureText : '';
-      const featureToWrite = overrideText.trim().length ? overrideText : rewriteWebTableStep(artifact.featureContent);
+      let featureToWrite = overrideText.trim().length ? overrideText : '';
+
+      if (!featureToWrite) {
+        if (uiEnabled && artifact) {
+          featureToWrite = rewriteWebTableStep(artifact.featureContent);
+          if (apiSteps.trim().length) featureToWrite = `${featureToWrite}\n${apiSteps}\n`;
+        } else if (apiSteps.trim().length) {
+          featureToWrite = generateFeatureFromCapturedApis({
+            capturedApis,
+            featureName: 'Auto Generated Test',
+            scenarioName: scenarioTitle,
+          });
+        } else {
+          featureToWrite = rewriteWebTableStep(artifact?.featureContent || '');
+        }
+      }
       fs.writeFileSync(featurePath, featureToWrite, 'utf8');
 
-      if (artifact.pageKey && artifact.pageMeta) {
+      if (uiEnabled && artifact?.pageKey && artifact.pageMeta) {
         ensureDir(path.dirname(pagesYamlPath));
         registerPage(pagesYamlPath, artifact.pageKey, artifact.pageMeta.title, artifact.pageMeta.label);
         writePageLocatorsYaml(pageLocatorPath, artifact.locatorMap);
@@ -2674,6 +3591,7 @@ async function main(): Promise<void> {
 
       // Clear actions ONLY after successful write.
       actions.splice(0, actions.length);
+      if (apiEnabled) capturedApis.splice(0, capturedApis.length);
       lastFlushedInputKey = null;
       pendingInput = null;
       if (pendingInputTimer) {
@@ -2693,7 +3611,47 @@ async function main(): Promise<void> {
   );
 
   await context.addInitScript(getInjectScript(resetOnStart));
+
+  await page.exposeFunction('pwRecorderSetCaptureSelection', (value: string) => {
+    const normalized = String(value || '').trim().toUpperCase();
+    const allowed = ['UI', 'API', 'UI+API'];
+    if (!allowed.includes(normalized)) return { ok: false, message: 'Invalid capture selection' };
+
+    const prevSelection = captureSelection;
+    captureSelection = normalized as typeof captureSelection;
+
+    const prevShouldCaptureApi = prevSelection === 'API' || prevSelection === 'UI+API';
+    const nowShouldCaptureApi = shouldCaptureApi();
+
+    if (recorderIsRecording) {
+      // Keep API-only feature deterministic when the user flips into API capture.
+      if (nowShouldCaptureApi && !prevShouldCaptureApi) capturedApis.splice(0, capturedApis.length);
+
+      if (nowShouldCaptureApi) {
+        apiCaptureStop?.();
+        apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true) }).stop;
+      } else {
+        apiCaptureStop?.();
+        apiCaptureStop = undefined;
+      }
+
+      if (!shouldRecordUiActions()) {
+        pendingInput = null;
+        lastFlushedInputKey = null;
+        if (pendingInputTimer) {
+          clearTimeout(pendingInputTimer);
+          pendingInputTimer = null;
+        }
+      }
+    }
+
+    scheduleUiSync(true);
+    return { ok: true, captureSelection };
+  });
+
   await page.exposeFunction('pwRecorderSetRecording', (value: boolean, reset?: boolean) => {
+    recorderIsRecording = !!value;
+
     // Start: optionally reset previous session actions.
     if (value === true && reset) {
       actions.splice(0, actions.length);
@@ -2703,16 +3661,257 @@ async function main(): Promise<void> {
         clearTimeout(pendingInputTimer);
         pendingInputTimer = null;
       }
+      if (shouldCaptureApi()) capturedApis.splice(0, capturedApis.length);
+
       scheduleUiSync(false);
+    }
+
+    if (value === true) {
+      // Start capture based on user selection.
+      if (shouldCaptureApi()) {
+        apiCaptureStop?.();
+        apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true) }).stop;
+      } else {
+        apiCaptureStop?.();
+        apiCaptureStop = undefined;
+      }
     }
 
     // Stop: flush any pending input so the final value isn't lost.
     if (value === false) {
-      flushPendingInput();
+      if (shouldRecordUiActions()) flushPendingInput();
+      apiCaptureStop?.();
+      apiCaptureStop = undefined;
     }
 
     return { recording: !!value };
   });
+
+  await page.exposeFunction('pwRecorderAiFixListBundles', (): AiFixBundleRow[] => {
+    return listAiFixBundles();
+  });
+
+  await page.exposeFunction(
+    'pwRecorderAiFixGenerate',
+    async (args?: { id?: string; userProblem?: string }): Promise<{ output: string; model: string }> => {
+      const id = String(args?.id || '').trim();
+      if (!id) throw new Error('Missing bundle id');
+      const bundlePath = path.join(AI_FIX_DIR, id);
+      if (!bundlePath.startsWith(AI_FIX_DIR) || !fs.existsSync(bundlePath)) throw new Error('Bundle not found');
+
+      const bundle = safeReadJsonFile<any>(bundlePath);
+      const markdownPath = String(bundle.markdownPath || '');
+      if (!markdownPath || !fs.existsSync(markdownPath)) throw new Error('Missing markdown bundle file');
+      const markdown = fs.readFileSync(markdownPath, 'utf8');
+      const prompt = buildAiFixUiPrompt(markdown, String(args?.userProblem || ''));
+      const output = await ollamaGenerate({ model: ollamaModel(), prompt });
+
+      try {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        ensureDir(AI_FIX_DIR);
+        fs.writeFileSync(path.join(AI_FIX_DIR, `recorder-${stamp}-${id}.llm.txt`), output, 'utf8');
+      } catch {
+        // ignore
+      }
+
+      return { output, model: ollamaModel() };
+    },
+  );
+
+  await page.exposeFunction(
+    'pwRecorderAiFixGenerateFromUpload',
+    async (args?: {
+      userProblem?: string;
+      files?: Array<{ name?: string; content?: string }>;
+    }): Promise<{ output: string; model: string }> => {
+      const userProblem = String(args?.userProblem || '');
+      const files = Array.isArray(args?.files) ? args!.files : [];
+      if (!files.length) throw new Error('No uploaded files provided');
+
+      const normalized = files
+        .map((f, idx) => ({
+          name: String(f?.name || `file_${idx}`),
+          content: String(f?.content || ''),
+        }))
+        .filter((f) => f.content.trim().length > 0);
+      if (!normalized.length) throw new Error('Uploaded files are empty');
+
+      const bundle = [
+        'Uploaded files:',
+        ...normalized.map((f) => `- ${f.name}`),
+        '',
+        ...normalized.flatMap((f) => [
+          `### ${f.name}`,
+          '```',
+          f.content,
+          '```',
+          '',
+        ]),
+      ].join('\n');
+
+      const prompt = buildAiFixUiPrompt(bundle, userProblem);
+      const output = await ollamaGenerate({ model: ollamaModel(), prompt });
+      return { output, model: ollamaModel() };
+    },
+  );
+
+  await page.exposeFunction(
+    'pwRecorderAiFixDiagnoseFromUpload',
+    async (args?: {
+      userProblem?: string;
+      files?: Array<{ name?: string; content?: string }>;
+    }): Promise<{ output: string; model: string }> => {
+      const userProblem = String(args?.userProblem || '');
+      const files = Array.isArray(args?.files) ? args!.files : [];
+      if (!files.length) throw new Error('No uploaded files provided');
+
+      const normalized: Array<{ name: string; content: string }> = files
+        .map((f, idx) => ({
+          name: String(f?.name || `file_${idx}`),
+          content: String(f?.content || ''),
+        }))
+        .filter((f) => f.content.trim().length > 0);
+      if (!normalized.length) throw new Error('Uploaded files are empty');
+
+      const featureFile = normalized.find((f) => f.name.toLowerCase().endsWith('.feature'));
+      if (!featureFile) throw new Error('Upload must include a .feature file');
+
+      const yamlFiles = normalized.filter((f) => f.name.toLowerCase().endsWith('.yaml') || f.name.toLowerCase().endsWith('.yml'));
+      const { url: targetUrl, screen } = parseFeatureForUrlAndScreen(featureFile.content);
+      if (!targetUrl) throw new Error('Feature must include: Given User navigates to "<url>" URL');
+
+      // Try to pick a page YAML and common YAML from uploads (best-effort by name).
+      let pageYamlText = '';
+      let commonYamlText = '';
+      for (const yf of yamlFiles) {
+        const n = yf.name.toLowerCase();
+        if (!commonYamlText && n.includes('common')) commonYamlText = yf.content;
+        else if (!pageYamlText) pageYamlText = yf.content;
+      }
+
+      // IMPORTANT: do NOT navigate the recorder UI page (it would wipe uploads/panel).
+      // Use a separate tab/page for diagnosis so the UI stays intact.
+      const diag = await getDiagnosePage();
+      await diag.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => undefined);
+
+      let aria = '';
+      try {
+        aria = await diag.locator('body').ariaSnapshot({ timeout: 15000 });
+      } catch (e) {
+        aria = `(aria snapshot failed: ${e instanceof Error ? e.message : String(e)})`;
+      }
+
+      // Try to detect failing locators (best-effort).
+      const elementNames = collectQuotedElementNames(featureFile.content);
+      let pageLocs: Record<string, [string, string]> = {};
+      let commonLocs: Record<string, [string, string]> = {};
+      try { if (pageYamlText) pageLocs = parseLocatorYaml(pageYamlText); } catch {}
+      try { if (commonYamlText) commonLocs = parseLocatorYaml(commonYamlText); } catch {}
+
+      const failures: Array<{ name: string; selector?: string; reason: string }> = [];
+      for (const name of elementNames.slice(0, 40)) {
+        const tuple = pageLocs[name] || commonLocs[name];
+        if (!tuple) {
+          failures.push({ name, reason: 'No locator entry found for this name in uploaded YAML.' });
+          continue;
+        }
+        const { selectorText } = locatorFromTuple(tuple);
+        try {
+          const loc = diag.locator(selectorText);
+          await loc.first().waitFor({ state: 'visible', timeout: 2000 });
+        } catch (e) {
+          failures.push({ name, selector: selectorText, reason: e instanceof Error ? e.message : String(e) });
+        }
+      }
+
+      // Optional screenshot path written into test-results/ai-fix/
+      let screenshotPath = '';
+      try {
+        ensureDir(AI_FIX_DIR);
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        screenshotPath = path.join(AI_FIX_DIR, `diagnose-${stamp}.png`);
+        await diag.screenshot({ path: screenshotPath, fullPage: false });
+      } catch {
+        screenshotPath = '';
+      }
+
+      const bundle = [
+        'Diagnose mode (browser-assisted)',
+        '',
+        'Target URL:',
+        targetUrl,
+        '',
+        'Screen (from feature):',
+        screen || '(not provided)',
+        '',
+        'User described change:',
+        userProblem || '(none provided)',
+        '',
+        'Uploaded feature:',
+        '```',
+        featureFile.content,
+        '```',
+        '',
+        'Uploaded page locators YAML (best-effort):',
+        '```',
+        pageYamlText || '(none)',
+        '```',
+        '',
+        'Uploaded common locators YAML (best-effort):',
+        '```',
+        commonYamlText || '(none)',
+        '```',
+        '',
+        'Detected locator problems (best-effort):',
+        '```json',
+        JSON.stringify(failures, null, 2),
+        '```',
+        '',
+        'Screenshot path (if saved):',
+        screenshotPath || '(not saved)',
+        '',
+        'ARIA snapshot:',
+        '```yaml',
+        aria || '(empty)',
+        '```',
+      ].join('\n');
+
+      const prompt = buildAiFixUiPrompt(bundle, userProblem);
+      const output = await ollamaGenerate({ model: ollamaModel(), prompt });
+      return { output, model: ollamaModel() };
+    },
+  );
+
+  await page.exposeFunction(
+    'pwRecorderAiFixApply',
+    async (args?: { id?: string; userProblem?: string }): Promise<{ output: string; model: string }> => {
+      const id = String(args?.id || '').trim();
+      if (!id) throw new Error('Missing bundle id');
+      const bundlePath = path.join(AI_FIX_DIR, id);
+      if (!bundlePath.startsWith(AI_FIX_DIR) || !fs.existsSync(bundlePath)) throw new Error('Bundle not found');
+      const bundle = safeReadJsonFile<any>(bundlePath);
+
+      const markdownPath = String(bundle.markdownPath || '');
+      if (!markdownPath || !fs.existsSync(markdownPath)) throw new Error('Missing markdown bundle file');
+      const markdown = fs.readFileSync(markdownPath, 'utf8');
+      const prompt = buildAiFixUiPrompt(markdown, String(args?.userProblem || ''));
+      const output = await ollamaGenerate({ model: ollamaModel(), prompt });
+
+      const feature = betweenTags(output, '<FEATURE_FILE>', '</FEATURE_FILE>');
+      const pageYaml = betweenTags(output, '<PAGE_LOCATORS_YAML>', '</PAGE_LOCATORS_YAML>');
+      const commonYaml = betweenTags(output, '<COMMON_LOCATORS_YAML>', '</COMMON_LOCATORS_YAML>');
+      if (!feature) throw new Error('LLM output missing <FEATURE_FILE> section');
+
+      const featurePath = String(bundle.featurePath || '');
+      if (!featurePath) throw new Error('Bundle missing featurePath');
+      backupAndWriteFile(featurePath, feature);
+
+      if (pageYaml && bundle.pageYamlPath) backupAndWriteFile(String(bundle.pageYamlPath), pageYaml);
+      if (commonYaml && bundle.commonYamlPath) backupAndWriteFile(String(bundle.commonYamlPath), commonYaml);
+
+      return { output, model: ollamaModel() };
+    },
+  );
   await page.goto(startUrl, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
   await page.evaluate(getInjectScript(resetOnStart)).catch(() => undefined);
 

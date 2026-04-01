@@ -337,10 +337,10 @@ function cellTextMatches(actualRaw: string, expectedRaw: string, now: Date): boo
   if (!e) return true;
   const a = normalizeLoose(actualRaw);
   if (!a) return false;
-  if (a === e || a.includes(e) || e.includes(a)) return true;
-  const an = normalizeForRawTableCell(actualRaw);
-  const en = normalizeForRawTableCell(resolved);
-  return rawTableCellPresent(an, en);
+  // Strict mode for "verify data from ... web table":
+  // the normalized actual cell must equal the normalized expected cell.
+  // This prevents accidental matches like "Name" matching "Nameee".
+  return a === e;
 }
 
 function findHeaderColumnIndex(
@@ -351,11 +351,8 @@ function findHeaderColumnIndex(
   const norms = actualHeaders.map((h) => normalizeForRawTableCell(String(h ?? '')));
   let idx = norms.indexOf(expectedHeaderNorm);
   if (idx >= 0) return idx;
-  const needle = normalizeLoose(expectedHeaderRaw);
-  for (let j = 0; j < actualHeaders.length; j++) {
-    const h = normalizeLoose(actualHeaders[j]);
-    if (h === needle || h.includes(needle) || needle.includes(h)) return j;
-  }
+  // Strict header mapping: only exact match on normalized header text.
+  // If the header doesn't match, fail with "Header ... not found".
   return -1;
 }
 
@@ -558,34 +555,62 @@ export async function verifyWebTableDataFrom(
     );
   }
 
+  // Optimize strict matching:
+  // - Normalize expected cells once (date tokens resolved).
+  // - Normalize actual table rows once for the selected columns.
+  // - Then do exact string equality checks during the ordered subsequence search.
+  const expectedDataRows = expected.slice(1);
+  const expectedNormCells: Array<Array<string | null>> = expectedDataRows.map((row) =>
+    selectedColIdx.map((_, j) => {
+      const expectedRaw = String(row[j] ?? '');
+      const resolved = resolveExpectedCellRaw(expectedRaw, now);
+      const n = normalizeLoose(resolved);
+      return n ? n : null; // null => expected empty => don't care
+    }),
+  );
+
+  const bodyNormSelected: string[][] = bodyRows.map((row) =>
+    selectedColIdx.map((col) => normalizeLoose(String(row[col] ?? ''))),
+  );
+
   let searchStart = 0;
-  for (let i = 1; i < expected.length; i++) {
+  for (let expIdx = 0; expIdx < expectedDataRows.length; expIdx++) {
+    const expectedRow = expectedDataRows[expIdx];
     let foundAt = -1;
+
     for (let r = searchStart; r < bodyRows.length; r++) {
-      const actualRow = bodyRows[r];
+      const actualNormRow = bodyNormSelected[r];
       let allOk = true;
+
       for (let j = 0; j < selectedColIdx.length; j++) {
-        const col = selectedColIdx[j];
-        const actualRaw = actualRow[col] ?? '';
-        const expectedRaw = String(expected[i][j] ?? '');
-        if (!cellTextMatches(actualRaw, expectedRaw, now)) {
+        const eNorm = expectedNormCells[expIdx][j];
+        if (eNorm === null) continue; // expected empty => ignore
+        const aNorm = actualNormRow[j] ?? '';
+        if (!aNorm || aNorm !== eNorm) {
           allOk = false;
           break;
         }
       }
+
       if (allOk) {
         foundAt = r;
         break;
       }
     }
+
     if (foundAt < 0) {
-      const sample = bodyRows.slice(0, 8).map((row) => selectedColIdx.map((c) => (row[c] ?? '').trim()));
+      const sample = bodyRows
+        .slice(0, 8)
+        .map((row) => selectedColIdx.map((c) => (row[c] ?? '').trim()));
       throw new Error(
-        `Expected row not found in table "${objName}": ${JSON.stringify(expected[i])} (columns: ${JSON.stringify(expected[0])}). ` +
+        `Expected row not found in table "${objName}": ${JSON.stringify(expectedRow)} (columns: ${JSON.stringify(
+          expected[0],
+        )}). ` +
           `Sample rows (selected columns only, first up to 8): ${JSON.stringify(sample)}. ` +
           `If names are on another page, navigate or filter until they are visible.`,
       );
     }
+
     searchStart = foundAt + 1;
   }
 }

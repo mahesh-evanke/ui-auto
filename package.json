@@ -6,7 +6,8 @@
   "scripts": {
     "pw": "ts-node utils/recorder.ts",
     "generate": "node scripts/generate.js",
-    "cucumber": "cucumber-js"
+    "cucumber": "cucumber-js",
+    "ai-fix:ui": "node scripts/ai-fix-ui.cjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11.3.0",

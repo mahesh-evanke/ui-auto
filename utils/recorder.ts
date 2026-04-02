@@ -89,6 +89,326 @@ function betweenTags(text: string, startTag: string, endTag: string): string | n
     .replace(/\n\s*$/, '') + '\n';
 }
 
+type DiffOp =
+  | { type: 'equal'; lines: string[] }
+  | { type: 'delete'; lines: string[] }
+  | { type: 'insert'; lines: string[] };
+
+function splitLinesKeepLastEmpty(text: string): string[] {
+  // Keep trailing newline semantics stable for diffs.
+  const t = String(text ?? '');
+  const lines = t.split(/\r?\n/);
+  // If text ends with newline, split() creates a last empty line; keep it.
+  // If not, keep as-is.
+  return lines;
+}
+
+function myersDiffLines(aText: string, bText: string): DiffOp[] {
+  const a = splitLinesKeepLastEmpty(aText);
+  const b = splitLinesKeepLastEmpty(bText);
+  const n = a.length;
+  const m = b.length;
+  const max = n + m;
+  const offset = max;
+  const v: number[] = new Array(2 * max + 1).fill(0);
+  const trace: number[][] = [];
+
+  for (let d = 0; d <= max; d++) {
+    trace.push(v.slice());
+    for (let k = -d; k <= d; k += 2) {
+      const kIndex = offset + k;
+      const down = k === -d || (k !== d && v[kIndex - 1] < v[kIndex + 1]);
+      let x = down ? v[kIndex + 1] : v[kIndex - 1] + 1;
+      let y = x - k;
+      while (x < n && y < m && a[x] === b[y]) {
+        x++;
+        y++;
+      }
+      v[kIndex] = x;
+      if (x >= n && y >= m) {
+        return backtrackMyers(a, b, trace, d, offset);
+      }
+    }
+  }
+  return [{ type: 'delete', lines: a }, { type: 'insert', lines: b }];
+}
+
+function backtrackMyers(a: string[], b: string[], trace: number[][], dFinal: number, offset: number): DiffOp[] {
+  let x = a.length;
+  let y = b.length;
+  const ops: Array<{ type: 'equal' | 'delete' | 'insert'; line: string }> = [];
+
+  for (let d = dFinal; d > 0; d--) {
+    const v = trace[d - 1];
+    const k = x - y;
+    const kIndex = offset + k;
+    const down = k === -d || (k !== d && v[kIndex - 1] < v[kIndex + 1]);
+    const prevK = down ? k + 1 : k - 1;
+    const prevX = down ? v[offset + prevK] : v[offset + prevK] + 1;
+    const prevY = prevX - prevK;
+
+    while (x > prevX && y > prevY) {
+      ops.push({ type: 'equal', line: a[x - 1] });
+      x--;
+      y--;
+    }
+    if (down) {
+      // Insert from b
+      ops.push({ type: 'insert', line: b[y - 1] });
+      y--;
+    } else {
+      // Delete from a
+      ops.push({ type: 'delete', line: a[x - 1] });
+      x--;
+    }
+  }
+
+  while (x > 0 && y > 0) {
+    ops.push({ type: 'equal', line: a[x - 1] });
+    x--;
+    y--;
+  }
+  while (x > 0) {
+    ops.push({ type: 'delete', line: a[x - 1] });
+    x--;
+  }
+  while (y > 0) {
+    ops.push({ type: 'insert', line: b[y - 1] });
+    y--;
+  }
+
+  ops.reverse();
+
+  // Coalesce into grouped ops.
+  const grouped: DiffOp[] = [];
+  for (const o of ops) {
+    const last = grouped[grouped.length - 1];
+    if (last && last.type === o.type) {
+      last.lines.push(o.line);
+    } else {
+      grouped.push({ type: o.type, lines: [o.line] } as DiffOp);
+    }
+  }
+  return grouped;
+}
+
+function buildUnifiedPatch(fileLabel: string, oldText: string, newText: string, contextLines = 2): string {
+  if (oldText === newText) return '';
+  const ops = myersDiffLines(oldText, newText);
+  const aLines = splitLinesKeepLastEmpty(oldText);
+  const bLines = splitLinesKeepLastEmpty(newText);
+
+  // Build a single unified diff with multiple hunks when separated by equals > contextLines.
+  let aIndex = 0;
+  let bIndex = 0;
+  type HunkLine = { kind: ' ' | '+' | '-'; text: string };
+  type Hunk = { aStart: number; bStart: number; aCount: number; bCount: number; lines: HunkLine[] };
+  const hunks: Hunk[] = [];
+  let cur: Hunk | null = null;
+  let pendingContext: string[] = [];
+
+  const flushContextIntoHunk = () => {
+    if (!cur) return;
+    for (const l of pendingContext) cur.lines.push({ kind: ' ', text: l });
+    pendingContext = [];
+  };
+
+  const closeHunk = () => {
+    if (!cur) return;
+    // Trim trailing context to at most contextLines
+    let trailing = 0;
+    for (let i = cur.lines.length - 1; i >= 0; i--) {
+      if (cur.lines[i].kind !== ' ') break;
+      trailing++;
+    }
+    if (trailing > contextLines) cur.lines.splice(cur.lines.length - (trailing - contextLines), trailing - contextLines);
+
+    // Recompute counts based on lines.
+    cur.aCount = cur.lines.filter((l) => l.kind !== '+').length;
+    cur.bCount = cur.lines.filter((l) => l.kind !== '-').length;
+    hunks.push(cur);
+    cur = null;
+    pendingContext = [];
+  };
+
+  const startHunkIfNeeded = () => {
+    if (cur) return;
+    // Include leading context (up to contextLines) that we buffered.
+    const lead = pendingContext.slice(Math.max(0, pendingContext.length - contextLines));
+    const aStart = aIndex - lead.length;
+    const bStart = bIndex - lead.length;
+    cur = { aStart: aStart + 1, bStart: bStart + 1, aCount: 0, bCount: 0, lines: [] };
+    pendingContext = [];
+    for (const l of lead) cur.lines.push({ kind: ' ', text: l });
+  };
+
+  for (const op of ops) {
+    if (op.type === 'equal') {
+      for (const line of op.lines) {
+        pendingContext.push(line);
+        aIndex++;
+        bIndex++;
+
+        if (cur) {
+          // If we already have changes in the hunk, we keep context up to contextLines;
+          // if context grows beyond that without new changes, we close the hunk.
+          if (pendingContext.length <= contextLines) {
+            flushContextIntoHunk();
+          } else {
+            closeHunk();
+          }
+        } else if (pendingContext.length > contextLines) {
+          // Keep only recent context while not in a hunk.
+          pendingContext = pendingContext.slice(-contextLines);
+        }
+      }
+      continue;
+    }
+
+    // Change op: ensure hunk started and include buffered context.
+    startHunkIfNeeded();
+    flushContextIntoHunk();
+
+    if (op.type === 'delete') {
+      for (const line of op.lines) {
+        cur!.lines.push({ kind: '-', text: line });
+        aIndex++;
+      }
+    } else if (op.type === 'insert') {
+      for (const line of op.lines) {
+        cur!.lines.push({ kind: '+', text: line });
+        bIndex++;
+      }
+    }
+  }
+  closeHunk();
+
+  const header = [`--- a/${fileLabel}`, `+++ b/${fileLabel}`];
+  const body: string[] = [];
+  for (const h of hunks) {
+    body.push(`@@ -${h.aStart},${h.aCount} +${h.bStart},${h.bCount} @@`);
+    for (const l of h.lines) body.push(`${l.kind}${l.text}`);
+  }
+
+  if (!body.length) return '';
+  return header.concat(body).join('\n') + '\n';
+}
+
+function safeReadTextFile(p: string): string {
+  try {
+    return fs.readFileSync(p, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+function summarizeTextChanges(oldText: string, newText: string, issue: string, location: string): string[] {
+  if (oldText === newText) return [];
+  const ops = myersDiffLines(oldText, newText);
+  const out: string[] = [];
+
+  const pushChange = (oldLine: string, newLine: string) => {
+    const o = String(oldLine ?? '').trim();
+    const n = String(newLine ?? '').trim();
+    if (!o && !n) return;
+    if (o === n) return;
+    out.push(
+      `❌ ${issue}\n` +
+        `📍 ${location}\n\n` +
+        `💡 Change this:\n` +
+        `${o || '(empty)'} → ${n || '(empty)'}\n`,
+    );
+  };
+
+  const pushRemoveAdd = (removed: string[], added: string[]) => {
+    const rm = removed.map((x) => String(x ?? '').trim()).filter(Boolean);
+    const ad = added.map((x) => String(x ?? '').trim()).filter(Boolean);
+    if (!rm.length && !ad.length) return;
+    const lines: string[] = [];
+    lines.push(`❌ ${issue}`);
+    lines.push(`📍 ${location}`);
+    lines.push('');
+    lines.push('💡 Fix:');
+    if (rm.length) {
+      lines.push('Remove this');
+      lines.push(...rm);
+    }
+    if (ad.length) {
+      lines.push('Add this');
+      lines.push(...ad);
+    }
+    out.push(lines.join('\n') + '\n');
+  };
+
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i];
+    if (op.type === 'equal') continue;
+
+    // Prefer "old → new" if we have delete followed by insert.
+    if (op.type === 'delete' && ops[i + 1] && ops[i + 1].type === 'insert') {
+      const del = op.lines;
+      const ins = (ops[i + 1] as any).lines as string[];
+      const min = Math.min(del.length, ins.length);
+      for (let j = 0; j < min; j++) pushChange(del[j], ins[j]);
+      if (del.length > min || ins.length > min) pushRemoveAdd(del.slice(min), ins.slice(min));
+      i++; // consume insert
+      continue;
+    }
+
+    if (op.type === 'delete') {
+      pushRemoveAdd(op.lines, []);
+      continue;
+    }
+    if (op.type === 'insert') {
+      pushRemoveAdd([], op.lines);
+      continue;
+    }
+  }
+
+  return out;
+}
+
+function summarizeLocatorYamlChanges(oldYamlText: string, newYamlText: string): string[] {
+  const out: string[] = [];
+  let oldMap: Record<string, [string, string]> = {};
+  let newMap: Record<string, [string, string]> = {};
+  try {
+    if (oldYamlText && oldYamlText.trim()) oldMap = parseLocatorYaml(oldYamlText);
+  } catch {
+    // If YAML can't be parsed, fall back to text diff summary.
+    return summarizeTextChanges(oldYamlText, newYamlText, 'Locator file changed', 'locators');
+  }
+  try {
+    if (newYamlText && newYamlText.trim()) newMap = parseLocatorYaml(newYamlText);
+  } catch {
+    return summarizeTextChanges(oldYamlText, newYamlText, 'Locator file changed', 'locators');
+  }
+
+  const names = Array.from(new Set([...Object.keys(oldMap), ...Object.keys(newMap)])).sort((a, b) => a.localeCompare(b));
+  for (const name of names) {
+    const o = oldMap[name];
+    const n = newMap[name];
+    if (!o && n) {
+      const { selectorText } = locatorFromTuple(n);
+      out.push(`❌ Locator missing\n📍 ${name}\n\n💡 Fix:\nAdd this\n${selectorText}\n`);
+      continue;
+    }
+    if (o && !n) {
+      const { selectorText } = locatorFromTuple(o);
+      out.push(`❌ Locator not used / removed\n📍 ${name}\n\n💡 Fix:\nRemove this\n${selectorText}\n`);
+      continue;
+    }
+    if (o && n) {
+      const oSel = locatorFromTuple(o).selectorText;
+      const nSel = locatorFromTuple(n).selectorText;
+      if (oSel !== nSel) {
+        out.push(`❌ Locator changed\n📍 ${name}\n\n💡 Change this:\n${oSel} → ${nSel}\n`);
+      }
+    }
+  }
+  return out;
+}
+
 function backupAndWriteFile(targetPath: string, contents: string): void {
   ensureDir(path.dirname(targetPath));
   if (fs.existsSync(targetPath)) {
@@ -816,6 +1136,7 @@ function getInjectScript(resetOnStart: boolean): string {
 
     let uploadedFiles = [];
     let lastLlmOutput = '';
+    let lastLlmChanges = '';
     const fileKey = (f) =>
       String(f.name || 'file') + '|' + String(f.size || 0) + '|' + String(f.lastModified || 0);
 
@@ -920,6 +1241,7 @@ function getInjectScript(resetOnStart: boolean): string {
     aiClearUploads.addEventListener('click', () => {
       uploadedFiles = [];
       lastLlmOutput = '';
+      lastLlmChanges = '';
       updateUploadMeta();
       renderUploadList();
       aiOut.textContent = '(ready)';
@@ -975,7 +1297,9 @@ function getInjectScript(resetOnStart: boolean): string {
           r = window.pwRecorderAiFixGenerate ? await window.pwRecorderAiFixGenerate({ id, userProblem: String(aiProblem.value || '') }) : null;
         }
         lastLlmOutput = r && r.output ? String(r.output) : '';
-        aiOut.textContent = lastLlmOutput || '(empty)';
+        lastLlmChanges = r && r.changes ? String(r.changes) : '';
+        const changeText = (lastLlmChanges || '').trim();
+        aiOut.textContent = changeText ? changeText : lastLlmOutput || '(empty)';
       } catch (e) {
         aiOut.textContent = String(e && e.message ? e.message : e);
       }
@@ -992,7 +1316,9 @@ function getInjectScript(resetOnStart: boolean): string {
           ? await window.pwRecorderAiFixDiagnoseFromUpload({ userProblem: String(aiProblem.value || ''), files: uploadedFiles })
           : null;
         lastLlmOutput = r && r.output ? String(r.output) : '';
-        aiOut.textContent = lastLlmOutput || '(empty)';
+        lastLlmChanges = r && r.changes ? String(r.changes) : '';
+        const changeText = (lastLlmChanges || '').trim();
+        aiOut.textContent = changeText ? changeText : lastLlmOutput || '(empty)';
       } catch (e) {
         aiOut.textContent = String(e && e.message ? e.message : e);
       }
@@ -3693,7 +4019,7 @@ async function main(): Promise<void> {
 
   await page.exposeFunction(
     'pwRecorderAiFixGenerate',
-    async (args?: { id?: string; userProblem?: string }): Promise<{ output: string; model: string }> => {
+    async (args?: { id?: string; userProblem?: string }): Promise<{ output: string; model: string; changes?: string }> => {
       const id = String(args?.id || '').trim();
       if (!id) throw new Error('Missing bundle id');
       const bundlePath = path.join(AI_FIX_DIR, id);
@@ -3706,6 +4032,31 @@ async function main(): Promise<void> {
       const prompt = buildAiFixUiPrompt(markdown, String(args?.userProblem || ''));
       const output = await ollamaGenerate({ model: ollamaModel(), prompt });
 
+      const featureNew = betweenTags(output, '<FEATURE_FILE>', '</FEATURE_FILE>') || '';
+      const pageYamlNew = betweenTags(output, '<PAGE_LOCATORS_YAML>', '</PAGE_LOCATORS_YAML>') || '';
+      const commonYamlNew = betweenTags(output, '<COMMON_LOCATORS_YAML>', '</COMMON_LOCATORS_YAML>') || '';
+
+      const changeParts: string[] = [];
+      const featurePath = String(bundle.featurePath || '');
+      const pageYamlPath = String(bundle.pageYamlPath || '');
+      const commonYamlPath = String(bundle.commonYamlPath || '');
+
+      if (featurePath && featureNew) {
+        const oldText = safeReadTextFile(featurePath);
+        const c = summarizeTextChanges(oldText, featureNew, 'Feature step changed', path.basename(featurePath));
+        changeParts.push(...c);
+      }
+      if (pageYamlPath && pageYamlNew) {
+        const oldText = safeReadTextFile(pageYamlPath);
+        const c = summarizeLocatorYamlChanges(oldText, pageYamlNew);
+        changeParts.push(...c);
+      }
+      if (commonYamlPath && commonYamlNew) {
+        const oldText = safeReadTextFile(commonYamlPath);
+        const c = summarizeLocatorYamlChanges(oldText, commonYamlNew);
+        changeParts.push(...c);
+      }
+
       try {
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         ensureDir(AI_FIX_DIR);
@@ -3714,7 +4065,7 @@ async function main(): Promise<void> {
         // ignore
       }
 
-      return { output, model: ollamaModel() };
+      return { output, model: ollamaModel(), changes: changeParts.join('\n') };
     },
   );
 
@@ -3723,7 +4074,7 @@ async function main(): Promise<void> {
     async (args?: {
       userProblem?: string;
       files?: Array<{ name?: string; content?: string }>;
-    }): Promise<{ output: string; model: string }> => {
+    }): Promise<{ output: string; model: string; changes?: string }> => {
       const userProblem = String(args?.userProblem || '');
       const files = Array.isArray(args?.files) ? args!.files : [];
       if (!files.length) throw new Error('No uploaded files provided');
@@ -3751,7 +4102,32 @@ async function main(): Promise<void> {
 
       const prompt = buildAiFixUiPrompt(bundle, userProblem);
       const output = await ollamaGenerate({ model: ollamaModel(), prompt });
-      return { output, model: ollamaModel() };
+
+      const featureNew = betweenTags(output, '<FEATURE_FILE>', '</FEATURE_FILE>') || '';
+      const pageYamlNew = betweenTags(output, '<PAGE_LOCATORS_YAML>', '</PAGE_LOCATORS_YAML>') || '';
+      const commonYamlNew = betweenTags(output, '<COMMON_LOCATORS_YAML>', '</COMMON_LOCATORS_YAML>') || '';
+
+      const pickUploaded = (pred: (nameLower: string) => boolean): string => {
+        const f = normalized.find((x) => pred(x.name.toLowerCase()));
+        return f ? String(f.content || '') : '';
+      };
+
+      const featureOld = pickUploaded((n) => n.endsWith('.feature'));
+      const pageYamlOld = pickUploaded((n) => (n.endsWith('.yaml') || n.endsWith('.yml')) && !n.includes('common'));
+      const commonYamlOld = pickUploaded((n) => (n.endsWith('.yaml') || n.endsWith('.yml')) && n.includes('common'));
+
+      const changeParts: string[] = [];
+      if (featureOld && featureNew) {
+        changeParts.push(...summarizeTextChanges(featureOld, featureNew, 'Feature step changed', 'uploaded.feature'));
+      }
+      if (pageYamlOld && pageYamlNew) {
+        changeParts.push(...summarizeLocatorYamlChanges(pageYamlOld, pageYamlNew));
+      }
+      if (commonYamlOld && commonYamlNew) {
+        changeParts.push(...summarizeLocatorYamlChanges(commonYamlOld, commonYamlNew));
+      }
+
+      return { output, model: ollamaModel(), changes: changeParts.join('\n') };
     },
   );
 
@@ -3760,7 +4136,7 @@ async function main(): Promise<void> {
     async (args?: {
       userProblem?: string;
       files?: Array<{ name?: string; content?: string }>;
-    }): Promise<{ output: string; model: string }> => {
+    }): Promise<{ output: string; model: string; changes?: string }> => {
       const userProblem = String(args?.userProblem || '');
       const files = Array.isArray(args?.files) ? args!.files : [];
       if (!files.length) throw new Error('No uploaded files provided');
@@ -3878,7 +4254,23 @@ async function main(): Promise<void> {
 
       const prompt = buildAiFixUiPrompt(bundle, userProblem);
       const output = await ollamaGenerate({ model: ollamaModel(), prompt });
-      return { output, model: ollamaModel() };
+
+      const featureNew = betweenTags(output, '<FEATURE_FILE>', '</FEATURE_FILE>') || '';
+      const pageYamlNew = betweenTags(output, '<PAGE_LOCATORS_YAML>', '</PAGE_LOCATORS_YAML>') || '';
+      const commonYamlNew = betweenTags(output, '<COMMON_LOCATORS_YAML>', '</COMMON_LOCATORS_YAML>') || '';
+
+      const changeParts: string[] = [];
+      if (featureFile?.content && featureNew) {
+        changeParts.push(...summarizeTextChanges(featureFile.content, featureNew, 'Feature step changed', 'uploaded.feature'));
+      }
+      if (pageYamlText && pageYamlNew) {
+        changeParts.push(...summarizeLocatorYamlChanges(pageYamlText, pageYamlNew));
+      }
+      if (commonYamlText && commonYamlNew) {
+        changeParts.push(...summarizeLocatorYamlChanges(commonYamlText, commonYamlNew));
+      }
+
+      return { output, model: ollamaModel(), changes: changeParts.join('\n') };
     },
   );
 

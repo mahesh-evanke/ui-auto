@@ -43,7 +43,10 @@ Before(async function (this: AutomationWorld) {
 
   if (!this.runConfig.shouldOpenBrowser) return;
 
-  this.browser = await chromium.launch({ headless: process.env.HEADLESS !== 'false' });
+  this.browser = await chromium.launch({
+    headless: process.env.HEADLESS === 'true',
+    slowMo: Number(process.env.SLOW_MO || '1000'),
+  });
   this.context = await this.browser.newContext({ viewport: { width: 1280, height: 720 }, ignoreHTTPSErrors: true });
   this.page = await this.context.newPage();
 

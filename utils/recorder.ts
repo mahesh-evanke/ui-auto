@@ -3456,6 +3456,7 @@ async function main(): Promise<void> {
   let captureSelection: 'UI' | 'API' | 'UI+API' = 'UI+API';
   let recorderIsRecording = false;
   let lastUrl = startUrl;
+  let initialPageTitle = '';
   const debounceMs = Number(process.env.RECORDER_INPUT_DEBOUNCE_MS || '650');
 
   const shouldRecordUiActions = () => captureSelection === 'UI' || captureSelection === 'UI+API';
@@ -3848,13 +3849,16 @@ async function main(): Promise<void> {
     const pageLocatorPath = resolvePageLocatorPath(pageKey, locatorRoot);
 
     const websiteTitle = await page.title().catch(() => '');
+    // Use the title captured when recording STARTED (matches the navigate-step URL).
+    // Fall back to current title only if the user never pressed Start.
+    const startingTitle = initialPageTitle || websiteTitle;
     const artifact = uiEnabled
       ? convertToArtifacts(actions, {
           scenarioTitle,
           scenarioUrl: lastUrl,
           featureFile: featurePath,
           pageKey,
-          pageStepInput: { title: websiteTitle },
+          pageStepInput: { title: startingTitle },
         })
       : undefined;
 
@@ -3975,7 +3979,7 @@ async function main(): Promise<void> {
     return { ok: true, captureSelection };
   });
 
-  await page.exposeFunction('pwRecorderSetRecording', (value: boolean, reset?: boolean) => {
+  await page.exposeFunction('pwRecorderSetRecording', async (value: boolean, reset?: boolean) => {
     recorderIsRecording = !!value;
 
     // Start: optionally reset previous session actions.
@@ -3988,11 +3992,15 @@ async function main(): Promise<void> {
         pendingInputTimer = null;
       }
       if (shouldCaptureApi()) capturedApis.splice(0, capturedApis.length);
+      initialPageTitle = '';
 
       scheduleUiSync(false);
     }
 
     if (value === true) {
+      // Capture the starting page title so pages.yaml reflects the navigate-step URL, not the ending URL.
+      if (!initialPageTitle) initialPageTitle = await page.title().catch(() => '');
+
       // Start capture based on user selection.
       if (shouldCaptureApi()) {
         apiCaptureStop?.();

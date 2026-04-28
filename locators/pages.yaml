@@ -16,3 +16,12 @@ apitesting:
 apiuitesting:
   - title: Misha House Billing
     label: Email Addresssss
+primereactcomponettest:
+  - title: React Checkbox Component
+    label: Get Started
+primereact:
+  - title: PrimeReact - React UI Component Library
+    label: Get Started
+button:
+  - title: PrimeReact - React UI Component Library
+    label: Get Started

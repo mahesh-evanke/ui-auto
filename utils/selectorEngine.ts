@@ -105,6 +105,7 @@ function buildFallbackXPathCandidates(snapshot: ElementSnapshot): string[] {
   const label = (snapshot.label || '').trim();
   const text = normalizeVisibleText(snapshot.text || '');
   const typeAttr = (snapshot.type || '').toLowerCase();
+  const href = (snapshot.href || '').trim();
 
   const candidates: string[] = [];
 
@@ -114,8 +115,27 @@ function buildFallbackXPathCandidates(snapshot: ElementSnapshot): string[] {
   if (name && (tag === 'input' || tag === 'textarea' || tag === 'select')) candidates.push(`//${tag}[@name=${xpathLiteral(name)}]`);
   if (tag === 'select' && snapshot.name) candidates.push(`//select[@name=${xpathLiteral(snapshot.name)}]`);
 
-  // Buttons/links by visible text (codegen-like)
-  if (text && (tag === 'button' || tag === 'a')) candidates.push(`//${tag}[normalize-space(.)=${xpathLiteral(text)}]`);
+  if (tag === 'a' || tag === 'button') {
+    // 1. Specific-tag text match (most precise)
+    if (text) candidates.push(`//${tag}[normalize-space(.)=${xpathLiteral(text)}]`);
+
+    // 2. Href-based match for links (stable: survives text re-wording)
+    if (tag === 'a' && href) {
+      try {
+        const pathPart = new URL(href).pathname;
+        if (pathPart && pathPart !== '/') candidates.push(`//a[contains(@href,${xpathLiteral(pathPart)})]`);
+      } catch {
+        if (!href.startsWith('http') && href.length < 100) candidates.push(`//a[@href=${xpathLiteral(href)}]`);
+      }
+    }
+
+    // 3. Tag-agnostic text match — handles navigation items that switch between <button> and <a>
+    //    depending on which page is loaded (e.g. top-nav vs sidebar).
+    if (text) {
+      const otherTag = tag === 'button' ? 'a' : 'button';
+      candidates.push(`//*[normalize-space(.)=${xpathLiteral(text)} and (self::${tag} or self::${otherTag})]`);
+    }
+  }
 
   // input[type=button|submit]
   if (tag === 'input' && (typeAttr === 'submit' || typeAttr === 'button')) {
@@ -146,15 +166,28 @@ async function uniqueXPathOrNull(page: Page, expr: string): Promise<string | nul
 
 async function resolveFallbackXPath(page: Page, markId: string, snapshot: ElementSnapshot): Promise<string> {
   const candidates = buildFallbackXPathCandidates(snapshot);
+
+  // Pass 1: prefer a uniquely-matching XPath (most stable).
   for (const expr of candidates) {
-    // Keep only XPaths that are unique; this matches the "detect best selector" requirement.
     const ok = await uniqueXPathOrNull(page, expr);
     if (ok) return ok;
   }
 
+  // Pass 2: use an indexed selector for any candidate with at least one match.
+  // This is far more stable than an absolute body-path XPath because it stays
+  // anchored to a meaningful attribute (text, href, id) even if the DOM restructures.
+  for (const expr of candidates) {
+    try {
+      const n = await page.locator(`xpath=${expr}`).count();
+      if (n > 0) return `(${expr})[1]`;
+    } catch {
+      // ignore unparseable expressions
+    }
+  }
+
+  // Pass 3: absolute XPath — last resort only (fragile, breaks on DOM changes).
   const marked = page.locator(`[${MARK_ATTR}="${markId}"]`).first();
-  const abs = await absoluteXPathFromLocatorFirst(marked);
-  return abs;
+  return absoluteXPathFromLocatorFirst(marked);
 }
 
 function semanticNameCandidates(snapshot: ElementSnapshot, derivedName: string): string[] {

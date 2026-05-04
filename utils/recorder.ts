@@ -545,7 +545,6 @@ function getInjectScript(resetOnStart: boolean): string {
   let isGenerating = false;
   let captureMode = 'UI+API';
   let isInspectorOpen = false;
-  let isObjectInspectorOpen = false;
   let inspectorDirty = false;
   let generatedFeatureContent = '';
   const NO_STEPS_TEXT = 'No steps recorded yet...';
@@ -684,14 +683,75 @@ function getInjectScript(resetOnStart: boolean): string {
       'font-family:system-ui,Segoe UI,Roboto,sans-serif',
       'background:rgba(2,6,23,0.55)',
       'border:1px solid rgba(148,163,184,0.35)',
-      'padding:8px',
+      'padding:6px 8px 8px',
       'border-radius:14px',
       'box-shadow:0 10px 30px rgba(0,0,0,0.25)',
       'display:flex',
-      'flex-direction:row',
-      'gap:8px',
-      'align-items:center',
+      'flex-direction:column',
+      'gap:4px',
+      'backdrop-filter:blur(8px)',
     ].join(';'));
+
+    // Drag handle + minimize button
+    const toolbarDragHandle = document.createElement('div');
+    toolbarDragHandle.setAttribute(
+      'style',
+      [
+        'display:flex',
+        'align-items:center',
+        'justify-content:space-between',
+        'cursor:grab',
+        'padding:2px 2px 4px',
+        'border-bottom:1px solid rgba(148,163,184,0.18)',
+        'margin-bottom:2px',
+        'user-select:none',
+      ].join(';'),
+    );
+    const toolbarGrip = document.createElement('div');
+    toolbarGrip.setAttribute('style', 'display:flex;gap:3px;align-items:center;');
+    for (let gi = 0; gi < 3; gi++) {
+      const col = document.createElement('div');
+      col.setAttribute('style', 'display:flex;flex-direction:column;gap:3px;');
+      for (let ri = 0; ri < 2; ri++) {
+        const dot = document.createElement('div');
+        dot.setAttribute('style', 'width:3px;height:3px;border-radius:50%;background:rgba(148,163,184,0.55);');
+        col.appendChild(dot);
+      }
+      toolbarGrip.appendChild(col);
+    }
+    const toolbarMinBtn = document.createElement('button');
+    toolbarMinBtn.type = 'button';
+    toolbarMinBtn.textContent = '−';
+    toolbarMinBtn.title = 'Minimize toolbar';
+    toolbarMinBtn.setAttribute(
+      'style',
+      [
+        'border:0',
+        'background:transparent',
+        'color:#94a3b8',
+        'font-size:15px',
+        'font-weight:700',
+        'cursor:pointer',
+        'padding:0 2px',
+        'line-height:1',
+      ].join(';'),
+    );
+    toolbarDragHandle.appendChild(toolbarGrip);
+    toolbarDragHandle.appendChild(toolbarMinBtn);
+    root.appendChild(toolbarDragHandle);
+
+    // Collapsible body wrapping all toolbar content
+    const toolbarBody = document.createElement('div');
+    toolbarBody.id = '__pw_rec_toolbar_body__';
+    toolbarBody.setAttribute('style', ['display:flex', 'flex-direction:column', 'gap:6px'].join(';'));
+
+    let toolbarMinimized = false;
+    toolbarMinBtn.addEventListener('click', () => {
+      toolbarMinimized = !toolbarMinimized;
+      toolbarBody.style.display = toolbarMinimized ? 'none' : 'flex';
+      toolbarMinBtn.textContent = toolbarMinimized ? '+' : '−';
+      toolbarMinBtn.title = toolbarMinimized ? 'Expand toolbar' : 'Minimize toolbar';
+    });
 
     const fileInput = document.createElement('input');
     fileInput.type = 'text';
@@ -761,6 +821,7 @@ function getInjectScript(resetOnStart: boolean): string {
       } else {
         isRecording = true;
         inspectorDirty = false;
+        hideElementInfoPopup();
         updateToggleUi(toggleBtn);
         if (window.pwRecorderSetRecording) window.pwRecorderSetRecording(true, RESET_ON_START).catch(() => {});
       }
@@ -791,10 +852,14 @@ function getInjectScript(resetOnStart: boolean): string {
       }
     });
 
-    root.appendChild(fileInput);
+    // Top row: filename input + buttons
+    const topRow = document.createElement('div');
+    topRow.setAttribute('style', ['display:flex', 'gap:8px', 'align-items:center'].join(';'));
+    topRow.appendChild(fileInput);
+    toolbarBody.appendChild(topRow);
 
     const barRow = document.createElement('div');
-    barRow.setAttribute('style', ['display:flex', 'gap:8px', 'align-items:center', 'justify-content:flex-end'].join(';'));
+    barRow.setAttribute('style', ['display:flex', 'gap:8px', 'align-items:center', 'flex-wrap:wrap'].join(';'));
     let captureSelect = document.createElement('select');
     captureSelect.id = '__pw_rec_capture_mode__';
     captureSelect.setAttribute(
@@ -821,17 +886,64 @@ function getInjectScript(resetOnStart: boolean): string {
     captureSelect.addEventListener('change', () => {
       captureMode = String(captureSelect.value || '').trim().toUpperCase();
       if (window.pwRecorderSetCaptureSelection) window.pwRecorderSetCaptureSelection(captureMode).catch(() => {});
-      if (isInspectorOpen) (async () => { try { await renderApiInline(); } catch {} })();
+      const needsApi = captureMode === 'API' || captureMode === 'UI+API';
+      const urlFilterRow = document.getElementById('__pw_rec_url_filter_row__');
+      if (urlFilterRow) urlFilterRow.style.display = needsApi ? 'flex' : 'none';
+      if (isInspectorOpen) (async () => { try { await renderApiTab(); } catch {} })();
     });
     barRow.appendChild(captureSelect);
     barRow.appendChild(toggleBtn);
     barRow.appendChild(genBtn);
-    root.appendChild(barRow);
+    topRow.appendChild(barRow);
+
+    // URL filter row — only visible in API / UI+API mode
+    const urlFilterRow = document.createElement('div');
+    urlFilterRow.id = '__pw_rec_url_filter_row__';
+    urlFilterRow.setAttribute(
+      'style',
+      [
+        'display:none',
+        'align-items:center',
+        'gap:6px',
+        'margin-top:6px',
+        'padding:6px 8px',
+        'border-radius:10px',
+        'border:1px solid rgba(148,163,184,0.25)',
+        'background:rgba(15,23,42,0.35)',
+      ].join(';'),
+    );
+    const urlFilterLabel = document.createElement('span');
+    urlFilterLabel.textContent = 'Capture URL:';
+    urlFilterLabel.setAttribute('style', 'font-size:11px;color:#94a3b8;white-space:nowrap;font-weight:700;');
+    const urlFilterInput = document.createElement('input');
+    urlFilterInput.type = 'text';
+    urlFilterInput.id = '__pw_rec_url_filter_input__';
+    urlFilterInput.placeholder = 'e.g. https://api.example.com (leave empty = all)';
+    urlFilterInput.setAttribute(
+      'style',
+      [
+        'flex:1',
+        'padding:6px 8px',
+        'border-radius:8px',
+        'border:1px solid rgba(148,163,184,0.28)',
+        'background:rgba(2,6,23,0.65)',
+        'color:#e5e7eb',
+        'font-size:11px',
+        'outline:none',
+      ].join(';'),
+    );
+    urlFilterInput.addEventListener('input', () => {
+      const v = urlFilterInput.value.trim();
+      if (window.pwRecorderSetApiUrlFilter) window.pwRecorderSetApiUrlFilter(v).catch(() => {});
+    });
+    urlFilterRow.appendChild(urlFilterLabel);
+    urlFilterRow.appendChild(urlFilterInput);
+    toolbarBody.appendChild(urlFilterRow);
 
     const inspectorBtn = document.createElement('button');
     inspectorBtn.type = 'button';
     inspectorBtn.id = '__pw_rec_btn_inspector__';
-    inspectorBtn.textContent = '🔍 preview';
+    inspectorBtn.textContent = 'Inspector';
     inspectorBtn.setAttribute(
       'style',
       [
@@ -847,26 +959,6 @@ function getInjectScript(resetOnStart: boolean): string {
       ].join(';'),
     );
     barRow.appendChild(inspectorBtn);
-
-    const objectInspectorBtn = document.createElement('button');
-    objectInspectorBtn.type = 'button';
-    objectInspectorBtn.id = '__pw_rec_btn_object_inspector__';
-    objectInspectorBtn.textContent = 'Inspector';
-    objectInspectorBtn.setAttribute(
-      'style',
-      [
-        'padding:8px 10px',
-        'border-radius:10px',
-        'border:0',
-        'cursor:pointer',
-        'font-weight:700',
-        'font-size:12px',
-        'color:#fff',
-        'background:rgba(2,132,199,0.95)',
-        'box-shadow:0 8px 24px rgba(2,132,199,0.25)',
-      ].join(';'),
-    );
-    barRow.appendChild(objectInspectorBtn);
 
     const aiFixBtn = document.createElement('button');
     aiFixBtn.type = 'button';
@@ -887,7 +979,9 @@ function getInjectScript(resetOnStart: boolean): string {
       ].join(';'),
     );
     barRow.appendChild(aiFixBtn);
+    root.appendChild(toolbarBody);
     wrapper.appendChild(root);
+    wireDraggableResizable(root, toolbarDragHandle, { resize: false });
 
     // AI Fix panel (local Ollama)
     const aiPanel = document.createElement('div');
@@ -1392,29 +1486,35 @@ function getInjectScript(resetOnStart: boolean): string {
         'right:8px',
         'left:auto',
         'width:400px',
-        // Start shorter so resize handle is usable.
         'height:70vh',
         'max-height:calc(100vh - 16px)',
         'z-index:2147483647',
         'background:rgba(2,6,23,0.92)',
-        'border-left:1px solid rgba(148,163,184,0.35)',
+        'border:1px solid rgba(148,163,184,0.35)',
+        'border-radius:14px',
+        'box-shadow:0 18px 54px rgba(0,0,0,0.35)',
         'box-sizing:border-box',
         'padding:12px',
-        'overflow:auto',
+        'overflow:hidden',
         'display:none',
+        'flex-direction:column',
         'font-family:system-ui,Segoe UI,Roboto,sans-serif',
-        // Make inspector resizable (wireDraggableResizable also enables this, but keep it explicit).
         'resize:both',
         'min-width:320px',
         'min-height:240px',
       ].join(';'),
     );
 
+    // ---- Single Inspector Panel with 3 tabs ----
+    let activeTab = 'feature';
+    const tabStyleActive = ['padding:6px 12px','border-radius:8px 8px 0 0','border:1px solid rgba(148,163,184,0.35)','border-bottom:2px solid rgba(37,99,235,0.95)','background:transparent','color:#e5e7eb','font-size:11px','font-weight:700','cursor:pointer','outline:none'].join(';');
+    const tabStyleInactive = ['padding:6px 12px','border-radius:8px 8px 0 0','border:1px solid transparent','border-bottom:1px solid rgba(148,163,184,0.20)','background:transparent','color:#94a3b8','font-size:11px','font-weight:700','cursor:pointer','outline:none'].join(';');
+
     const panelHeader = document.createElement('div');
-    panelHeader.setAttribute('style', ['display:flex', 'align-items:center', 'justify-content:space-between', 'gap:10px'].join(';'));
+    panelHeader.setAttribute('style', ['display:flex', 'align-items:center', 'justify-content:space-between', 'gap:10px', 'flex-shrink:0'].join(';'));
 
     const panelTitle = document.createElement('div');
-    panelTitle.textContent = 'Feature (Editable) — drag to move';
+    panelTitle.textContent = 'Inspector — drag to move';
     panelTitle.setAttribute(
       'style',
       ['font-weight:800', 'font-size:12px', 'color:#e5e7eb', 'cursor:move', 'user-select:none', 'line-height:1.3'].join(';'),
@@ -1436,26 +1536,52 @@ function getInjectScript(resetOnStart: boolean): string {
         'background:rgba(148,163,184,0.15)',
       ].join(';'),
     );
-
     closeBtn.addEventListener('click', () => {
       isInspectorOpen = false;
       const panelEl = document.getElementById('__pw_rec_inspector_panel__');
       if (panelEl) panelEl.style.display = 'none';
     });
-
     panelHeader.appendChild(panelTitle);
     panelHeader.appendChild(closeBtn);
+
+    // Tab bar
+    const tabBar = document.createElement('div');
+    tabBar.setAttribute('style', ['display:flex', 'gap:2px', 'margin-top:10px', 'flex-shrink:0', 'border-bottom:1px solid rgba(148,163,184,0.25)'].join(';'));
+
+    const mkTabBtn = (label, id) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = label;
+      btn.id = '__pw_rec_tab_' + id + '__';
+      btn.setAttribute('style', tabStyleInactive);
+      return btn;
+    };
+    const tabFeatureBtn = mkTabBtn('Feature file', 'feature');
+    const tabApisBtn = mkTabBtn('Captured APIs', 'apis');
+    const tabObjectsBtn = mkTabBtn('Captured Objects', 'objects');
+    tabBar.appendChild(tabFeatureBtn);
+    tabBar.appendChild(tabApisBtn);
+    tabBar.appendChild(tabObjectsBtn);
+    tabFeatureBtn.setAttribute('style', tabStyleActive);
+
+    // Tab content wrapper
+    const tabContent = document.createElement('div');
+    tabContent.setAttribute('style', ['flex:1', 'overflow:hidden', 'display:flex', 'flex-direction:column', 'min-height:0', 'padding-top:8px'].join(';'));
+
+    // --- Tab 1: Feature file ---
+    const featureTabPane = document.createElement('div');
+    featureTabPane.id = '__pw_rec_tab_pane_feature__';
+    featureTabPane.setAttribute('style', 'display:flex;flex-direction:column;flex:1;min-height:0;');
 
     const featureEditor = document.createElement('textarea');
     featureEditor.id = '__pw_rec_feature_editor__';
     featureEditor.setAttribute(
       'style',
       [
-        'margin-top:10px',
+        'flex:1',
         'width:100%',
-        'height:calc(100% - 76px)',
-        'min-height:160px',
-        'resize:vertical',
+        'min-height:120px',
+        'resize:none',
         'padding:10px',
         'border-radius:12px',
         'border:1px solid rgba(148,163,184,0.25)',
@@ -1465,6 +1591,7 @@ function getInjectScript(resetOnStart: boolean): string {
         'font-size:11px',
         'line-height:1.35',
         'box-sizing:border-box',
+        'overflow:auto',
       ].join(';'),
     );
     featureEditor.placeholder = NO_STEPS_TEXT;
@@ -1473,28 +1600,79 @@ function getInjectScript(resetOnStart: boolean): string {
       if (suppressInspectorInput) return;
       inspectorDirty = true;
     });
+    featureTabPane.appendChild(featureEditor);
 
-    panel.appendChild(panelHeader);
-
-    // Captured APIs (embedded into the existing inspector panel)
-    const apiSection = document.createElement('div');
-    apiSection.id = '__pw_rec_api_section__';
-    apiSection.setAttribute(
+    // Feature file tab footer: Generate File button
+    const featureFooter = document.createElement('div');
+    featureFooter.setAttribute(
       'style',
       [
-        'margin-top:10px',
-        'padding-top:10px',
+        'margin-top:8px',
+        'padding-top:8px',
         'border-top:1px solid rgba(148,163,184,0.20)',
+        'display:flex',
+        'justify-content:flex-end',
+        'flex-shrink:0',
       ].join(';'),
     );
+    const genFileBtn = document.createElement('button');
+    genFileBtn.type = 'button';
+    genFileBtn.textContent = 'Generate File';
+    genFileBtn.setAttribute(
+      'style',
+      [
+        'border:0',
+        'border-radius:10px',
+        'padding:8px 14px',
+        'cursor:pointer',
+        'font-weight:700',
+        'font-size:12px',
+        'color:#fff',
+        'background:linear-gradient(135deg,#059669,#10b981)',
+      ].join(';'),
+    );
+    genFileBtn.addEventListener('click', async () => {
+      if (isGenerating) return;
+      isGenerating = true;
+      genFileBtn.textContent = 'Generating...';
+      genFileBtn.disabled = true;
+      try {
+        const fileInputEl = document.getElementById('__pw_rec_filename__');
+        const rawName = fileInputEl && typeof fileInputEl.value === 'string' ? fileInputEl.value.trim() : '';
+        const currentFileName = rawName || 'recorded-flow';
+        const currentText = String(featureEditor.value || '').trim();
+        if (!currentText || currentText === NO_STEPS_TEXT) {
+          alert('Feature file is empty. Add some steps first.');
+          return;
+        }
+        if (window.pwRecorderGenerate) {
+          await window.pwRecorderGenerate({ featureText: featureEditor.value, useEdited: true, fileName: currentFileName });
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Generate failed — see console');
+      } finally {
+        isGenerating = false;
+        genFileBtn.textContent = 'Generate File';
+        genFileBtn.disabled = false;
+      }
+    });
+    featureFooter.appendChild(genFileBtn);
+    featureTabPane.appendChild(featureFooter);
 
-    const apiSectionTitle = document.createElement('div');
-    apiSectionTitle.textContent = 'Captured APIs';
-    apiSectionTitle.setAttribute('style', ['font-weight:900', 'font-size:12px', 'color:#e5e7eb', 'margin-bottom:6px'].join(';'));
+    // --- Tab 2: Captured APIs ---
+    const apisTabPane = document.createElement('div');
+    apisTabPane.id = '__pw_rec_tab_pane_apis__';
+    apisTabPane.setAttribute('style', 'display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;');
+
+    const apiNoModeHint = document.createElement('div');
+    apiNoModeHint.id = '__pw_rec_api_no_mode_hint__';
+    apiNoModeHint.textContent = 'Switch capture mode to API or UI+API to capture APIs.';
+    apiNoModeHint.setAttribute('style', ['font-size:12px', 'color:#94a3b8', 'margin-bottom:8px', 'display:none'].join(';'));
 
     const apiSectionHint = document.createElement('div');
     apiSectionHint.textContent = 'Delete removes the API call from preview + generated feature.';
-    apiSectionHint.setAttribute('style', ['font-size:11px', 'color:#94a3b8', 'margin-bottom:8px'].join(';'));
+    apiSectionHint.setAttribute('style', ['font-size:11px', 'color:#94a3b8', 'margin-bottom:8px', 'flex-shrink:0'].join(';'));
 
     const apiInlineList = document.createElement('div');
     apiInlineList.id = '__pw_rec_api_inline_list__';
@@ -1504,207 +1682,85 @@ function getInjectScript(resetOnStart: boolean): string {
         'display:flex',
         'flex-direction:column',
         'gap:8px',
-        'max-height:260px',
+        'flex:1',
         'overflow:auto',
-        'padding-right:6px',
+        'padding:6px',
         'border-radius:10px',
         'border:1px solid rgba(148,163,184,0.12)',
         'background:rgba(15,23,42,0.18)',
       ].join(';'),
     );
 
-    apiSection.appendChild(apiSectionTitle);
-    apiSection.appendChild(apiSectionHint);
-    apiSection.appendChild(apiInlineList);
-    panel.appendChild(apiSection);
-    panel.appendChild(featureEditor);
-    wrapper.appendChild(panel);
+    const inputStyle = [
+      'box-sizing:border-box',
+      'padding:7px 10px',
+      'border-radius:8px',
+      'border:1px solid rgba(148,163,184,0.25)',
+      'background:rgba(15,23,42,0.55)',
+      'color:#e5e7eb',
+      'font-size:12px',
+      'outline:none',
+    ].join(';');
 
-    const renderApiInline = async () => {
-      try {
-        const listEl = document.getElementById('__pw_rec_api_inline_list__');
-        const sectionEl = document.getElementById('__pw_rec_api_section__');
-        if (!listEl || !sectionEl) return;
+    const apiFilterBar = document.createElement('div');
+    apiFilterBar.setAttribute('style', ['display:flex', 'flex-direction:column', 'gap:6px', 'margin-bottom:8px', 'flex-shrink:0'].join(';'));
 
-        // Only show this section in API / UI+API selection.
-        const cm = String(captureMode || '').toUpperCase();
-        if (cm === 'UI') {
-          sectionEl.style.display = 'none';
-          return;
-        }
-        sectionEl.style.display = 'block';
+    const apiFilterInput = document.createElement('input');
+    apiFilterInput.type = 'text';
+    apiFilterInput.id = '__pw_rec_api_filter_input__';
+    apiFilterInput.placeholder = 'Filter by URL...';
+    apiFilterInput.setAttribute('style', 'width:100%;' + inputStyle);
 
-        const rows = window.pwRecorderGetCapturedApis ? await window.pwRecorderGetCapturedApis().catch(() => []) : [];
-        listEl.innerHTML = '';
-        if (!rows || !rows.length) {
-          listEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;">No APIs captured yet.</div>';
-          return;
-        }
+    const apiFilterRow2 = document.createElement('div');
+    apiFilterRow2.setAttribute('style', ['display:flex', 'gap:6px'].join(';'));
 
-        rows.forEach((r) => {
-          const card = document.createElement('div');
-          card.setAttribute(
-            'style',
-            [
-              'border:1px solid rgba(148,163,184,0.24)',
-              'border-radius:10px',
-              'padding:10px',
-              'background:rgba(15,23,42,0.30)',
-              'display:flex',
-              'gap:10px',
-              'align-items:flex-start',
-              'justify-content:space-between',
-            ].join(';'),
-          );
-
-          const left = document.createElement('div');
-          left.setAttribute('style', ['display:flex', 'flex-direction:column', 'gap:4px', 'min-width:0'].join(';'));
-          const top = document.createElement('div');
-          top.setAttribute('style', ['display:flex', 'gap:8px', 'align-items:center', 'flex-wrap:wrap'].join(';'));
-          const badge = document.createElement('span');
-          badge.textContent = String(r.method || '').toUpperCase() + ' ' + String(r.status ?? '');
-          badge.setAttribute(
-            'style',
-            [
-              'font-size:11px',
-              'font-weight:900',
-              'padding:3px 8px',
-              'border-radius:999px',
-              'color:#e5e7eb',
-              'background:rgba(37,99,235,0.25)',
-              'border:1px solid rgba(148,163,184,0.18)',
-            ].join(';'),
-          );
-          const url = document.createElement('div');
-          url.textContent = String(r.fullUrl || r.url || '');
-          url.setAttribute('style', ['font-size:12px', 'color:#e2e8f0', 'word-break:break-all'].join(';'));
-          top.appendChild(badge);
-          top.appendChild(url);
-
-          const sub = document.createElement('div');
-          sub.textContent = 'Match key: ' + String((r.method || '').toUpperCase()) + ' ' + String(r.url || '');
-          sub.setAttribute('style', ['font-size:11px', 'color:#94a3b8', 'word-break:break-all'].join(';'));
-
-          left.appendChild(top);
-          left.appendChild(sub);
-
-          const del = document.createElement('button');
-          del.type = 'button';
-          del.textContent = 'Delete';
-          del.setAttribute(
-            'style',
-            [
-              'border:0',
-              'border-radius:10px',
-              'padding:8px 10px',
-              'cursor:pointer',
-              'font-weight:900',
-              'font-size:12px',
-              'color:#fff',
-              'background:rgba(220,38,38,0.95)',
-            ].join(';'),
-          );
-          del.onclick = async () => {
-            if (!window.pwRecorderDeleteCapturedApi) return;
-            await window.pwRecorderDeleteCapturedApi({ index: Number(r.index) }).catch(() => {});
-            void renderApiInline();
-          };
-
-          card.appendChild(left);
-          card.appendChild(del);
-          listEl.appendChild(card);
-        });
-      } catch {}
-    };
-
-    const setInspectorOpen = (open) => {
-      isInspectorOpen = !!open;
-      const panelEl = document.getElementById('__pw_rec_inspector_panel__');
-      if (panelEl) panelEl.style.display = isInspectorOpen ? 'block' : 'none';
-      if (isInspectorOpen) {
-        inspectorDirty = false;
-        const editorEl = document.getElementById('__pw_rec_feature_editor__');
-        if (editorEl) {
-          suppressInspectorInput = true;
-          editorEl.value = generatedFeatureContent || NO_STEPS_TEXT;
-          suppressInspectorInput = false;
-        }
-        void renderApiInline();
-      }
-    };
-
-    inspectorBtn.addEventListener('click', () => {
-      if (isGenerating) return;
-      setInspectorOpen(!isInspectorOpen);
+    const apiMethodSelect = document.createElement('select');
+    apiMethodSelect.id = '__pw_rec_api_method_select__';
+    apiMethodSelect.setAttribute('style', ['flex:0 0 auto', inputStyle].join(';'));
+    ['All', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'].forEach((m) => {
+      const opt = document.createElement('option');
+      opt.value = m === 'All' ? '' : m;
+      opt.textContent = m;
+      apiMethodSelect.appendChild(opt);
     });
 
-    const objectPanel = document.createElement('div');
-    objectPanel.id = '__pw_rec_object_inspector_panel__';
-    objectPanel.setAttribute(
-      'style',
-      [
-        'position:fixed',
-        'top:72px',
-        'left:24px',
-        'right:auto',
-        'transform:none',
-        'width:560px',
-        'max-width:calc(100vw - 32px)',
-        'max-height:calc(100vh - 96px)',
-        'z-index:2147483647',
-        'background:rgba(2,6,23,0.94)',
-        'border:1px solid rgba(148,163,184,0.35)',
-        'border-radius:14px',
-        'box-shadow:0 18px 54px rgba(0,0,0,0.35)',
-        'box-sizing:border-box',
-        'padding:14px',
-        'overflow:auto',
-        'display:none',
-        'font-family:system-ui,Segoe UI,Roboto,sans-serif',
-      ].join(';'),
-    );
+    const apiStatusInput = document.createElement('input');
+    apiStatusInput.type = 'text';
+    apiStatusInput.id = '__pw_rec_api_status_input__';
+    apiStatusInput.placeholder = 'Status (200, 4, 404...)';
+    apiStatusInput.setAttribute('style', ['flex:1', inputStyle].join(';'));
 
-    const objectPanelHeader = document.createElement('div');
-    objectPanelHeader.setAttribute(
-      'style',
-      ['display:flex', 'align-items:center', 'justify-content:space-between', 'gap:10px', 'margin-bottom:10px'].join(';'),
-    );
-    const objectPanelTitle = document.createElement('div');
-    objectPanelTitle.textContent = 'Captured Objects — drag to move';
-    objectPanelTitle.setAttribute(
-      'style',
-      ['font-weight:800', 'font-size:12px', 'color:#e5e7eb', 'cursor:move', 'user-select:none', 'line-height:1.3'].join(';'),
-    );
-    const objectPanelClose = document.createElement('button');
-    objectPanelClose.type = 'button';
-    objectPanelClose.textContent = 'Close';
-    objectPanelClose.setAttribute(
-      'style',
-      [
-        'border:0',
-        'border-radius:8px',
-        'padding:6px 10px',
-        'cursor:pointer',
-        'font-weight:700',
-        'font-size:12px',
-        'color:#cbd5e1',
-        'background:rgba(148,163,184,0.15)',
-      ].join(';'),
-    );
-    objectPanelHeader.appendChild(objectPanelTitle);
-    objectPanelHeader.appendChild(objectPanelClose);
+    apiFilterRow2.appendChild(apiMethodSelect);
+    apiFilterRow2.appendChild(apiStatusInput);
+    apiFilterBar.appendChild(apiFilterInput);
+    apiFilterBar.appendChild(apiFilterRow2);
+
+    const triggerApiRerender = () => { (async () => { try { await renderApiTab(); } catch {} })(); };
+    apiFilterInput.addEventListener('input', triggerApiRerender);
+    apiMethodSelect.addEventListener('change', triggerApiRerender);
+    apiStatusInput.addEventListener('input', triggerApiRerender);
+
+    apisTabPane.appendChild(apiNoModeHint);
+    apisTabPane.appendChild(apiFilterBar);
+    apisTabPane.appendChild(apiSectionHint);
+    apisTabPane.appendChild(apiInlineList);
+
+    // --- Tab 3: Captured Objects ---
+    const objectsTabPane = document.createElement('div');
+    objectsTabPane.id = '__pw_rec_tab_pane_objects__';
+    objectsTabPane.setAttribute('style', 'display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;');
 
     const objectStatus = document.createElement('div');
     objectStatus.id = '__pw_rec_object_inspector_status__';
-    objectStatus.setAttribute('style', ['font-size:12px', 'color:#94a3b8', 'margin-bottom:8px'].join(';'));
+    objectStatus.setAttribute('style', ['font-size:12px', 'color:#94a3b8', 'margin-bottom:8px', 'flex-shrink:0'].join(';'));
     objectStatus.textContent = '';
 
     const objectList = document.createElement('div');
     objectList.id = '__pw_rec_object_inspector_list__';
-    objectList.setAttribute('style', ['display:flex', 'flex-direction:column', 'gap:8px'].join(';'));
+    objectList.setAttribute('style', ['flex:1', 'display:flex', 'flex-direction:column', 'gap:8px', 'overflow:auto'].join(';'));
 
     const objectFooter = document.createElement('div');
-    objectFooter.setAttribute('style', ['margin-top:12px', 'padding-top:10px', 'border-top:1px solid rgba(148,163,184,0.20)', 'display:flex', 'justify-content:flex-end'].join(';'));
+    objectFooter.setAttribute('style', ['margin-top:10px', 'padding-top:10px', 'border-top:1px solid rgba(148,163,184,0.20)', 'display:flex', 'justify-content:flex-end', 'flex-shrink:0'].join(';'));
     const genYamlBtn = document.createElement('button');
     genYamlBtn.type = 'button';
     genYamlBtn.id = '__pw_rec_generate_yaml_btn__';
@@ -1723,16 +1779,41 @@ function getInjectScript(resetOnStart: boolean): string {
       ].join(';'),
     );
     objectFooter.appendChild(genYamlBtn);
+    objectsTabPane.appendChild(objectStatus);
+    objectsTabPane.appendChild(objectList);
+    objectsTabPane.appendChild(objectFooter);
 
-    objectPanel.appendChild(objectPanelHeader);
-    objectPanel.appendChild(objectStatus);
-    objectPanel.appendChild(objectList);
-    objectPanel.appendChild(objectFooter);
-    wrapper.appendChild(objectPanel);
+    tabContent.appendChild(featureTabPane);
+    tabContent.appendChild(apisTabPane);
+    tabContent.appendChild(objectsTabPane);
+
+    panel.appendChild(panelHeader);
+    panel.appendChild(tabBar);
+    panel.appendChild(tabContent);
+    wrapper.appendChild(panel);
 
     wireDraggableResizable(panel, panelTitle, { minW: 300, minH: 220 });
-    wireDraggableResizable(objectPanel, objectPanelTitle, { minW: 360, minH: 220 });
 
+    // Tab switching
+    const switchTab = (tab) => {
+      activeTab = tab;
+      const paneMap = { feature: featureTabPane, apis: apisTabPane, objects: objectsTabPane };
+      const btnMap = { feature: tabFeatureBtn, apis: tabApisBtn, objects: tabObjectsBtn };
+      for (const [k, pane] of Object.entries(paneMap)) {
+        pane.style.display = k === tab ? 'flex' : 'none';
+      }
+      for (const [k, btn] of Object.entries(btnMap)) {
+        btn.setAttribute('style', k === tab ? tabStyleActive : tabStyleInactive);
+      }
+      if (tab === 'apis') (async () => { try { await renderApiTab(); } catch {} })();
+      if (tab === 'objects') void loadCapturedObjects();
+    };
+
+    tabFeatureBtn.addEventListener('click', () => switchTab('feature'));
+    tabApisBtn.addEventListener('click', () => switchTab('apis'));
+    tabObjectsBtn.addEventListener('click', () => switchTab('objects'));
+
+    // Captured Objects logic
     const objectInspectorState = { rows: [] };
 
     const renderObjectRows = () => {
@@ -1816,22 +1897,6 @@ function getInjectScript(resetOnStart: boolean): string {
       renderObjectRows();
     };
 
-    const setObjectInspectorOpen = (open) => {
-      isObjectInspectorOpen = !!open;
-      const panelEl = document.getElementById('__pw_rec_object_inspector_panel__');
-      if (panelEl) panelEl.style.display = isObjectInspectorOpen ? 'block' : 'none';
-      if (isObjectInspectorOpen) void loadCapturedObjects();
-    };
-
-    objectInspectorBtn.addEventListener('click', () => {
-      if (isGenerating) return;
-      setObjectInspectorOpen(!isObjectInspectorOpen);
-    });
-
-    objectPanelClose.addEventListener('click', () => {
-      setObjectInspectorOpen(false);
-    });
-
     genYamlBtn.addEventListener('click', async () => {
       if (!window.pwRecorderGenerateInspectorYaml) return;
       const fileInputEl = document.getElementById('__pw_rec_filename__');
@@ -1848,6 +1913,180 @@ function getInjectScript(resetOnStart: boolean): string {
         alert(String((result && result.message) || 'Generate YAML failed'));
       }
     });
+
+    // Captured APIs render
+    const renderApiTab = async () => {
+      try {
+        const listEl = document.getElementById('__pw_rec_api_inline_list__');
+        const noModeHint = document.getElementById('__pw_rec_api_no_mode_hint__');
+        if (!listEl) return;
+        const cm = String(captureMode || '').toUpperCase();
+        if (cm === 'UI') {
+          if (noModeHint) noModeHint.style.display = 'block';
+          listEl.innerHTML = '';
+          return;
+        }
+        if (noModeHint) noModeHint.style.display = 'none';
+        const allRows = window.pwRecorderGetCapturedApis ? await window.pwRecorderGetCapturedApis().catch(() => []) : [];
+        const filterEl = document.getElementById('__pw_rec_api_filter_input__');
+        const methodEl = document.getElementById('__pw_rec_api_method_select__');
+        const statusEl = document.getElementById('__pw_rec_api_status_input__');
+        const urlFilter = filterEl ? String(filterEl.value || '').trim().toLowerCase() : '';
+        const methodFilter = methodEl ? String(methodEl.value || '').trim().toUpperCase() : '';
+        const statusFilter = statusEl ? String(statusEl.value || '').trim() : '';
+        const rows = (allRows || []).filter((r) => {
+          if (urlFilter && !String(r.fullUrl || r.url || '').toLowerCase().includes(urlFilter)) return false;
+          if (methodFilter && String(r.method || '').toUpperCase() !== methodFilter) return false;
+          if (statusFilter && !String(r.status ?? '').startsWith(statusFilter)) return false;
+          return true;
+        });
+        listEl.innerHTML = '';
+        if (!rows.length) {
+          const hasFilter = urlFilter || methodFilter || statusFilter;
+          const msg = hasFilter ? 'No APIs match the current filters.' : 'No APIs captured yet.';
+          listEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:8px;">' + msg + '</div>';
+          return;
+        }
+        rows.forEach((r) => {
+          const card = document.createElement('div');
+          card.setAttribute(
+            'style',
+            [
+              'border:1px solid rgba(148,163,184,0.24)',
+              'border-radius:10px',
+              'padding:10px',
+              'background:rgba(15,23,42,0.30)',
+              'display:flex',
+              'gap:10px',
+              'align-items:flex-start',
+              'justify-content:space-between',
+            ].join(';'),
+          );
+          const left = document.createElement('div');
+          left.setAttribute('style', ['display:flex', 'flex-direction:column', 'gap:4px', 'min-width:0'].join(';'));
+          const top = document.createElement('div');
+          top.setAttribute('style', ['display:flex', 'gap:8px', 'align-items:center', 'flex-wrap:wrap'].join(';'));
+          const badge = document.createElement('span');
+          badge.textContent = String(r.method || '').toUpperCase() + ' ' + String(r.status ?? '');
+          badge.setAttribute(
+            'style',
+            [
+              'font-size:11px',
+              'font-weight:900',
+              'padding:3px 8px',
+              'border-radius:999px',
+              'color:#e5e7eb',
+              'background:rgba(37,99,235,0.25)',
+              'border:1px solid rgba(148,163,184,0.18)',
+            ].join(';'),
+          );
+          const urlEl = document.createElement('div');
+          urlEl.textContent = String(r.fullUrl || r.url || '');
+          urlEl.setAttribute('style', ['font-size:12px', 'color:#e2e8f0', 'word-break:break-all'].join(';'));
+          top.appendChild(badge);
+          top.appendChild(urlEl);
+          const sub = document.createElement('div');
+          sub.textContent = 'Match key: ' + String((r.method || '').toUpperCase()) + ' ' + String(r.url || '');
+          sub.setAttribute('style', ['font-size:11px', 'color:#94a3b8', 'word-break:break-all'].join(';'));
+          left.appendChild(top);
+          left.appendChild(sub);
+          const del = document.createElement('button');
+          del.type = 'button';
+          del.textContent = 'Delete';
+          del.setAttribute(
+            'style',
+            [
+              'border:0',
+              'border-radius:10px',
+              'padding:8px 10px',
+              'cursor:pointer',
+              'font-weight:900',
+              'font-size:12px',
+              'color:#fff',
+              'background:rgba(220,38,38,0.95)',
+            ].join(';'),
+          );
+          del.onclick = async () => {
+            if (!window.pwRecorderDeleteCapturedApi) return;
+            await window.pwRecorderDeleteCapturedApi({ index: Number(r.index) }).catch(() => {});
+            void renderApiTab();
+          };
+          card.appendChild(left);
+          card.appendChild(del);
+          listEl.appendChild(card);
+        });
+      } catch {}
+    };
+
+    const setInspectorOpen = (open, tab) => {
+      isInspectorOpen = !!open;
+      const panelEl = document.getElementById('__pw_rec_inspector_panel__');
+      if (panelEl) panelEl.style.display = isInspectorOpen ? 'flex' : 'none';
+      if (isInspectorOpen) {
+        switchTab(tab || activeTab || 'feature');
+        inspectorDirty = false;
+        const editorEl = document.getElementById('__pw_rec_feature_editor__');
+        if (editorEl) {
+          suppressInspectorInput = true;
+          editorEl.value = generatedFeatureContent || NO_STEPS_TEXT;
+          suppressInspectorInput = false;
+        }
+      }
+    };
+
+    inspectorBtn.addEventListener('click', () => {
+      if (isGenerating) return;
+      setInspectorOpen(!isInspectorOpen);
+    });
+
+    // Allow the element-info popup to open the Objects tab from outside mountUi()
+    window.__pwRecOpenObjectsTab = () => {
+      setInspectorOpen(true, 'objects');
+      void loadCapturedObjects();
+    };
+
+    // Append a Gherkin step for a picked element and mark the editor dirty
+    window.__pwRecAppendToFeature = (info) => {
+      const editorEl = document.getElementById('__pw_rec_feature_editor__');
+      if (!editorEl) return;
+      const eName = String(info && info.name ? info.name : '');
+      const eStrategy = String(info && info.strategy ? info.strategy : '');
+      const eLocator = String(info && info.locatorValue ? info.locatorValue : '').toLowerCase();
+
+      // Infer Gherkin step from element type
+      const isInputEl = eStrategy === 'getByLabel' || eStrategy === 'getByPlaceholder'
+        || eLocator.indexOf("'textbox'") >= 0 || eLocator.indexOf('"textbox"') >= 0
+        || eLocator.indexOf("'searchbox'") >= 0 || eLocator.indexOf("'spinbutton'") >= 0;
+      const isButtonEl = eStrategy === 'getByRole'
+        && (eLocator.indexOf("'button'") >= 0 || eLocator.indexOf('"button"') >= 0);
+      const isLinkEl = (eStrategy === 'getByRole'
+        && (eLocator.indexOf("'link'") >= 0 || eLocator.indexOf('"link"') >= 0))
+        || eStrategy === 'getByText';
+
+      const step = isInputEl
+        ? 'When User enters "" text in "' + eName + '" textbox'
+        : isButtonEl
+          ? 'When User clicks on "' + eName + '" button'
+          : isLinkEl
+            ? 'When User clicks on "' + eName + '" link'
+            : 'When User clicks on "' + eName + '" element';
+
+      const current = String(editorEl.value || '');
+      const isEmpty = !current.trim() || current === NO_STEPS_TEXT;
+      let newContent;
+      if (isEmpty) {
+        const fileInputEl = document.getElementById('__pw_rec_filename__');
+        const rawName = fileInputEl && typeof fileInputEl.value === 'string' ? fileInputEl.value.trim() : '';
+        const screenName = rawName || 'testscreen';
+        const currentUrl = window.location.href || '';
+        newContent = 'Feature: Auto Generated Test\\n\\n  Scenario: User flow\\n\\n    Given User navigates to "' + currentUrl + '" URL\\n    Given User is on "' + screenName + '" screen\\n    ' + step + '\\n';
+      } else {
+        newContent = current.trimEnd() + '\\n    ' + step + '\\n';
+      }
+      editorEl.value = newContent;
+      generatedFeatureContent = newContent;
+      inspectorDirty = true;
+    };
 
     window.__pwRecorderRender = (payload) => {
       try {
@@ -1869,9 +2108,8 @@ function getInjectScript(resetOnStart: boolean): string {
         editorEl.value = featureContent;
         suppressInspectorInput = false;
         if (force) inspectorDirty = false;
-        if (isObjectInspectorOpen) {
-          void loadCapturedObjects();
-        }
+        if (activeTab === 'apis') (async () => { try { await renderApiTab(); } catch {} })();
+        if (activeTab === 'objects') void loadCapturedObjects();
       } catch {}
     };
 
@@ -1880,7 +2118,130 @@ function getInjectScript(resetOnStart: boolean): string {
 
     updateToggleUi(toggleBtn);
     ensureHoverUi();
-    try { void renderApiInline(); } catch {}
+    try { void renderApiTab(); } catch {}
+  }
+
+  function hideElementInfoPopup() {
+    const p = document.getElementById('__pw_rec_element_info_popup__');
+    if (p) p.style.display = 'none';
+  }
+
+  function showElementInfoPopup(x, y, name, strategy, locatorValue, fallback) {
+    let popup = document.getElementById('__pw_rec_element_info_popup__');
+    if (!popup) {
+      popup = document.createElement('div');
+      popup.id = '__pw_rec_element_info_popup__';
+      popup.setAttribute(
+        'style',
+        [
+          'position:fixed',
+          'z-index:2147483647',
+          'background:rgba(2,6,23,0.96)',
+          'border:1px solid rgba(5,150,105,0.6)',
+          'border-radius:12px',
+          'padding:14px 16px 12px',
+          'min-width:300px',
+          'max-width:440px',
+          'box-shadow:0 12px 40px rgba(0,0,0,0.5)',
+          'font-family:system-ui,Segoe UI,Roboto,sans-serif',
+          'display:none',
+        ].join(';'),
+      );
+      const uiRoot = document.getElementById('pw-recorder-ui-root') || document.body;
+      uiRoot.appendChild(popup);
+    }
+
+    const infoRow = (label, val) =>
+      '<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:5px;">' +
+        '<span style="font-size:11px;font-weight:700;color:#94a3b8;white-space:nowrap;min-width:68px;">' + label + '</span>' +
+        '<span style="font-size:11px;color:#e2e8f0;word-break:break-all;line-height:1.4;">' + val + '</span>' +
+      '</div>';
+
+    const safeVal = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    popup.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
+        '<span style="font-size:12px;font-weight:800;color:#34d399;">Captured Element</span>' +
+        '<button id="__pw_rec_eip_close__" type="button" style="border:0;background:transparent;color:#94a3b8;font-size:14px;cursor:pointer;padding:2px 6px;border-radius:6px;">✕</button>' +
+      '</div>' +
+      '<div style="margin-bottom:8px;">' +
+        '<label style="font-size:11px;font-weight:700;color:#94a3b8;display:block;margin-bottom:4px;">Element Name</label>' +
+        '<input id="__pw_rec_eip_name__" type="text" value="' + safeVal(name) + '" ' +
+          'style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:8px;border:1px solid rgba(148,163,184,0.3);background:rgba(15,23,42,0.5);color:#e5e7eb;font-size:12px;font-weight:700;outline:none;" />' +
+      '</div>' +
+      infoRow('Strategy', strategy || 'xpath') +
+      infoRow('Locator', locatorValue || '') +
+      (fallback && fallback !== locatorValue ? infoRow('XPath', fallback) : '') +
+      '<div style="margin-top:12px;display:flex;gap:8px;">' +
+        '<button id="__pw_rec_eip_add__" type="button" style="flex:1;padding:8px 10px;border-radius:8px;border:0;background:rgba(5,150,105,0.9);color:#fff;font-size:11px;font-weight:800;cursor:pointer;">Add to YAML &amp; Feature</button>' +
+        '<button id="__pw_rec_eip_copy__" type="button" style="padding:8px 10px;border-radius:8px;border:0;background:rgba(148,163,184,0.15);color:#94a3b8;font-size:11px;font-weight:700;cursor:pointer;">Copy</button>' +
+      '</div>' +
+      '<div id="__pw_rec_eip_status__" style="margin-top:6px;font-size:11px;color:#34d399;min-height:14px;"></div>';
+
+    // Position near click, keep within viewport
+    const margin = 12;
+    popup.style.display = 'block';
+    const pw = popup.offsetWidth || 320;
+    const ph = popup.offsetHeight || 200;
+    let left = x + 14;
+    let top = y + 14;
+    if (left + pw > window.innerWidth - margin) left = x - pw - 14;
+    if (top + ph > window.innerHeight - margin) top = y - ph - 14;
+    popup.style.left = Math.max(margin, left) + 'px';
+    popup.style.top = Math.max(margin, top) + 'px';
+
+    const closeEl = document.getElementById('__pw_rec_eip_close__');
+    if (closeEl) closeEl.onclick = () => { hideElementInfoPopup(); };
+
+    const copyEl = document.getElementById('__pw_rec_eip_copy__');
+    if (copyEl) {
+      copyEl.onclick = () => {
+        try {
+          navigator.clipboard.writeText(locatorValue || '').then(() => {
+            copyEl.textContent = 'Copied!';
+            setTimeout(() => { copyEl.textContent = 'Copy'; }, 1200);
+          });
+        } catch (ex) { copyEl.textContent = 'Copy failed'; }
+      };
+    }
+
+    const addEl = document.getElementById('__pw_rec_eip_add__');
+    const statusEl = document.getElementById('__pw_rec_eip_status__');
+    if (addEl) {
+      addEl.onclick = async () => {
+        const nameInput = document.getElementById('__pw_rec_eip_name__');
+        const finalName = nameInput ? String(nameInput.value || '').trim() : (name || '');
+        if (!finalName) {
+          if (statusEl) statusEl.textContent = 'Please enter an element name.';
+          return;
+        }
+        addEl.disabled = true;
+        addEl.textContent = 'Adding...';
+        try {
+          // 1. Save to server-side pickedObjects — prefer XPath (fallback) for stable YAML
+          if (window.pwRecorderAddPickedObject) {
+            const yamlStrategy = fallback ? 'xpath' : (strategy || 'xpath');
+            const yamlValue = fallback || locatorValue || '';
+            await window.pwRecorderAddPickedObject({ element: finalName, strategy: yamlStrategy, value: yamlValue });
+          }
+
+          // 2. Append Gherkin step to feature editor (via helper that also marks dirty)
+          if (window.__pwRecAppendToFeature) {
+            window.__pwRecAppendToFeature({ name: finalName, strategy: strategy || 'xpath', locatorValue: locatorValue || '', fallback: fallback || '' });
+          }
+
+          // 3. Open Inspector on Objects tab so user can see + Generate YAML
+          if (window.__pwRecOpenObjectsTab) window.__pwRecOpenObjectsTab();
+
+          if (statusEl) statusEl.textContent = 'Added! See Objects tab → Generate YAML.';
+          addEl.textContent = 'Added ✓';
+        } catch (ex) {
+          if (statusEl) statusEl.textContent = 'Error: ' + String(ex && ex.message ? ex.message : ex);
+          addEl.disabled = false;
+          addEl.textContent = 'Add to YAML & Feature';
+        }
+      };
+    }
   }
 
   function ensureHoverUi() {
@@ -3188,11 +3549,35 @@ function getInjectScript(resetOnStart: boolean): string {
     }
   }
 
-  document.addEventListener('click', (e) => {
-    if (!isRecording || isGenerating) return;
+  // Right-click when not recording shows the element capture popup
+  document.addEventListener('contextmenu', (e) => {
+    if (isRecording || isGenerating) return;
     const raw = e.target;
     if (!raw || !raw.closest) return;
     if (raw.closest('#pw-recorder-ui-root')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = raw.nodeType === 1 ? raw : (raw.parentElement || null);
+    if (!el || !el.setAttribute) return;
+    const mark = uid();
+    el.setAttribute(MARK, mark);
+    const payload = { markId: mark, snapshot: snap(el) };
+    if (window.pwRecorderHoverPreview) {
+      window.pwRecorderHoverPreview(payload).then((resp) => {
+        try { el.removeAttribute(MARK); } catch (ex) {}
+        if (!resp) return;
+        const strategy = (resp.locator || '').split('(')[0] || 'xpath';
+        showElementInfoPopup(e.clientX, e.clientY, resp.name || '', strategy, resp.locator || '', resp.fallback || '');
+      }).catch(() => { try { el.removeAttribute(MARK); } catch (ex) {} });
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    const raw = e.target;
+    if (!raw || !raw.closest) return;
+    if (raw.closest('#pw-recorder-ui-root')) return;
+
+    if (!isRecording || isGenerating) return;
 
     // Interactive validation creation (non-blocking, does not change existing recording behavior)
     try {
@@ -3452,8 +3837,10 @@ async function main(): Promise<void> {
   };
   const actions: RecordedAction[] = [];
   const capturedApis: CapturedApi[] = [];
+  const pickedObjects: InspectorObjectRow[] = [];
   let apiCaptureStop: (() => void) | undefined;
   let captureSelection: 'UI' | 'API' | 'UI+API' = 'UI+API';
+  let apiUrlFilter = '';
   let recorderIsRecording = false;
   let lastUrl = startUrl;
   let initialPageTitle = '';
@@ -3749,6 +4136,12 @@ async function main(): Promise<void> {
       }
     }
 
+    // Merge manually picked objects (from Pick mode) — these take precedence by name
+    for (const p of pickedObjects) {
+      const key = String(p.element || '').toLowerCase();
+      if (key) byName.set(key, p);
+    }
+
     for (const v of byName.values()) out.push(v);
     return out;
   });
@@ -3773,6 +4166,25 @@ async function main(): Promise<void> {
     scheduleUiSync(true);
     return { ok: true };
   });
+
+  await page.exposeFunction(
+    'pwRecorderAddPickedObject',
+    async (args?: { element?: string; strategy?: string; value?: string }) => {
+      const element = capitalizeWords(String(args?.element || '').trim());
+      const strategy = String(args?.strategy || 'xpath').trim();
+      const value = String(args?.value || '').trim();
+      if (!element || !value) return { ok: false, message: 'element and value are required' };
+      const key = element.toLowerCase();
+      const existingIdx = pickedObjects.findIndex((p) => p.element.toLowerCase() === key);
+      const row: InspectorObjectRow = { element, locator: [strategy, value] };
+      if (existingIdx >= 0) {
+        pickedObjects[existingIdx] = row;
+      } else {
+        pickedObjects.push(row);
+      }
+      return { ok: true };
+    },
+  );
 
   await page.exposeFunction(
     'pwRecorderGenerateInspectorYaml',
@@ -3832,7 +4244,8 @@ async function main(): Promise<void> {
 
     const hasAnyUi = uiEnabled && actions.length > 0;
     const hasAnyApi = apiEnabled && apiSteps.trim().length > 0;
-    if (!hasAnyUi && !hasAnyApi) {
+    const hasEditedContent = !!(args?.useEdited && args?.featureText?.trim());
+    if (!hasAnyUi && !hasAnyApi && !hasEditedContent) {
       await page.evaluate(() => alert('No steps recorded'));
       return { ok: false, message: 'No steps recorded' };
     }
@@ -3959,7 +4372,7 @@ async function main(): Promise<void> {
 
       if (nowShouldCaptureApi) {
         apiCaptureStop?.();
-        apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true) }).stop;
+        apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true), urlFilter: apiUrlFilter }).stop;
       } else {
         apiCaptureStop?.();
         apiCaptureStop = undefined;
@@ -3977,6 +4390,15 @@ async function main(): Promise<void> {
 
     scheduleUiSync(true);
     return { ok: true, captureSelection };
+  });
+
+  await page.exposeFunction('pwRecorderSetApiUrlFilter', (value: string) => {
+    apiUrlFilter = String(value ?? '').trim();
+    if (recorderIsRecording && shouldCaptureApi()) {
+      apiCaptureStop?.();
+      apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true), urlFilter: apiUrlFilter }).stop;
+    }
+    return { ok: true };
   });
 
   await page.exposeFunction('pwRecorderSetRecording', async (value: boolean, reset?: boolean) => {
@@ -4004,7 +4426,7 @@ async function main(): Promise<void> {
       // Start capture based on user selection.
       if (shouldCaptureApi()) {
         apiCaptureStop?.();
-        apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true) }).stop;
+        apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true), urlFilter: apiUrlFilter }).stop;
       } else {
         apiCaptureStop?.();
         apiCaptureStop = undefined;

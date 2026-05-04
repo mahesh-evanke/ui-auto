@@ -5,8 +5,8 @@ tester:
   - title: Tester
     label: Email Addresssss
 recordedflow:
-  - title: Misha House Billing
-    label: Email Addresssss
+  - title: PrimeReact - React UI Component Library
+    label: Recordedflow
 webtable:
   - title: Misha House Billing
     label: Email Addresssss
@@ -25,3 +25,9 @@ primereact:
 button:
   - title: PrimeReact - React UI Component Library
     label: Get Started
+testingweb:
+  - title: PrimeReact - React UI Component Library
+    label: Get Started
+something:
+  - title: Misha House Billing
+    label: Edit

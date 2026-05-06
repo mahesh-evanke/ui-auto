@@ -19,9 +19,19 @@ function formatKvDataTable(rows: DataTableKvRow[]): string {
   return `${header}\n${body}\n`;
 }
 
-function formatOneCapturedApi(c: CapturedApi): string {
+function applyUrlAliases(url: string, aliases: Record<string, string>): string {
+  for (const [name, base] of Object.entries(aliases)) {
+    if (base && url.startsWith(base)) {
+      return '${' + name + '}' + url.slice(base.length);
+    }
+  }
+  return url;
+}
+
+function formatOneCapturedApi(c: CapturedApi, aliases: Record<string, string> = {}): string {
   const method = String(c.method || '').toUpperCase();
-  const url = c.fullUrl ? String(c.fullUrl) : urlToHostPlaceholder(c.url);
+  const rawUrl = c.fullUrl ? String(c.fullUrl) : urlToHostPlaceholder(c.url);
+  const url = applyUrlAliases(rawUrl, aliases);
 
   const indent = '    ';
   const indentDt = '      ';
@@ -55,12 +65,16 @@ function formatOneCapturedApi(c: CapturedApi): string {
   return `${indent}Given User sends ${method} request to "${url}"${bodyBlock}\n${indent}Then User expects status code ${c.status}`;
 }
 
-export function generateApiStepsFromCapturedApis(capturedApis: CapturedApi[]): string {
+export function generateApiStepsFromCapturedApis(
+  capturedApis: CapturedApi[],
+  urlAliases?: Record<string, string>,
+): string {
+  const aliases = urlAliases ?? {};
   const sorted = [...capturedApis].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
   const steps: string[] = [];
   for (const c of sorted) {
     if (!c.method || !c.url) continue;
-    steps.push(formatOneCapturedApi(c));
+    steps.push(formatOneCapturedApi(c, aliases));
   }
   return steps.join('\n');
 }
@@ -69,10 +83,11 @@ export function generateFeatureFromCapturedApis(args: {
   capturedApis: CapturedApi[];
   featureName?: string;
   scenarioName?: string;
+  urlAliases?: Record<string, string>;
 }): string {
   const featureName = args.featureName || 'Captured API Replay';
   const scenarioName = args.scenarioName || 'API calls';
-  const apiSteps = generateApiStepsFromCapturedApis(args.capturedApis);
+  const apiSteps = generateApiStepsFromCapturedApis(args.capturedApis, args.urlAliases);
 
   return [`Feature: ${featureName}`, ``, `  Scenario: ${scenarioName}`, apiSteps, ``].join('\n');
 }

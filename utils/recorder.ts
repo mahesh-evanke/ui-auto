@@ -544,6 +544,7 @@ function getInjectScript(resetOnStart: boolean): string {
   let isRecording = false;
   let isGenerating = false;
   let captureMode = 'UI+API';
+  const apiUrlFilterList = [];
   let isInspectorOpen = false;
   let inspectorDirty = false;
   let generatedFeatureContent = '';
@@ -903,41 +904,130 @@ function getInjectScript(resetOnStart: boolean): string {
       'style',
       [
         'display:none',
-        'align-items:center',
+        'flex-direction:column',
         'gap:6px',
-        'margin-top:6px',
+        'margin-top:2px',
         'padding:6px 8px',
         'border-radius:10px',
         'border:1px solid rgba(148,163,184,0.25)',
         'background:rgba(15,23,42,0.35)',
       ].join(';'),
     );
+
     const urlFilterLabel = document.createElement('span');
-    urlFilterLabel.textContent = 'Capture URL:';
-    urlFilterLabel.setAttribute('style', 'font-size:11px;color:#94a3b8;white-space:nowrap;font-weight:700;');
+    urlFilterLabel.textContent = 'Capture URLs:';
+    urlFilterLabel.setAttribute('style', 'font-size:11px;color:#94a3b8;font-weight:700;');
+
+    const urlFieldStyle = [
+      'padding:6px 8px',
+      'border-radius:8px',
+      'border:1px solid rgba(148,163,184,0.28)',
+      'background:rgba(2,6,23,0.65)',
+      'color:#e5e7eb',
+      'font-size:11px',
+      'outline:none',
+    ].join(';');
+
+    const urlAddRow = document.createElement('div');
+    urlAddRow.setAttribute('style', 'display:flex;gap:6px;align-items:center;');
+
+    const urlNameInput = document.createElement('input');
+    urlNameInput.type = 'text';
+    urlNameInput.id = '__pw_rec_url_name_input__';
+    urlNameInput.placeholder = 'Name (e.g. api1)';
+    urlNameInput.setAttribute('style', 'width:90px;flex-shrink:0;' + urlFieldStyle);
+
     const urlFilterInput = document.createElement('input');
     urlFilterInput.type = 'text';
     urlFilterInput.id = '__pw_rec_url_filter_input__';
-    urlFilterInput.placeholder = 'e.g. https://api.example.com (leave empty = all)';
-    urlFilterInput.setAttribute(
+    urlFilterInput.placeholder = 'https://api.example.com';
+    urlFilterInput.setAttribute('style', 'flex:1;' + urlFieldStyle);
+
+    const urlAddBtn = document.createElement('button');
+    urlAddBtn.type = 'button';
+    urlAddBtn.textContent = '+ Add';
+    urlAddBtn.setAttribute(
       'style',
       [
-        'flex:1',
-        'padding:6px 8px',
+        'border:0',
         'border-radius:8px',
-        'border:1px solid rgba(148,163,184,0.28)',
-        'background:rgba(2,6,23,0.65)',
-        'color:#e5e7eb',
+        'padding:6px 10px',
+        'cursor:pointer',
+        'font-weight:700',
         'font-size:11px',
-        'outline:none',
+        'color:#fff',
+        'white-space:nowrap',
+        'background:rgba(37,99,235,0.85)',
+        'flex-shrink:0',
       ].join(';'),
     );
-    urlFilterInput.addEventListener('input', () => {
-      const v = urlFilterInput.value.trim();
-      if (window.pwRecorderSetApiUrlFilter) window.pwRecorderSetApiUrlFilter(v).catch(() => {});
-    });
+
+    const urlChipsContainer = document.createElement('div');
+    urlChipsContainer.id = '__pw_rec_url_chips__';
+    urlChipsContainer.setAttribute('style', 'display:flex;flex-direction:column;gap:4px;');
+
+    const renderUrlChips = () => {
+      urlChipsContainer.innerHTML = '';
+      apiUrlFilterList.forEach((entry, idx) => {
+        const chip = document.createElement('div');
+        chip.setAttribute(
+          'style',
+          [
+            'display:flex',
+            'align-items:center',
+            'gap:6px',
+            'background:rgba(37,99,235,0.12)',
+            'border:1px solid rgba(37,99,235,0.30)',
+            'border-radius:6px',
+            'padding:4px 8px',
+          ].join(';'),
+        );
+        const nameBadge = document.createElement('span');
+        nameBadge.textContent = entry.name;
+        nameBadge.setAttribute('style', 'font-size:10px;font-weight:800;color:#93c5fd;white-space:nowrap;flex-shrink:0;');
+        const urlText = document.createElement('span');
+        urlText.textContent = entry.url;
+        urlText.setAttribute('style', 'font-size:11px;color:#e2e8f0;flex:1;word-break:break-all;');
+        const rmBtn = document.createElement('button');
+        rmBtn.type = 'button';
+        rmBtn.textContent = '×';
+        rmBtn.setAttribute('style', 'border:0;background:transparent;color:#94a3b8;cursor:pointer;font-size:14px;padding:0;line-height:1;flex-shrink:0;');
+        rmBtn.onclick = () => {
+          apiUrlFilterList.splice(idx, 1);
+          renderUrlChips();
+          if (window.pwRecorderSetApiUrlFilters) window.pwRecorderSetApiUrlFilters(apiUrlFilterList.slice()).catch(() => {});
+        };
+        chip.appendChild(nameBadge);
+        chip.appendChild(urlText);
+        chip.appendChild(rmBtn);
+        urlChipsContainer.appendChild(chip);
+      });
+    };
+
+    const addUrlFilter = () => {
+      const url = urlFilterInput.value.trim();
+      if (!url) return;
+      const existingIdx = apiUrlFilterList.findIndex((e) => e.url === url);
+      if (existingIdx >= 0) { urlFilterInput.value = ''; return; }
+      const rawName = urlNameInput.value.trim();
+      const name = rawName || ('api' + (apiUrlFilterList.length + 1));
+      apiUrlFilterList.push({ name: name, url: url });
+      urlNameInput.value = '';
+      urlFilterInput.value = '';
+      renderUrlChips();
+      if (window.pwRecorderSetApiUrlFilters) window.pwRecorderSetApiUrlFilters(apiUrlFilterList.slice()).catch(() => {});
+    };
+
+    urlAddBtn.addEventListener('click', addUrlFilter);
+    urlFilterInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addUrlFilter(); });
+    urlNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') urlFilterInput.focus(); });
+
+    urlAddRow.appendChild(urlNameInput);
+    urlAddRow.appendChild(urlFilterInput);
+    urlAddRow.appendChild(urlAddBtn);
     urlFilterRow.appendChild(urlFilterLabel);
-    urlFilterRow.appendChild(urlFilterInput);
+    urlFilterRow.appendChild(urlAddRow);
+    urlFilterRow.appendChild(urlChipsContainer);
     toolbarBody.appendChild(urlFilterRow);
 
     const inspectorBtn = document.createElement('button');
@@ -3840,7 +3930,13 @@ async function main(): Promise<void> {
   const pickedObjects: InspectorObjectRow[] = [];
   let apiCaptureStop: (() => void) | undefined;
   let captureSelection: 'UI' | 'API' | 'UI+API' = 'UI+API';
-  let apiUrlFilter = '';
+  let apiUrlFilters: { name: string; url: string }[] = [];
+  const buildUrlAliases = (): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const f of apiUrlFilters) { if (f.name && f.url) out[f.name] = f.url; }
+    return out;
+  };
+  const filterUrls = (): string[] => apiUrlFilters.map((f) => f.url).filter(Boolean);
   let recorderIsRecording = false;
   let lastUrl = startUrl;
   let initialPageTitle = '';
@@ -3875,7 +3971,7 @@ async function main(): Promise<void> {
       const NO_STEPS_TEXT = 'No steps recorded yet...';
       const uiEnabled = shouldRecordUiActions();
       const apiEnabled = shouldCaptureApi();
-      const apiSteps = apiEnabled ? generateApiStepsFromCapturedApis(capturedApis) : '';
+      const apiSteps = apiEnabled ? generateApiStepsFromCapturedApis(capturedApis, buildUrlAliases()) : '';
       const uiFeature =
         uiEnabled && actions.length
           ? rewriteWebTableStep(
@@ -3898,6 +3994,7 @@ async function main(): Promise<void> {
                   capturedApis,
                   featureName: 'Auto Generated Test',
                   scenarioName: scenarioTitle,
+                  urlAliases: buildUrlAliases(),
                 })
               : NO_STEPS_TEXT;
 
@@ -4221,6 +4318,16 @@ async function main(): Promise<void> {
         const outPath = path.join(generatedDir, `${fileNameSafe}.yaml`);
         const yamlBody = lines.length ? `${lines.join('\n')}\n` : '';
         fs.writeFileSync(outPath, yamlBody, 'utf8');
+
+        // Write companion API URL config if any named filters are active
+        const urlConfigPath = path.join(generatedDir, `${fileNameSafe}-api-config.yaml`);
+        const namedFilters = apiUrlFilters.filter((f) => f.name && f.url);
+        if (namedFilters.length) {
+          const urlLines = ['# API URL aliases used during capture', '# Usage: replace ${name} in feature steps with actual base URL'];
+          for (const f of namedFilters) urlLines.push(`${f.name}: ${f.url}`);
+          fs.writeFileSync(urlConfigPath, urlLines.join('\n') + '\n', 'utf8');
+        }
+
         return { ok: true, path: path.relative(ROOT, outPath).replace(/\\/g, '/') };
       } catch (err) {
         return { ok: false, message: err instanceof Error ? err.message : String(err) };
@@ -4233,7 +4340,7 @@ async function main(): Promise<void> {
     async (args?: { featureText?: string; useEdited?: boolean; fileName?: string }) => {
     const uiEnabled = shouldRecordUiActions();
     const apiEnabled = shouldCaptureApi();
-    const apiSteps = apiEnabled ? generateApiStepsFromCapturedApis(capturedApis) : '';
+    const apiSteps = apiEnabled ? generateApiStepsFromCapturedApis(capturedApis, buildUrlAliases()) : '';
 
     // Stop network capture during feature generation to keep output stable.
     apiCaptureStop?.();
@@ -4289,6 +4396,7 @@ async function main(): Promise<void> {
             capturedApis,
             featureName: 'Auto Generated Test',
             scenarioName: scenarioTitle,
+            urlAliases: buildUrlAliases(),
           });
         } else {
           featureToWrite = rewriteWebTableStep(artifact?.featureContent || '');
@@ -4300,6 +4408,22 @@ async function main(): Promise<void> {
         ensureDir(path.dirname(pagesYamlPath));
         registerPage(pagesYamlPath, artifact.pageKey, artifact.pageMeta.title, artifact.pageMeta.label);
         writePageLocatorsYaml(pageLocatorPath, artifact.locatorMap);
+      }
+
+      // Write API URL alias config alongside locators when named filters are active
+      const namedFilters = apiUrlFilters.filter((f) => f.name && f.url);
+      let apiConfigRel = '';
+      if (apiEnabled && namedFilters.length) {
+        const apiConfigDir = path.join(ROOT, 'locators', 'generated');
+        ensureDir(apiConfigDir);
+        const apiConfigPath = path.join(apiConfigDir, `${pageKey}-api-config.yaml`);
+        const configLines = [
+          '# API URL aliases used during capture',
+          '# Replace ${name} references in the feature file with the actual base URL',
+        ];
+        for (const f of namedFilters) configLines.push(`${f.name}: ${f.url}`);
+        fs.writeFileSync(apiConfigPath, configLines.join('\n') + '\n', 'utf8');
+        apiConfigRel = path.relative(ROOT, apiConfigPath).replace(/\\/g, '/');
       }
 
       const sessionPath = path.join(ROOT, 'recorded-session.json');
@@ -4324,8 +4448,9 @@ async function main(): Promise<void> {
       const featureRel = path.relative(ROOT, featurePath).replace(/\\/g, '/');
       const pagesRel = path.relative(ROOT, pagesYamlPath).replace(/\\/g, '/');
       const pageLocRel = path.relative(ROOT, pageLocatorPath).replace(/\\/g, '/');
+      const apiConfigLine = apiConfigRel ? `\\nAPI config: ${apiConfigRel}` : '';
       const message =
-        `✅ Files generated successfully!\\nFeature: ${featureRel}\\nPages: ${pagesRel}\\nPage locators: ${pageLocRel}`;
+        `✅ Files generated successfully!\\nFeature: ${featureRel}\\nPages: ${pagesRel}\\nPage locators: ${pageLocRel}${apiConfigLine}`;
 
       // eslint-disable-next-line no-console
       console.log(message);
@@ -4372,7 +4497,7 @@ async function main(): Promise<void> {
 
       if (nowShouldCaptureApi) {
         apiCaptureStop?.();
-        apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true), urlFilter: apiUrlFilter }).stop;
+        apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true), urlFilters: filterUrls() }).stop;
       } else {
         apiCaptureStop?.();
         apiCaptureStop = undefined;
@@ -4392,11 +4517,13 @@ async function main(): Promise<void> {
     return { ok: true, captureSelection };
   });
 
-  await page.exposeFunction('pwRecorderSetApiUrlFilter', (value: string) => {
-    apiUrlFilter = String(value ?? '').trim();
+  await page.exposeFunction('pwRecorderSetApiUrlFilters', (values: { name: string; url: string }[]) => {
+    apiUrlFilters = Array.isArray(values)
+      ? values.map((v) => ({ name: String(v?.name ?? '').trim(), url: String(v?.url ?? '').trim() })).filter((f) => f.url)
+      : [];
     if (recorderIsRecording && shouldCaptureApi()) {
       apiCaptureStop?.();
-      apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true), urlFilter: apiUrlFilter }).stop;
+      apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true), urlFilters: filterUrls() }).stop;
     }
     return { ok: true };
   });
@@ -4426,7 +4553,7 @@ async function main(): Promise<void> {
       // Start capture based on user selection.
       if (shouldCaptureApi()) {
         apiCaptureStop?.();
-        apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true), urlFilter: apiUrlFilter }).stop;
+        apiCaptureStop = attachApiCapture(page, capturedApis, { onCaptured: () => scheduleUiSync(true), urlFilters: filterUrls() }).stop;
       } else {
         apiCaptureStop?.();
         apiCaptureStop = undefined;

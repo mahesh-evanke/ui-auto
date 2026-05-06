@@ -8,6 +8,7 @@ import type { AutomationWorld } from './world';
 import { dataTableToJson } from '../utils/datatable';
 import { extractTokenFromJson, buildAuthorizationHeader } from '../utils/token';
 import { findCapturedApi, normalizeUrl, waitForCapturedApi } from '../utils/matcher';
+import { resolveApiUrl } from '../utils/api-config';
 
 type SyntheticApiResponse = {
   status: () => number;
@@ -72,20 +73,22 @@ function createSyntheticResponse(captured: any): SyntheticApiResponse {
 }
 
 Given('User sends {word} request to {string}', async function (this: AutomationWorld, method: string, url: string) {
-  const normalizedUrl = normalizeUrl(url);
+  const resolvedUrl = resolveApiUrl(url);
+  const normalizedUrl = normalizeUrl(resolvedUrl);
   this.apiState.pendingRequest = {
     method: String(method || '').toUpperCase(),
-    url,
+    url: resolvedUrl,
     normalizedUrl,
   };
 });
 
 Given('User sends {word} request to {string} with body:', async function (this: AutomationWorld, method: string, url: string, dataTable: DataTable) {
+  const resolvedUrl = resolveApiUrl(url);
   const bodyJson = dataTableToJson(dataTable);
-  const normalizedUrl = normalizeUrl(url);
+  const normalizedUrl = normalizeUrl(resolvedUrl);
   this.apiState.pendingRequest = {
     method: String(method || '').toUpperCase(),
-    url,
+    url: resolvedUrl,
     normalizedUrl,
     body: stripJsonIfQuoted(bodyJson),
   };

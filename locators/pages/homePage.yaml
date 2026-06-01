@@ -1,0 +1,6 @@
+Dropdown:
+  - xpath
+  - //*[@id='dropdown']
+Option 1:
+  - xpath
+  - //select[@id='dropdown']/option[text()='Option 1']

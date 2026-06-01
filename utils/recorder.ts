@@ -532,6 +532,500 @@ type InspectorObjectRow = {
   locator: [string, string];
 };
 
+async function injectAiGeneratePanel(page: import('playwright').Page): Promise<void> {
+  await page.evaluate(() => {
+    if (document.getElementById('__pw_ai_gen_panel__')) return;
+    const win = window as any;
+
+    // ── Toolbar button ────────────────────────────────────────────────────────
+    const barRow = document.querySelector('[id^="__pw_rec_btn_ai_fix__"]')?.parentElement;
+    if (!barRow) return;
+
+    const aiGenBtn = document.createElement('button');
+    aiGenBtn.type = 'button';
+    aiGenBtn.id = '__pw_rec_btn_ai_gen__';
+    aiGenBtn.textContent = '✨ AI Generate';
+    aiGenBtn.setAttribute('style', [
+      'padding:8px 10px', 'border-radius:10px', 'border:0', 'cursor:pointer',
+      'font-weight:800', 'font-size:12px', 'color:#fff',
+      'background:rgba(16,185,129,0.95)',
+      'box-shadow:0 8px 24px rgba(16,185,129,0.22)',
+    ].join(';'));
+    barRow.appendChild(aiGenBtn);
+
+    // ── Panel ─────────────────────────────────────────────────────────────────
+    const panel = document.createElement('div');
+    panel.id = '__pw_ai_gen_panel__';
+    panel.setAttribute('style', [
+      'position:fixed', 'top:8px', 'left:8px', 'width:560px', 'height:82vh',
+      'max-height:calc(100vh - 16px)', 'z-index:2147483647',
+      'background:rgba(2,6,23,0.95)', 'border:1px solid rgba(148,163,184,0.35)',
+      'border-radius:14px', 'box-sizing:border-box', 'padding:14px',
+      'overflow:auto', 'display:none',
+      'font-family:system-ui,Segoe UI,Roboto,sans-serif',
+      'resize:both', 'min-width:380px', 'min-height:340px',
+    ].join(';'));
+
+    // Header
+    const hdr = document.createElement('div');
+    hdr.setAttribute('style', 'display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:move;user-select:none');
+    const title = document.createElement('div');
+    title.textContent = '✨ AI Generate — feature + locators from description';
+    title.setAttribute('style', 'font-weight:900;font-size:12px;color:#e5e7eb');
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.textContent = 'Close';
+    closeBtn.setAttribute('style', 'border:0;border-radius:10px;padding:6px 10px;cursor:pointer;font-weight:800;font-size:12px;color:#cbd5e1;background:rgba(148,163,184,0.15)');
+    closeBtn.addEventListener('click', () => { panel.style.display = 'none'; });
+    hdr.appendChild(title);
+    hdr.appendChild(closeBtn);
+    panel.appendChild(hdr);
+
+    const meta = document.createElement('div');
+    meta.setAttribute('style', 'margin-top:6px;font-size:11px;color:#94a3b8;line-height:1.5');
+    meta.innerHTML = 'Describe your scenario in plain English. Use <b style="color:#6ee7b7">[pageKey]</b> markers for each page.<br>Example: <i style="color:#a5f3fc">[loginPage] Enter email and password, click Login. [dashboardPage] Verify Welcome text. Click Edit button.</i>';
+    panel.appendChild(meta);
+
+    // Helpers
+    const lbl = (t: string) => {
+      const d = document.createElement('div');
+      d.textContent = t;
+      d.setAttribute('style', 'margin-top:12px;font-weight:900;font-size:12px;color:#e5e7eb');
+      return d;
+    };
+    const inp = (ph: string, val: string) => {
+      const e = document.createElement('input');
+      e.type = 'text';
+      e.placeholder = ph;
+      e.value = val || '';
+      e.setAttribute('style', 'margin-top:6px;width:100%;padding:9px 12px;border-radius:10px;border:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.4);color:#e5e7eb;outline:none;font-size:12px;box-sizing:border-box');
+      return e;
+    };
+    const btn = (t: string, bg: string) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = t;
+      b.setAttribute('style', 'padding:9px 14px;border-radius:10px;border:0;cursor:pointer;font-weight:800;font-size:12px;color:#fff;background:' + bg);
+      return b;
+    };
+
+    panel.appendChild(lbl('URL to test'));
+    const urlIn = inp('https://example.com/login', '');
+    panel.appendChild(urlIn);
+
+    panel.appendChild(lbl('Scenario description'));
+    const descIn = document.createElement('textarea');
+    descIn.placeholder = '[loginPage] Enter email surya@evanke.com and password Test@123, click the Login button.\n[dashboardPage] Verify Welcome text is visible. Click the Edit button.\n[editPage] Update the name field and click Save.';
+    descIn.setAttribute('style', 'margin-top:6px;width:100%;height:110px;padding:9px 12px;border-radius:10px;border:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.4);color:#e5e7eb;outline:none;font-size:12px;resize:vertical;box-sizing:border-box;font-family:inherit');
+    panel.appendChild(descIn);
+
+    panel.appendChild(lbl('Feature file name (no extension)'));
+    const nameIn = inp('my-login-flow', 'generated-flow');
+    panel.appendChild(nameIn);
+
+    const btnRow = document.createElement('div');
+    btnRow.setAttribute('style', 'display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center');
+    const genBtn2 = btn('▶ Generate', 'rgba(16,185,129,0.9)');
+    const saveBtn = btn('💾 Save files', 'rgba(59,130,246,0.9)');
+    const runBtn2 = btn('🔄 Run & Auto-Fix', 'rgba(234,88,12,0.9)');
+
+    // Max iterations selector
+    const iterLabel = document.createElement('span');
+    iterLabel.textContent = 'Max attempts:';
+    iterLabel.setAttribute('style', 'font-size:11px;color:#94a3b8;white-space:nowrap');
+    const iterSel = document.createElement('select');
+    iterSel.setAttribute('style', 'padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.5);color:#e5e7eb;font-size:11px;outline:none');
+    [3, 5, 7, 10, 0].forEach((n) => {
+      const o = document.createElement('option');
+      o.value = String(n);
+      o.textContent = n === 0 ? 'Unlimited' : String(n);
+      if (n === 5) o.selected = true;
+      iterSel.appendChild(o);
+    });
+
+    saveBtn.style.display = 'none';
+    runBtn2.style.display = 'none';
+    iterLabel.style.display = 'none';
+    iterSel.style.display = 'none';
+
+    btnRow.appendChild(genBtn2);
+    btnRow.appendChild(saveBtn);
+    btnRow.appendChild(runBtn2);
+    btnRow.appendChild(iterLabel);
+    btnRow.appendChild(iterSel);
+    panel.appendChild(btnRow);
+
+    const status = document.createElement('div');
+    status.setAttribute('style', 'margin-top:10px;font-size:11px;color:#6ee7b7;min-height:18px');
+    panel.appendChild(status);
+
+    panel.appendChild(lbl('Generated feature file'));
+    const featOut = document.createElement('textarea');
+    featOut.setAttribute('style', 'margin-top:6px;width:100%;height:130px;padding:9px 12px;border-radius:10px;border:1px solid rgba(148,163,184,0.2);background:rgba(15,23,42,0.5);color:#a5f3fc;outline:none;font-size:11px;resize:vertical;box-sizing:border-box;font-family:monospace');
+    panel.appendChild(featOut);
+
+    panel.appendChild(lbl('Generated locators YAML (per page)'));
+    const yamlOut = document.createElement('textarea');
+    yamlOut.setAttribute('style', 'margin-top:6px;width:100%;height:130px;padding:9px 12px;border-radius:10px;border:1px solid rgba(148,163,184,0.2);background:rgba(15,23,42,0.5);color:#fde68a;outline:none;font-size:11px;resize:vertical;box-sizing:border-box;font-family:monospace');
+    panel.appendChild(yamlOut);
+    const yamlNote = document.createElement('div');
+    yamlNote.setAttribute('style', 'margin-top:4px;font-size:10px;color:#94a3b8');
+    yamlNote.textContent = 'Multi-page: each page YAML is saved separately to locators/pages/<pageKey>.yaml';
+    panel.appendChild(yamlNote);
+
+    // ── Run Existing Feature section ─────────────────────────────────────────
+    const divider = document.createElement('div');
+    divider.setAttribute('style', 'margin-top:16px;border-top:1px solid rgba(148,163,184,0.2);padding-top:14px');
+    panel.appendChild(divider);
+
+    const runSecTitle = document.createElement('div');
+    runSecTitle.textContent = '▶ Run & Auto-Fix any feature file';
+    runSecTitle.setAttribute('style', 'font-weight:900;font-size:12px;color:#e5e7eb');
+    divider.appendChild(runSecTitle);
+
+    const runSecMeta = document.createElement('div');
+    runSecMeta.textContent = 'Pick any feature file → run → if it fails, LLM fixes it automatically and retries.';
+    runSecMeta.setAttribute('style', 'margin-top:4px;font-size:11px;color:#94a3b8');
+    divider.appendChild(runSecMeta);
+
+    // Dropdown of all feature files
+    const featureSel = document.createElement('select');
+    featureSel.setAttribute('style', 'margin-top:8px;width:100%;padding:9px 12px;border-radius:10px;border:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.4);color:#e5e7eb;outline:none;font-size:12px;box-sizing:border-box');
+    const featureSelPlaceholder = document.createElement('option');
+    featureSelPlaceholder.value = '';
+    featureSelPlaceholder.textContent = '— loading feature files... —';
+    featureSel.appendChild(featureSelPlaceholder);
+    divider.appendChild(featureSel);
+
+    // Refresh button + iterations row
+    const runExRow = document.createElement('div');
+    runExRow.setAttribute('style', 'display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap');
+    const refreshBtn = btn('⟳ Refresh', 'rgba(71,85,105,0.8)');
+    const runExBtn = btn('🔄 Run & Auto-Fix', 'rgba(234,88,12,0.9)');
+    const runExIterLabel = document.createElement('span');
+    runExIterLabel.textContent = 'Max attempts:';
+    runExIterLabel.setAttribute('style', 'font-size:11px;color:#94a3b8;white-space:nowrap');
+    const runExIterSel = document.createElement('select');
+    runExIterSel.setAttribute('style', 'padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.5);color:#e5e7eb;font-size:11px;outline:none');
+    [3, 5, 7, 10, 0].forEach((n) => {
+      const o = document.createElement('option');
+      o.value = String(n);
+      o.textContent = n === 0 ? 'Unlimited' : String(n);
+      if (n === 5) o.selected = true;
+      runExIterSel.appendChild(o);
+    });
+    runExRow.appendChild(refreshBtn);
+    runExRow.appendChild(runExBtn);
+    runExRow.appendChild(runExIterLabel);
+    runExRow.appendChild(runExIterSel);
+    divider.appendChild(runExRow);
+
+    // Status line for the existing-file runner
+    const runExStatus = document.createElement('div');
+    runExStatus.setAttribute('style', 'margin-top:8px;font-size:11px;color:#6ee7b7;min-height:16px');
+    divider.appendChild(runExStatus);
+
+    // Shared terminal output
+    panel.appendChild(lbl('Test output'));
+    const termOut = document.createElement('pre');
+    termOut.setAttribute('style', 'margin-top:6px;width:100%;min-height:100px;max-height:320px;padding:10px 12px;border-radius:10px;border:1px solid rgba(148,163,184,0.15);background:#0a0f1e;color:#86efac;font-size:11px;font-family:monospace;overflow-y:auto;white-space:pre-wrap;word-break:break-all;box-sizing:border-box;display:none');
+    panel.appendChild(termOut);
+
+    // Load feature file list
+    const loadFeatureFiles = async () => {
+      try {
+        const list = await win.pwRecorderListFeatureFiles();
+        while (featureSel.firstChild) featureSel.removeChild(featureSel.firstChild);
+        if (!list || !list.length) {
+          const o = document.createElement('option');
+          o.value = '';
+          o.textContent = '— no feature files found —';
+          featureSel.appendChild(o);
+          return;
+        }
+        const ph = document.createElement('option');
+        ph.value = '';
+        ph.textContent = '— select a feature file —';
+        featureSel.appendChild(ph);
+        list.forEach((f: { label: string; absPath: string }) => {
+          const o = document.createElement('option');
+          o.value = f.absPath;
+          o.textContent = f.label;
+          featureSel.appendChild(o);
+        });
+      } catch (e) {
+        runExStatus.textContent = 'Could not load file list: ' + ((e as any).message || String(e));
+      }
+    };
+
+    // Load on open, refresh on button click
+    void loadFeatureFiles();
+    refreshBtn.addEventListener('click', () => { void loadFeatureFiles(); runExStatus.textContent = 'Refreshed.'; });
+
+    // Run & auto-fix loop for an existing file
+    const startLoop = async (featurePath: string, maxIter: number, statusEl: HTMLElement) => {
+      if (!featurePath) { statusEl.textContent = 'Select a feature file first.'; return; }
+      runExBtn.disabled = true;
+      runBtn2.disabled = true;
+      termOut.style.display = '';
+      termOut.style.color = '#86efac';
+      termOut.textContent = 'Starting auto-fix loop (max ' + maxIter + ' attempts)...\n';
+      statusEl.textContent = 'Starting...';
+      try {
+        const start = await win.pwRecorderStartFixLoop({ featurePath, maxIterations: maxIter });
+        const loopId: string = start.loopId;
+        const poll = async () => {
+          const s = await win.pwRecorderGetLoopStatus({ loopId });
+          termOut.textContent = s.log || '';
+          termOut.scrollTop = termOut.scrollHeight;
+          statusEl.textContent = s.statusLine || 'Running...';
+          if (!s.done) { setTimeout(poll, 2000); return; }
+          runExBtn.disabled = false;
+          runBtn2.disabled = false;
+          if (s.passed) {
+            statusEl.textContent = '✅ Passed after ' + s.iterations + ' iteration(s)!';
+            termOut.style.color = '#86efac';
+          } else {
+            statusEl.textContent = '❌ Could not fix after ' + s.iterations + ' attempt(s).';
+            termOut.style.color = '#fca5a5';
+          }
+          if (s.finalFeature) featOut.value = s.finalFeature;
+          if (s.finalYaml) yamlOut.value = s.finalYaml;
+        };
+        void poll();
+      } catch (e) {
+        termOut.textContent += 'Error: ' + ((e as any).message || String(e)) + '\n';
+        statusEl.textContent = 'Failed to start';
+        runExBtn.disabled = false;
+        runBtn2.disabled = false;
+      }
+    };
+
+    runExBtn.addEventListener('click', () => {
+      const fp = featureSel.value;
+      const maxIter = parseInt(runExIterSel.value || '5', 10);
+      void startLoop(fp, maxIter, runExStatus);
+    });
+
+    // ── Upload your own files ─────────────────────────────────────────────────
+    const uploadTitle = document.createElement('div');
+    uploadTitle.textContent = '📂 Upload your own files to fix';
+    uploadTitle.setAttribute('style', 'margin-top:14px;font-weight:900;font-size:12px;color:#e5e7eb');
+    divider.appendChild(uploadTitle);
+
+    const uploadHint = document.createElement('div');
+    uploadHint.textContent = 'Drop or pick .feature and/or .yaml locator files. They will be saved to the project, then the auto-fix loop runs.';
+    uploadHint.setAttribute('style', 'margin-top:4px;font-size:11px;color:#94a3b8');
+    divider.appendChild(uploadHint);
+
+    // Drop zone
+    const dropZone = document.createElement('div');
+    dropZone.id = '__pw_gen_upload_zone__';
+    dropZone.textContent = '⬆ Drop .feature / .yaml files here, or click to browse';
+    dropZone.setAttribute('style', [
+      'margin-top:8px', 'padding:14px 12px', 'border-radius:10px',
+      'border:2px dashed rgba(148,163,184,0.35)', 'background:rgba(15,23,42,0.35)',
+      'color:#94a3b8', 'font-size:11px', 'text-align:center',
+      'cursor:pointer', 'transition:border-color 0.15s',
+    ].join(';'));
+    divider.appendChild(dropZone);
+
+    // Hidden file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.multiple = true;
+    fileInput.accept = '.feature,.yaml,.yml';
+    fileInput.setAttribute('style', 'display:none');
+    divider.appendChild(fileInput);
+
+    // Uploaded files list
+    const uploadList = document.createElement('div');
+    uploadList.setAttribute('style', 'margin-top:6px;font-size:11px;color:#a5f3fc;min-height:16px');
+    divider.appendChild(uploadList);
+
+    // Upload row: iterations + run button
+    const uploadRow = document.createElement('div');
+    uploadRow.setAttribute('style', 'display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap');
+    const uploadRunBtn = btn('🔄 Save & Run Auto-Fix', 'rgba(234,88,12,0.9)');
+    const uploadIterLabel = document.createElement('span');
+    uploadIterLabel.textContent = 'Max attempts:';
+    uploadIterLabel.setAttribute('style', 'font-size:11px;color:#94a3b8;white-space:nowrap');
+    const uploadIterSel = document.createElement('select');
+    uploadIterSel.setAttribute('style', 'padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.5);color:#e5e7eb;font-size:11px;outline:none');
+    [3, 5, 7, 10, 0].forEach((n) => {
+      const o = document.createElement('option');
+      o.value = String(n);
+      o.textContent = n === 0 ? 'Unlimited' : String(n);
+      if (n === 5) o.selected = true;
+      uploadIterSel.appendChild(o);
+    });
+    const clearBtn = btn('✕ Clear', 'rgba(71,85,105,0.7)');
+    uploadRow.appendChild(uploadRunBtn);
+    uploadRow.appendChild(uploadIterLabel);
+    uploadRow.appendChild(uploadIterSel);
+    uploadRow.appendChild(clearBtn);
+    divider.appendChild(uploadRow);
+
+    const uploadStatus = document.createElement('div');
+    uploadStatus.setAttribute('style', 'margin-top:6px;font-size:11px;color:#6ee7b7;min-height:16px');
+    divider.appendChild(uploadStatus);
+
+    // Collected uploaded files: { name, content }
+    let uploadedFiles: Array<{ name: string; content: string }> = [];
+
+    const renderUploadList = () => {
+      uploadList.textContent = '';
+      if (!uploadedFiles.length) { uploadList.textContent = 'No files selected.'; return; }
+      uploadedFiles.forEach((f) => {
+        const chip = document.createElement('span');
+        chip.textContent = '📄 ' + f.name + '  ';
+        chip.setAttribute('style', 'margin-right:6px;background:rgba(99,102,241,0.2);padding:2px 6px;border-radius:6px');
+        uploadList.appendChild(chip);
+      });
+    };
+
+    const readFiles = (files: FileList | null) => {
+      if (!files || !files.length) return;
+      const readers: Promise<void>[] = [];
+      Array.from(files).forEach((file) => {
+        readers.push(new Promise((res) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const existing = uploadedFiles.findIndex((u) => u.name === file.name);
+            const entry = { name: file.name, content: String(reader.result || '') };
+            if (existing >= 0) uploadedFiles[existing] = entry;
+            else uploadedFiles.push(entry);
+            res();
+          };
+          reader.readAsText(file);
+        }));
+      });
+      Promise.all(readers).then(() => renderUploadList());
+    };
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => { readFiles(fileInput.files); fileInput.value = ''; });
+
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = 'rgba(99,102,241,0.8)'; });
+    dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = 'rgba(148,163,184,0.35)'; });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'rgba(148,163,184,0.35)';
+      readFiles(e.dataTransfer && e.dataTransfer.files);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      uploadedFiles = [];
+      renderUploadList();
+      uploadStatus.textContent = 'Cleared.';
+    });
+
+    uploadRunBtn.addEventListener('click', async () => {
+      const featureFile = uploadedFiles.find((f) => f.name.endsWith('.feature'));
+      const yamlFiles = uploadedFiles.filter((f) => f.name.endsWith('.yaml') || f.name.endsWith('.yml'));
+      if (!featureFile) { uploadStatus.textContent = 'Please upload at least one .feature file.'; return; }
+
+      uploadRunBtn.disabled = true;
+      uploadStatus.textContent = 'Saving uploaded files...';
+      try {
+        const saved = await win.pwRecorderSaveUploadedFiles({
+          files: uploadedFiles.map((f) => ({ name: f.name, content: f.content })),
+        });
+        uploadStatus.textContent = 'Saved: ' + (saved.savedPaths || []).join(', ');
+        // Refresh dropdown and select the saved feature
+        await loadFeatureFiles();
+        if (saved.featureAbsPath) {
+          Array.from(featureSel.options).forEach((o) => {
+            if ((o as HTMLOptionElement).value === saved.featureAbsPath) (o as HTMLOptionElement).selected = true;
+          });
+        }
+        // Start the fix loop
+        const maxIter = parseInt(uploadIterSel.value || '5', 10);
+        void startLoop(saved.featureAbsPath || '', maxIter, uploadStatus);
+      } catch (e) {
+        uploadStatus.textContent = 'Error: ' + ((e as any).message || String(e));
+        uploadRunBtn.disabled = false;
+      }
+    });
+
+    let savedPath = '';
+    let currentPageYamls: Record<string, string> = {};
+
+    genBtn2.addEventListener('click', async () => {
+      const url = urlIn.value.trim();
+      const desc = descIn.value.trim();
+      const name = (nameIn.value.trim() || 'generated-flow').replace(/[^a-zA-Z0-9_-]/g, '-');
+      if (!url) { status.textContent = 'Please enter a URL.'; return; }
+      if (!desc) { status.textContent = 'Please describe the scenario.'; return; }
+      genBtn2.disabled = true;
+      saveBtn.style.display = 'none';
+      featOut.value = '';
+      yamlOut.value = '';
+      // Detect page markers for status message
+      const pageMarkers = (desc.match(/\[[a-zA-Z][a-zA-Z0-9]*\]/g) || []);
+      status.textContent = pageMarkers.length > 1
+        ? 'Step 1: LLM drafts flow → Step 2: Browser navigates ' + pageMarkers.length + ' pages → Step 3: LLM generates feature + YAMLs...'
+        : 'Generating...';
+      let currentPageYamls: Record<string, string> = {};
+      try {
+        const r = await win.pwRecorderAiGenerate({ url, description: desc, fileName: name });
+        featOut.value = r.featureContent || '';
+        // Display all page YAMLs concatenated with headers
+        if (r.pageYamls && Object.keys(r.pageYamls).length > 0) {
+          currentPageYamls = r.pageYamls;
+          yamlOut.value = Object.entries(r.pageYamls)
+            .map(([pk, yaml]) => '# === ' + pk + '.yaml ===\n' + yaml)
+            .join('\n\n');
+        } else {
+          yamlOut.value = r.locatorsYaml || '';
+        }
+        status.textContent = r.status || 'Done! Review and click Save files.';
+        saveBtn.style.display = '';
+      } catch (e) {
+        status.textContent = 'Error: ' + (e && (e as any).message ? (e as any).message : String(e));
+      }
+      genBtn2.disabled = false;
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      const name = (nameIn.value.trim() || 'generated-flow').replace(/[^a-zA-Z0-9_-]/g, '-');
+      if (!featOut.value.trim()) { status.textContent = 'Feature file is empty.'; return; }
+      saveBtn.disabled = true;
+      status.textContent = 'Saving...';
+      try {
+        const r = await win.pwRecorderAiGenerateSave({ fileName: name, featureContent: featOut.value, pageYamls: currentPageYamls, locatorsYaml: yamlOut.value });
+        savedPath = r.featurePath || '';
+        status.textContent = 'Saved: ' + (r.savedPaths || []).join(', ');
+        runBtn2.style.display = '';
+        iterLabel.style.display = '';
+        iterSel.style.display = '';
+      } catch (e) {
+        status.textContent = 'Save error: ' + (e && (e as any).message ? (e as any).message : String(e));
+      }
+      saveBtn.disabled = false;
+    });
+
+    runBtn2.addEventListener('click', () => {
+      if (!savedPath) { status.textContent = 'Save the feature file first.'; return; }
+      const maxIter = parseInt(iterSel.value || '5', 10);
+      void startLoop(savedPath, maxIter, status);
+    });
+
+    aiGenBtn.addEventListener('click', () => {
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
+
+    // Simple drag
+    let drag = false, ox = 0, oy = 0;
+    hdr.addEventListener('mousedown', (e) => { drag = true; ox = e.clientX - panel.offsetLeft; oy = e.clientY - panel.offsetTop; });
+    document.addEventListener('mousemove', (e) => { if (drag) { panel.style.left = (e.clientX - ox) + 'px'; panel.style.top = (e.clientY - oy) + 'px'; } });
+    document.addEventListener('mouseup', () => { drag = false; });
+
+    const root = document.getElementById('pw-recorder-ui-root') || document.body;
+    root.appendChild(panel);
+  });
+}
+
 function getInjectScript(resetOnStart: boolean): string {
   return `
 (() => {
@@ -887,6 +1381,7 @@ function getInjectScript(resetOnStart: boolean): string {
       ].join(';'),
     );
     barRow.appendChild(aiFixBtn);
+
     wrapper.appendChild(root);
 
     // AI Fix panel (local Ollama)
@@ -4304,8 +4799,930 @@ async function main(): Promise<void> {
       return { output, model: ollamaModel() };
     },
   );
+
+  // ── AI Generate: URL + description → draft feature → navigate → aria snapshot → refined feature + YAML ──
+  await page.exposeFunction(
+    'pwRecorderAiGenerate',
+    async (args?: { url?: string; description?: string; fileName?: string }): Promise<{
+      featureContent: string;
+      pageYamls: Record<string, string>;
+      capturedPages?: Array<{ pageKey: string; pageTitle: string }>;
+      locatorsYaml?: string;
+      status: string;
+    }> => {
+      const targetUrl = String(args?.url || '').trim();
+      const description = String(args?.description || '').trim();
+      const fileName = String(args?.fileName || 'generated-flow').trim();
+      if (!targetUrl) throw new Error('URL is required');
+      if (!description) throw new Error('Scenario description is required');
+
+      // Step 1: LLM draft feature from description
+      const draftPrompt = `You are a QA automation expert writing Cucumber BDD feature files for Playwright tests.
+
+URL: ${targetUrl}
+Scenario description: ${description}
+
+Available step patterns (use ONLY these):
+- Given User navigates to "URL" URL
+- Given User is on "PageName" screen
+- Given enters "value" text in "Field Label" textbox
+- When User clicks on "Element Name" button
+- When User clicks on "Element Name" link
+- Then verify "some text" text is present on the screen
+- When verify data from "tableName" web table
+
+Rules:
+- "PageName" in "User is on X screen" must be a camelCase identifier (no spaces, e.g. loginPage)
+- Use the exact URL provided in the navigate step
+- Keep field/button names as they would appear on screen
+
+Output ONLY the feature file content (no markdown fences, no explanation).`;
+
+      let draftFeature = '';
+      try {
+        draftFeature = await ollamaGenerate({ model: ollamaModel(), prompt: draftPrompt });
+      } catch (err) {
+        throw new Error(`LLM step 1 failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      // Step 2: Open a NEW tab to snapshot the target URL — never touch the recorder page
+      let ariaSnapshot = '';
+      let pageTitle = '';
+      const snapTab = await context.newPage();
+      try {
+        await snapTab.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        pageTitle = await snapTab.title().catch(() => '');
+        ariaSnapshot = await (snapTab as any).accessibility.snapshot().then((s: unknown) => JSON.stringify(s, null, 2)).catch(() => '');
+        if (!ariaSnapshot || ariaSnapshot === 'null') {
+          // Fallback: scrape visible interactive elements from DOM
+          ariaSnapshot = await snapTab.evaluate(() => {
+            const inputs = Array.from(document.querySelectorAll('input,button,a,select,textarea,label')).slice(0, 60);
+            return inputs.map((el) => {
+              const tag = el.tagName.toLowerCase();
+              const id = el.id ? `id="${el.id}"` : '';
+              const name = (el as HTMLInputElement).name ? `name="${(el as HTMLInputElement).name}"` : '';
+              const text = el.textContent?.trim().slice(0, 80) || '';
+              const placeholder = (el as HTMLInputElement).placeholder ? `placeholder="${(el as HTMLInputElement).placeholder}"` : '';
+              const type = (el as HTMLInputElement).type ? `type="${(el as HTMLInputElement).type}"` : '';
+              return `<${tag} ${id} ${name} ${type} ${placeholder}>${text}</${tag}>`.replace(/\s+/g, ' ');
+            }).join('\n');
+          }).catch(() => '');
+        }
+      } catch (err) {
+        // Navigation failed — still proceed with draft only
+        ariaSnapshot = `Navigation failed: ${err instanceof Error ? err.message : String(err)}`;
+      } finally {
+        // Always close the snapshot tab so the recorder page stays active
+        await snapTab.close().catch(() => {});
+      }
+
+      // Step 3: LLM refine with page structure
+      // ── Helper: capture live DOM elements from a tab ─────────────────────
+      const captureDom = async (tab: import('playwright').Page): Promise<string> => {
+        return tab.evaluate(() => {
+          const rows: string[] = [];
+          const lbl = (el: Element) => {
+            if (el.id) { const l = document.querySelector(`label[for="${el.id}"]`); if (l) return l.textContent?.trim() || ''; }
+            const p = el.closest('label,[class*="form"],[class*="field"],[class*="group"]');
+            if (p) { const l = p.querySelector('label,span'); if (l && l !== el) return l.textContent?.trim().slice(0, 60) || ''; }
+            return '';
+          };
+          document.querySelectorAll('input,textarea,select').forEach((el) => {
+            const e = el as HTMLInputElement;
+            const parts = [`<${e.tagName.toLowerCase()}`];
+            if (e.id) parts.push(`id="${e.id}"`);
+            if (e.name) parts.push(`name="${e.name}"`);
+            if (e.type && e.type !== 'text') parts.push(`type="${e.type}"`);
+            if (e.placeholder) parts.push(`placeholder="${e.placeholder}"`);
+            const c = lbl(e); if (c) parts.push(`[label:"${c}"]`);
+            rows.push(parts.join(' ') + '>');
+          });
+          document.querySelectorAll('button,input[type="button"],input[type="submit"],[role="button"]').forEach((el) => {
+            const text = (el.textContent || (el as HTMLInputElement).value || '').trim().slice(0, 80);
+            const id = (el as HTMLElement).id; const cls = ((el as HTMLElement).className || '').toString().trim().slice(0, 50);
+            const parts = [`<${el.tagName.toLowerCase()}`]; if (id) parts.push(`id="${id}"`); if (cls) parts.push(`class="${cls}"`);
+            rows.push(parts.join(' ') + `>${text}</${el.tagName.toLowerCase()}>`);
+          });
+          document.querySelectorAll('a[href]').forEach((el) => {
+            const text = el.textContent?.trim().slice(0, 60) || '';
+            if (text) rows.push(`<a href="${(el as HTMLAnchorElement).href.slice(0, 80)}">${text}</a>`);
+          });
+          document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]').forEach((el) => {
+            const text = el.textContent?.trim().slice(0, 100) || '';
+            if (text) rows.push(`<${el.tagName.toLowerCase()}>${text}</${el.tagName.toLowerCase()}>`);
+          });
+          document.querySelectorAll('table').forEach((tbl) => {
+            const headers = Array.from(tbl.querySelectorAll('th,thead td')).map(th => th.textContent?.trim()).filter(Boolean);
+            if (headers.length) rows.push(`<table headers=[${headers.join(', ')}]>`);
+          });
+          const bodyText = (document.body as HTMLElement).innerText?.replace(/\s+/g, ' ').trim().slice(0, 800) || '';
+          rows.push(`\n[VISIBLE TEXT]: ${bodyText}`);
+          return rows.join('\n');
+        }).catch(() => '(DOM capture failed)');
+      };
+
+      // ── Helper: try to perform one step in the live tab ───────────────────
+      const executeStep = async (tab: import('playwright').Page, step: string): Promise<void> => {
+        const nav = step.match(/navigates to "([^"]+)"/i);
+        if (nav) { await tab.goto(nav[1], { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}); await tab.waitForTimeout(1200); return; }
+
+        const fill = step.match(/enters "([^"]+)" text in "([^"]+)"/i);
+        if (fill) {
+          const [, val, field] = fill;
+          for (const sel of [`[id="${field}"]`, `[name="${field}"]`, `[placeholder="${field}"]`, `[placeholder*="${field}" i]`, `input[type="email"]`, `input[type="password"]`, `textarea`]) {
+            try { const el = tab.locator(sel).first(); if (await el.count() > 0) { await el.fill(val); return; } } catch {}
+          }
+          return;
+        }
+
+        const click = step.match(/clicks?\s+on "([^"]+)"/i);
+        if (click) {
+          const name = click[1];
+          for (const sel of [`button:has-text("${name}")`, `[value="${name}"]`, `[aria-label="${name}"]`, `a:has-text("${name}")`, `input[type="submit"]`]) {
+            try { const el = tab.locator(sel).first(); if (await el.count() > 0) { await el.click(); await tab.waitForTimeout(2500); return; } } catch {}
+          }
+        }
+      };
+
+      // ── Step 2: Navigate through ALL pages in the draft, capture live HTML ─
+      //    Parse [pageKey] markers from description for multi-page support
+      const pageMarkers = [...description.matchAll(/\[([a-zA-Z][a-zA-Z0-9]*)\]/g)].map(m => m[1]);
+      const isMultiPage = pageMarkers.length > 1;
+
+      // Map: pageKey → { html, title }
+      const pageCaptures: Map<string, { html: string; title: string }> = new Map();
+
+      const liveTab = await context.newPage();
+      try {
+        // Navigate to starting URL first
+        await liveTab.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+        await liveTab.waitForTimeout(1000);
+
+        // Walk the draft feature steps — execute each and capture HTML at every "User is on X" boundary
+        const draftLines = draftFeature.split('\n').map(l => l.trim()).filter(l => /^(Given|When|Then|And|But)\s/i.test(l));
+        for (const step of draftLines) {
+          const screenMatch = step.match(/User is on "([^"]+)" screen/i);
+          if (screenMatch) {
+            const pk = screenMatch[1].replace(/[^a-zA-Z0-9]/g, '');
+            const html = await captureDom(liveTab);
+            const title = await liveTab.title().catch(() => '');
+            pageCaptures.set(pk, { html, title });
+            continue;
+          }
+          // Skip verify steps during replay
+          if (/verify\s+".+"\s+text/i.test(step) || /verify\s+data\s+from/i.test(step)) continue;
+          await executeStep(liveTab, step);
+        }
+
+        // If no "User is on" steps captured anything, capture current page
+        if (pageCaptures.size === 0) {
+          const html = await captureDom(liveTab);
+          const title = await liveTab.title().catch(() => '');
+          const pk = (fileName || 'page').replace(/[^a-zA-Z0-9]/g, '') || 'page';
+          pageCaptures.set(pk, { html, title });
+        }
+      } finally {
+        await liveTab.close().catch(() => {});
+      }
+
+      // ── Step 3: LLM refine — generate feature + one YAML per page ─────────
+      const pagesSection = [...pageCaptures.entries()].map(([pk, cap]) =>
+        `--- PAGE: "${pk}" | Title: "${cap.title}" ---\n${cap.html}`
+      ).join('\n\n');
+
+      const pageYamlTags = [...pageCaptures.keys()].map(pk =>
+        `<PAGE_YAML key="${pk}">\n(YAML locators for the "${pk}" page — ONLY elements used in steps for this page)\n</PAGE_YAML>`
+      ).join('\n');
+
+      const refinePrompt = `You are a QA automation expert. You have:
+1. A draft Cucumber feature file
+2. Live HTML snapshots captured from the real browser at each page
+
+Your job: generate a CORRECT feature file + accurate YAML locators for EVERY page.
+
+━━━ DRAFT FEATURE FILE ━━━
+${draftFeature}
+
+━━━ LIVE BROWSER HTML (captured by actually navigating the pages) ━━━
+${pagesSection}
+
+━━━ YAML FORMAT (MANDATORY — do NOT deviate) ━━━
+Each locator MUST be a YAML list with exactly 2 items — strategy then expression:
+
+  ElementName:
+    - xpath
+    - //*[@id='someId']
+
+OR:
+
+  ElementName:
+    - css
+    - input[type="email"]
+
+YAML key = exactly the element name quoted in the feature step (case-insensitive match).
+WRONG: Email: { xpath: //input }   ← this is a map, NOT a list
+CORRECT:
+  Email:
+    - xpath
+    - //*[@id='email']
+
+━━━ STEP PATTERNS (use ONLY these exact patterns) ━━━
+- Given User navigates to "URL" URL
+- Given User is on "pageKey" screen          ← camelCase, no spaces
+- Given enters "value" text in "Field" textbox
+- When User clicks on "Element" button
+- When User clicks on "Element" link
+- Then verify "visible text" text is present on the screen
+- When verify data from "tableName" web table
+
+━━━ RULES ━━━
+1. Use the HTML snapshots to write ACCURATE XPath/CSS — prefer id, then placeholder, then type, then text
+2. "User is on X screen" must appear ONCE per page with the correct pageKey
+3. Each page gets its own <PAGE_YAML key="pageKey"> block
+4. Only include locators for elements ACTUALLY REFERENCED in the feature steps
+5. Do NOT wrap output in markdown fences (\`\`\`gherkin, \`\`\`yaml etc.)
+
+Output ONLY in this exact format:
+<FEATURE_FILE>
+(complete corrected feature file)
+</FEATURE_FILE>
+${[...pageCaptures.keys()].map(pk => `<PAGE_YAML key="${pk}">\n(YAML locators for "${pk}" page)\n</PAGE_YAML>`).join('\n')}`;
+
+      let llmOutput = '';
+      try {
+        llmOutput = await ollamaGenerate({ model: ollamaModel(), prompt: refinePrompt });
+      } catch (err) {
+        return {
+          featureContent: draftFeature,
+          pageYamls: {} as Record<string, string>,
+          status: `⚠ LLM refinement failed: ${err instanceof Error ? err.message : String(err)}. Showing draft.`,
+        };
+      }
+
+      // ── Parse output ──────────────────────────────────────────────────────
+      const stripFn = (t: string) => t.replace(/^```[\w]*\r?\n?/gm, '').replace(/\r?\n?```\s*$/gm, '').trim();
+
+      const featureContent = stripFn(betweenTags(llmOutput, '<FEATURE_FILE>', '</FEATURE_FILE>') || draftFeature);
+
+      // Parse all <PAGE_YAML key="..."> blocks
+      const pageYamls: Record<string, string> = {};
+      const pageYamlRegex = /<PAGE_YAML\s+key="([^"]+)">([\s\S]*?)<\/PAGE_YAML>/g;
+      let m: RegExpExecArray | null;
+      while ((m = pageYamlRegex.exec(llmOutput)) !== null) {
+        const pk = m[1].replace(/[^a-zA-Z0-9]/g, '');
+        pageYamls[pk] = stripFn(m[2]);
+      }
+
+      // Fallback: if no PAGE_YAML blocks, check for old-style PAGE_LOCATORS_YAML
+      if (Object.keys(pageYamls).length === 0) {
+        const fallback = stripFn(betweenTags(llmOutput, '<PAGE_LOCATORS_YAML>', '</PAGE_LOCATORS_YAML>') || '');
+        if (fallback) {
+          const firstKey = [...pageCaptures.keys()][0] || (fileName.replace(/[^a-zA-Z0-9]/g, '') || 'page');
+          pageYamls[firstKey] = fallback;
+        }
+      }
+
+      const capturedPages = [...pageCaptures.entries()].map(([pk, cap]) => ({ pageKey: pk, pageTitle: cap.title }));
+      return {
+        featureContent: featureContent + '\n',
+        pageYamls,
+        capturedPages,
+        status: `✅ Generated ${capturedPages.length} page(s) using ${ollamaModel()}. Review and click Save.`,
+      };
+    },
+  );
+
+  await page.exposeFunction(
+    'pwRecorderAiGenerateSave',
+    async (args?: {
+      fileName?: string;
+      featureContent?: string;
+      pageYamls?: Record<string, string>;
+      // Legacy single-yaml support
+      locatorsYaml?: string;
+    }): Promise<{ savedPaths: string[]; featurePath: string }> => {
+      const fileName = String(args?.fileName || 'generated-flow').replace(/[^a-zA-Z0-9_-]/g, '-');
+      const featureContent = String(args?.featureContent || '').trim();
+      if (!featureContent) throw new Error('Feature content is empty');
+
+      const savedPaths: string[] = [];
+      const locatorRoot = path.join(ROOT, 'locators');
+      const pagesYamlPath = resolvePagesYamlPath(locatorRoot);
+
+      // Save feature file
+      const featureDir = path.join(ROOT, 'generated');
+      ensureDir(featureDir);
+      const featurePath = path.join(featureDir, `${fileName}.feature`);
+      fs.writeFileSync(featurePath, featureContent + '\n', 'utf8');
+      savedPaths.push(path.relative(ROOT, featurePath).replace(/\\/g, '/'));
+
+      // Collect pageYamls: prefer new multi-page format, fall back to legacy single yaml
+      const yamls: Record<string, string> = {};
+      if (args?.pageYamls && typeof args.pageYamls === 'object') {
+        Object.assign(yamls, args.pageYamls);
+      } else if (args?.locatorsYaml) {
+        // Legacy: derive pageKey from feature
+        const pkMatch = featureContent.match(/User is on "([^"]+)" screen/);
+        const pk = pkMatch ? pkMatch[1].replace(/[^a-zA-Z0-9]/g, '') : fileName.replace(/[^a-zA-Z0-9]/g, '');
+        yamls[pk] = args.locatorsYaml;
+      }
+
+      // Save each page's YAML and register it
+      for (const [pageKey, yamlContent] of Object.entries(yamls)) {
+        if (!yamlContent || !yamlContent.trim()) continue;
+        const pageLocatorPath = resolvePageLocatorPath(pageKey, locatorRoot);
+        ensureDir(path.dirname(pageLocatorPath));
+        fs.writeFileSync(pageLocatorPath, yamlContent.trim() + '\n', 'utf8');
+        savedPaths.push(path.relative(ROOT, pageLocatorPath).replace(/\\/g, '/'));
+
+        // Register in pages.yaml
+        const titleMatch = featureContent.match(new RegExp(`User is on "${pageKey}" screen[\\s\\S]*?verify "([^"]+)" text`, 'i'));
+        const pageTitle = titleMatch ? titleMatch[1] : pageKey;
+        const labelMatch = yamlContent.match(/^([A-Za-z][^\n:]+):/m);
+        const pageLabel = labelMatch ? labelMatch[1].trim() : pageKey;
+        registerPage(pagesYamlPath, pageKey, pageTitle, pageLabel);
+      }
+      if (Object.keys(yamls).length > 0) {
+        savedPaths.push(path.relative(ROOT, pagesYamlPath).replace(/\\/g, '/'));
+      }
+
+      return { savedPaths, featurePath };
+    },
+  );
+
+  await page.exposeFunction(
+    'pwRecorderRunFeature',
+    async (args?: { featurePath?: string }): Promise<{ output: string; exitCode: number }> => {
+      const featurePath = String(args?.featurePath || '').trim();
+      if (!featurePath) throw new Error('featurePath is required');
+
+      const absPath = path.isAbsolute(featurePath) ? featurePath : path.join(ROOT, featurePath);
+      if (!fs.existsSync(absPath)) throw new Error(`Feature file not found: ${absPath}`);
+
+      return new Promise((resolve) => {
+        const { spawn } = require('child_process') as typeof import('child_process');
+        // Use Node directly — avoids all cmd.exe / shell-quoting issues on
+        // Windows paths with spaces (e.g. "OneDrive - Evanke")
+        const cucumberEntry = resolveCucumberEntry();
+        const nodeArgs = [
+          cucumberEntry,
+          absPath,
+          '--require-module', 'ts-node/register',
+          '--require', 'steps-def/**/*.ts',
+        ];
+        const chunks: string[] = [];
+        const child = spawn(process.execPath, nodeArgs, {
+          cwd: ROOT,
+          env: { ...process.env },
+          shell: false,
+        });
+
+        child.stdout?.on('data', (d: Buffer) => chunks.push(d.toString()));
+        child.stderr?.on('data', (d: Buffer) => chunks.push(d.toString()));
+
+        const timeout = setTimeout(() => {
+          child.kill();
+          chunks.push('\n[TIMEOUT] Test run exceeded 3 minutes and was stopped.\n');
+          resolve({ output: chunks.join(''), exitCode: 1 });
+        }, 180_000);
+
+        child.on('close', (code: number | null) => {
+          clearTimeout(timeout);
+          resolve({ output: chunks.join(''), exitCode: code ?? 1 });
+        });
+
+        child.on('error', (err: Error) => {
+          clearTimeout(timeout);
+          chunks.push(`\n[ERROR] ${err.message}\n`);
+          resolve({ output: chunks.join(''), exitCode: 1 });
+        });
+      });
+    },
+  );
+
+  // ── Auto-fix loop state (keyed by loopId) ────────────────────────────────
+  type LoopState = {
+    done: boolean;
+    passed: boolean;
+    iterations: number;
+    log: string;
+    statusLine: string;
+    finalFeature: string;
+    finalYaml: string;
+  };
+  const loopStates = new Map<string, LoopState>();
+
+  /**
+   * Resolve the real cucumber-js JS entry point so we can call it with
+   * the current Node binary directly — no .cmd wrapper, no cmd.exe, no
+   * shell quoting issues even on Windows paths that contain spaces.
+   */
+  function resolveCucumberEntry(): string {
+    const pkgJson = path.join(ROOT, 'node_modules', '@cucumber', 'cucumber', 'package.json');
+    if (fs.existsSync(pkgJson)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgJson, 'utf8')) as { bin?: string | Record<string, string> };
+      const binVal = typeof pkg.bin === 'string' ? pkg.bin : (pkg.bin?.['cucumber-js'] ?? pkg.bin?.['cucumber'] ?? '');
+      if (binVal) return path.resolve(path.join(ROOT, 'node_modules', '@cucumber', 'cucumber'), binVal);
+    }
+    // Fallback to well-known path
+    return path.join(ROOT, 'node_modules', '@cucumber', 'cucumber', 'bin', 'cucumber.js');
+  }
+
+  function spawnCucumber(absFeaturePath: string): Promise<{ output: string; exitCode: number }> {
+    return new Promise((resolve) => {
+      const { spawn } = require('child_process') as typeof import('child_process');
+      // Use the current Node.js binary to run cucumber's JS entry directly.
+      // This avoids all cmd.exe / .cmd-wrapper / shell-quoting issues on Windows
+      // paths that contain spaces (e.g. OneDrive - Evanke).
+      const cucumberEntry = resolveCucumberEntry();
+      const nodeArgs = [
+        cucumberEntry,
+        absFeaturePath,
+        '--require-module', 'ts-node/register',
+        '--require', 'steps-def/**/*.ts',
+      ];
+      const child = spawn(process.execPath, nodeArgs, {
+        cwd: ROOT,
+        env: { ...process.env },
+        shell: false,   // Never go through cmd.exe
+      });
+      const chunks: string[] = [];
+
+      child.stdout?.on('data', (d: Buffer) => chunks.push(d.toString()));
+      child.stderr?.on('data', (d: Buffer) => chunks.push(d.toString()));
+      const timer = setTimeout(() => {
+        child.kill();
+        chunks.push('\n[TIMEOUT] Exceeded 3 minutes.\n');
+        resolve({ output: chunks.join(''), exitCode: 1 });
+      }, 180_000);
+      child.on('close', (code: number | null) => { clearTimeout(timer); resolve({ output: chunks.join(''), exitCode: code ?? 1 }); });
+      child.on('error', (err: Error) => { clearTimeout(timer); chunks.push(`\n[ERROR] ${err.message}\n`); resolve({ output: chunks.join(''), exitCode: 1 }); });
+    });
+  }
+
+  await page.exposeFunction(
+    'pwRecorderListFeatureFiles',
+    (): Array<{ label: string; absPath: string }> => {
+      const results: Array<{ label: string; absPath: string }> = [];
+      const dirs = [
+        path.join(ROOT, 'features'),
+        path.join(ROOT, 'generated'),
+      ];
+      for (const dir of dirs) {
+        if (!fs.existsSync(dir)) continue;
+        const folder = path.basename(dir);
+        const walk = (d: string) => {
+          for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+            const full = path.join(d, entry.name);
+            if (entry.isDirectory()) { walk(full); continue; }
+            if (!entry.name.endsWith('.feature')) continue;
+            const rel = path.relative(ROOT, full).replace(/\\/g, '/');
+            results.push({ label: `${folder}/${path.relative(dir, full).replace(/\\/g, '/')}`, absPath: full });
+          }
+        };
+        walk(dir);
+      }
+      return results.sort((a, b) => a.label.localeCompare(b.label));
+    },
+  );
+
+  await page.exposeFunction(
+    'pwRecorderSaveUploadedFiles',
+    async (args?: {
+      files?: Array<{ name?: string; content?: string }>;
+    }): Promise<{ savedPaths: string[]; featureAbsPath: string }> => {
+      const files = Array.isArray(args?.files) ? args!.files : [];
+      if (!files.length) throw new Error('No files provided');
+
+      const savedPaths: string[] = [];
+      let featureAbsPath = '';
+
+      for (const f of files) {
+        const name = String(f?.name || '').trim();
+        const content = String(f?.content || '').trim();
+        if (!name || !content) continue;
+
+        if (name.endsWith('.feature')) {
+          // Save feature file to generated/ folder
+          const baseName = name.replace(/\.feature$/, '').replace(/[^a-zA-Z0-9_-]/g, '-');
+          const featureDir = path.join(ROOT, 'generated');
+          ensureDir(featureDir);
+          const dest = path.join(featureDir, `${baseName}.feature`);
+          fs.writeFileSync(dest, content + '\n', 'utf8');
+          featureAbsPath = dest;
+          savedPaths.push(path.relative(ROOT, dest).replace(/\\/g, '/'));
+
+          // Auto-register page in pages.yaml if feature references a screen
+          const screenMatch = content.match(/User is on "([^"]+)" screen/);
+          if (screenMatch) {
+            const pageKey = screenMatch[1].replace(/[^a-zA-Z0-9]/g, '');
+            const pagesYamlPath = resolvePagesYamlPath(path.join(ROOT, 'locators'));
+            const titleMatch = content.match(/verify "([^"]+)" text/);
+            registerPage(pagesYamlPath, pageKey, titleMatch ? titleMatch[1] : pageKey, pageKey);
+          }
+
+        } else if (name.endsWith('.yaml') || name.endsWith('.yml')) {
+          // Infer page key from filename (e.g. loginPage.yaml → loginPage)
+          const pageKey = name.replace(/\.(yaml|yml)$/, '').replace(/[^a-zA-Z0-9_-]/g, '');
+          const locatorDir = path.join(ROOT, 'locators', 'pages');
+          ensureDir(locatorDir);
+          const dest = path.join(locatorDir, `${pageKey}.yaml`);
+          fs.writeFileSync(dest, content + '\n', 'utf8');
+          savedPaths.push(path.relative(ROOT, dest).replace(/\\/g, '/'));
+        }
+      }
+
+      if (!featureAbsPath) throw new Error('No .feature file found in uploaded files');
+      return { savedPaths, featureAbsPath };
+    },
+  );
+
+  await page.exposeFunction(
+    'pwRecorderStartFixLoop',
+    async (args?: { featurePath?: string; maxIterations?: number }): Promise<{ loopId: string }> => {
+      const featurePath = String(args?.featurePath || '').trim();
+      // 0 or negative = unlimited (cap at 100 for safety)
+      const rawMax = Number(args?.maxIterations ?? 5);
+      const maxIterations = rawMax <= 0 ? 100 : rawMax;
+      if (!featurePath) throw new Error('featurePath required');
+
+      const absFeature = path.isAbsolute(featurePath) ? featurePath : path.join(ROOT, featurePath);
+      if (!fs.existsSync(absFeature)) throw new Error(`Feature file not found: ${absFeature}`);
+
+      const loopId = `loop-${Date.now()}`;
+      const state: LoopState = { done: false, passed: false, iterations: 0, log: '', statusLine: 'Starting...', finalFeature: '', finalYaml: '' };
+      loopStates.set(loopId, state);
+      const appendLog = (line: string) => { state.log += line + '\n'; };
+
+      // ── Strip markdown fences the LLM adds around code blocks ────────────
+      const stripFences = (text: string): string =>
+        text.replace(/^```[\w]*\r?\n?/gm, '').replace(/\r?\n?```\s*$/gm, '').trim();
+
+      // ── Derive locator YAML path from current feature ─────────────────────
+      const getPageKey = (): string => {
+        const ft = fs.readFileSync(absFeature, 'utf8');
+        const m = ft.match(/User is on "([^"]+)" screen/);
+        return m ? m[1].replace(/[^a-zA-Z0-9]/g, '') : '';
+      };
+      const getAbsLocator = (pk: string) =>
+        pk ? path.join(ROOT, 'locators', 'pages', `${pk}.yaml`) : '';
+
+      // ── Capture DOM elements from a Playwright Page ───────────────────────
+      const capturePageDOM = async (tab: import('playwright').Page): Promise<string> => {
+        return tab.evaluate(() => {
+          const rows: string[] = [];
+          const getLabel = (el: Element) => {
+            if (el.id) {
+              const l = document.querySelector(`label[for="${el.id}"]`);
+              if (l) return l.textContent?.trim() || '';
+            }
+            const p = el.closest('label,[class*="form"],[class*="field"],[class*="group"]');
+            if (p) { const l = p.querySelector('label,span,p'); if (l && l !== el) return l.textContent?.trim().slice(0, 60) || ''; }
+            return '';
+          };
+          document.querySelectorAll('input,textarea,select').forEach((el) => {
+            const e = el as HTMLInputElement;
+            const parts = [`<${e.tagName.toLowerCase()}`];
+            if (e.id) parts.push(`id="${e.id}"`);
+            if (e.name) parts.push(`name="${e.name}"`);
+            if (e.type && e.type !== 'text') parts.push(`type="${e.type}"`);
+            if (e.placeholder) parts.push(`placeholder="${e.placeholder}"`);
+            const cls = e.className?.toString().trim();
+            if (cls) parts.push(`class="${cls.slice(0, 60)}"`);
+            const lbl = getLabel(e); if (lbl) parts.push(`[label:"${lbl}"]`);
+            rows.push(parts.join(' ') + '>');
+          });
+          document.querySelectorAll('button,input[type="button"],input[type="submit"],[role="button"]').forEach((el) => {
+            const text = (el.textContent || (el as HTMLInputElement).value || '').trim().slice(0, 80);
+            const id = (el as HTMLElement).id; const cls = ((el as HTMLElement).className || '').toString().trim().slice(0, 50);
+            const type = (el as HTMLInputElement).type || '';
+            const parts = [`<${el.tagName.toLowerCase()}`];
+            if (id) parts.push(`id="${id}"`); if (type) parts.push(`type="${type}"`); if (cls) parts.push(`class="${cls}"`);
+            rows.push(parts.join(' ') + `>${text}</${el.tagName.toLowerCase()}>`);
+          });
+          document.querySelectorAll('a[href]').forEach((el) => {
+            const text = el.textContent?.trim().slice(0, 60) || '';
+            if (text) rows.push(`<a href="${(el as HTMLAnchorElement).href.slice(0, 80)}">${text}</a>`);
+          });
+          document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]').forEach((el) => {
+            const text = el.textContent?.trim().slice(0, 100) || '';
+            if (text) rows.push(`<${el.tagName.toLowerCase()}>${text}</${el.tagName.toLowerCase()}>`);
+          });
+          document.querySelectorAll('table').forEach((tbl) => {
+            const headers = Array.from(tbl.querySelectorAll('th,thead td')).map(th => th.textContent?.trim()).filter(Boolean);
+            if (headers.length) rows.push(`<table headers=[${headers.join(', ')}]>`);
+          });
+          // Visible text on page (for text assertions)
+          const bodyText = document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 1000);
+          rows.push(`\n[VISIBLE PAGE TEXT]: ${bodyText}`);
+          return rows.join('\n');
+        }).catch(() => '(DOM capture failed)');
+      };
+
+      // ── Replay feature steps in a tab to reach the failure point ─────────
+      const replayStepsInTab = async (tab: import('playwright').Page, featureText: string): Promise<void> => {
+        const steps = featureText.split('\n').map(l => l.trim()).filter(l => /^(Given|When|Then|And|But)\s/i.test(l));
+        for (const step of steps) {
+          // Navigate
+          const nav = step.match(/navigates to "([^"]+)"/i);
+          if (nav) { await tab.goto(nav[1], { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {}); await tab.waitForTimeout(1500); continue; }
+          // Skip page-registration steps
+          if (/User is on "[^"]+" screen/i.test(step)) continue;
+          // Fill input: enters "value" text in "Field" textbox
+          const fill = step.match(/enters "([^"]+)" text in "([^"]+)"/i);
+          if (fill) {
+            const [, val, field] = fill;
+            const selectors = [`[id="${field}"]`, `[name="${field}"]`, `[placeholder="${field}"]`, `[placeholder*="${field}" i]`, `input[type="email"]`, `input[type="password"]`, `textarea`];
+            for (const sel of selectors) {
+              try { const l = tab.locator(sel).first(); if (await l.count() > 0) { await l.fill(val); break; } } catch {}
+            }
+            continue;
+          }
+          // Click button/link
+          const click = step.match(/clicks?\s+on "([^"]+)"/i);
+          if (click) {
+            const name = click[1];
+            const sels = [`button:has-text("${name}")`, `[value="${name}"]`, `[aria-label="${name}"]`, `a:has-text("${name}")`, `input[type="submit"]`];
+            for (const sel of sels) {
+              try { const l = tab.locator(sel).first(); if (await l.count() > 0) { await l.click(); await tab.waitForTimeout(3000); break; } } catch {}
+            }
+            continue;
+          }
+          // Stop BEFORE verify/assert steps — we want HTML at this point
+          if (/verify\s+".+"\s+text/i.test(step) || /verify\s+data\s+from/i.test(step)) break;
+        }
+      };
+
+      // ── Open ONE persistent tab for the whole loop ────────────────────────
+      const liveTab = await context.newPage();
+
+      // Run async so the browser gets loopId immediately
+      (async () => {
+        const iterLabel = maxIterations >= 100 ? '∞' : String(maxIterations);
+        for (let i = 1; i <= maxIterations; i++) {
+          state.iterations = i;
+          state.statusLine = `Iteration ${i}/${iterLabel} — running cucumber-js...`;
+          appendLog(`\n${'─'.repeat(50)}`);
+          appendLog(`▶ Iteration ${i}/${iterLabel}`);
+          appendLog('─'.repeat(50));
+
+          const { output, exitCode } = await spawnCucumber(absFeature);
+          appendLog(output);
+
+          const pageKey = getPageKey();
+          const absLocator = getAbsLocator(pageKey);
+
+          if (exitCode === 0) {
+            state.passed = true;
+            state.statusLine = `✅ Passed on iteration ${i}!`;
+            state.finalFeature = fs.readFileSync(absFeature, 'utf8');
+            state.finalYaml = absLocator && fs.existsSync(absLocator) ? fs.readFileSync(absLocator, 'utf8') : '';
+            break;
+          }
+
+          if (i >= maxIterations) {
+            state.statusLine = `❌ Still failing after ${i} attempt(s).`;
+            state.finalFeature = fs.readFileSync(absFeature, 'utf8');
+            state.finalYaml = absLocator && fs.existsSync(absLocator) ? fs.readFileSync(absLocator, 'utf8') : '';
+            break;
+          }
+
+          // ── Replay steps in persistent tab to reach the failure point ─────────
+          state.statusLine = `Iteration ${i} failed — replaying steps to capture live HTML...`;
+
+          const latestFeatureText = fs.readFileSync(absFeature, 'utf8');
+          const urlMatch = latestFeatureText.match(/User navigates to "([^"]+)"\s+URL/i);
+          const targetUrl = urlMatch ? urlMatch[1].trim() : '';
+
+          let pageHtmlSnapshot = '(could not capture page HTML)';
+          let pageTitle = '';
+
+          if (targetUrl) {
+            appendLog(`\n🌐 Replaying steps in live tab to reach failure point...`);
+            try {
+              // Replay all steps up to the first verify — persistent tab stays open
+              await replayStepsInTab(liveTab, latestFeatureText);
+              pageTitle = await liveTab.title().catch(() => '');
+              pageHtmlSnapshot = await capturePageDOM(liveTab);
+              appendLog(`   ✔ Live page captured after replay: "${pageTitle}" — ${pageHtmlSnapshot.split('\n').length} elements`);
+            } catch (err) {
+              appendLog(`   ⚠ Step replay failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          } else {
+            appendLog('\n⚠ No URL found in feature file — skipping page capture');
+          }
+
+          // Ask LLM to fix
+          state.statusLine = `Iteration ${i} failed — asking LLM to fix...`;
+          appendLog(`⚙ Sending error + live page HTML to LLM (model: ${ollamaModel()})...`);
+
+          const currentFeature = fs.readFileSync(absFeature, 'utf8');
+          const currentYaml = absLocator && fs.existsSync(absLocator) ? fs.readFileSync(absLocator, 'utf8') : '';
+
+          // ── Extract required locator keys from feature file ──────────────────
+          // Parse every quoted element name from steps that need a locator
+          const elementNamesNeeded: string[] = [];
+          for (const line of currentFeature.split('\n')) {
+            // enters "value" text in "ElementName" textbox
+            const fillMatch = line.match(/enters\s+"[^"]*"\s+text\s+in\s+"([^"]+)"/);
+            if (fillMatch) elementNamesNeeded.push(fillMatch[1]);
+            // clicks on "ElementName" button/link
+            const clickMatch = line.match(/clicks?\s+on\s+"([^"]+)"/);
+            if (clickMatch) elementNamesNeeded.push(clickMatch[1]);
+            // verify data from "name" web table
+            const tableMatch = line.match(/verify\s+data\s+from\s+"([^"]+)"\s+web\s+table/);
+            if (tableMatch) elementNamesNeeded.push(tableMatch[1]);
+          }
+          const uniqueElements = [...new Set(elementNamesNeeded)];
+          const elementsSection = uniqueElements.length
+            ? `REQUIRED YAML KEYS (must appear in the YAML, keys are case-insensitive):\n${uniqueElements.map(e => `  - "${e}"`).join('\n')}`
+            : '';
+
+          // ── Diagnose: show which keys are MISSING from current YAML ──────────
+          let missingKeys: string[] = [];
+          if (currentYaml && uniqueElements.length) {
+            try {
+              const yamlDoc = require('js-yaml').load(currentYaml) as Record<string, unknown> | null;
+              const existingKeys = yamlDoc ? Object.keys(yamlDoc).map(k => k.toLowerCase()) : [];
+              missingKeys = uniqueElements.filter(e => !existingKeys.includes(e.toLowerCase()));
+            } catch { /* ignore yaml parse error */ }
+          }
+          const diagSection = missingKeys.length
+            ? `DIAGNOSIS: These element names from the feature are MISSING in the current YAML:\n${missingKeys.map(k => `  ✗ "${k}" — NOT in YAML`).join('\n')}\nYou MUST add these keys to the YAML output.`
+            : (uniqueElements.length ? `DIAGNOSIS: All required keys are present in YAML. The XPath/CSS expressions may be wrong.` : '');
+
+          const fixPrompt = `You are a QA automation expert. A Cucumber BDD test is failing. Analyse the error and produce corrected files.
+
+━━━ FRAMEWORK LOCATOR YAML FORMAT ━━━
+The locators YAML uses this EXACT format — each locator is a YAML list with TWO items:
+
+  ElementName:
+    - xpath
+    - //your/xpath/expression
+
+OR for CSS:
+
+  ElementName:
+    - css
+    - input[type="email"]
+
+RULES:
+• The YAML KEY must EXACTLY match (case-insensitive) the element name quoted in the step.
+  e.g.  step: enters "Email" text in "Email" textbox  →  key must be: Email
+• The value MUST be a YAML list with exactly 2 items: strategy then expression.
+• Strategy must be lowercase: "xpath" or "css".
+• WRONG format (do not use):  Email: { xpath: //input }
+• WRONG format (do not use):  Email: - xpath: //input
+• CORRECT format:
+    Email:
+      - xpath
+      - //*[@id='email']
+
+━━━ LIVE PAGE HTML SNAPSHOT (${targetUrl || 'URL unknown'}) ━━━
+Title: ${pageTitle || '(unknown)'}
+Use the id, name, type, placeholder, class and label attributes below to write ACCURATE XPath/CSS locators.
+
+${pageHtmlSnapshot}
+
+━━━ CURRENT FEATURE FILE (${path.basename(absFeature)}) ━━━
+${currentFeature}
+
+━━━ CURRENT LOCATORS YAML — what is saved on disk right now ━━━
+${currentYaml || '(file is empty or does not exist)'}
+
+${elementsSection}
+
+${diagSection}
+
+━━━ CUCUMBER ERROR OUTPUT ━━━
+${output.slice(-4000)}
+\`\`\`
+
+━━━ TASK ━━━
+Fix the YAML and/or feature file so ALL steps pass.
+
+If error is "Element X not found in page Y":
+  → The YAML file is missing key "X" OR has the wrong XPath/CSS.
+  → Add/fix the locator. Use robust XPath like //*[@id='id'] or //*[@placeholder='text'] or //input[@type='email'].
+
+If error is "step not matched":
+  → Rephrase the step to use one of these patterns EXACTLY:
+    Given User navigates to "URL" URL
+    Given User is on "PageName" screen
+    Given enters "value" text in "FieldLabel" textbox
+    When User clicks on "ElementName" button
+    When User clicks on "ElementName" link
+    Then verify "some text" text is present on the screen
+
+Output ONLY in this format (no extra text):
+<FEATURE_FILE>
+(complete corrected feature file)
+</FEATURE_FILE>
+<PAGE_LOCATORS_YAML>
+(complete corrected YAML — include ALL existing locators plus any new/fixed ones)
+</PAGE_LOCATORS_YAML>
+<FIX_SUMMARY>
+(one sentence: what exactly was wrong and what you changed)
+</FIX_SUMMARY>`;
+
+          let llmOut = '';
+          try {
+            llmOut = await ollamaGenerate({ model: ollamaModel(), prompt: fixPrompt });
+          } catch (err) {
+            appendLog(`\n❌ LLM call failed: ${err instanceof Error ? err.message : String(err)}`);
+            state.statusLine = 'LLM error — stopping loop.';
+            break;
+          }
+
+          // Strip markdown fences the LLM adds (```gherkin, ```yaml, etc.)
+          const fixedFeature = stripFences(betweenTags(llmOut, '<FEATURE_FILE>', '</FEATURE_FILE>') || '');
+          const fixedYaml = stripFences(betweenTags(llmOut, '<PAGE_LOCATORS_YAML>', '</PAGE_LOCATORS_YAML>') || '');
+          const fixSummary = stripFences(betweenTags(llmOut, '<FIX_SUMMARY>', '</FIX_SUMMARY>') || 'No summary');
+
+          appendLog(`\n🔧 LLM fix: ${fixSummary.trim()}`);
+
+          if (fixedFeature && fixedFeature.trim()) {
+            fs.writeFileSync(absFeature, fixedFeature.trim() + '\n', 'utf8');
+            appendLog('   ✔ Feature file updated');
+          } else {
+            appendLog('   ⚠ LLM did not return a feature file — keeping current');
+          }
+
+          if (fixedYaml && fixedYaml.trim() && absLocator) {
+            // Validate YAML format before writing — must parse as an object with list values
+            let yamlValid = false;
+            let yamlParseErr = '';
+            try {
+              const parsed = require('js-yaml').load(fixedYaml.trim()) as unknown;
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const entries = Object.entries(parsed as Record<string, unknown>);
+                const badEntries = entries.filter(([, v]) => !Array.isArray(v) || (v as unknown[]).length < 2);
+                if (badEntries.length) {
+                  yamlParseErr = `Bad format for keys: ${badEntries.map(([k]) => k).join(', ')} — each must be a list [strategy, expression]`;
+                } else {
+                  yamlValid = true;
+                }
+              } else {
+                yamlParseErr = 'YAML did not parse as an object (key-value map)';
+              }
+            } catch (e) {
+              yamlParseErr = `YAML parse error: ${e instanceof Error ? e.message : String(e)}`;
+            }
+
+            if (yamlValid) {
+              ensureDir(path.dirname(absLocator));
+              fs.writeFileSync(absLocator, fixedYaml.trim() + '\n', 'utf8');
+              // Verify: show what keys are now in the file
+              const savedDoc = require('js-yaml').load(fs.readFileSync(absLocator, 'utf8')) as Record<string, unknown>;
+              const savedKeys = Object.keys(savedDoc || {});
+              appendLog(`   ✔ Locators YAML saved — keys: [${savedKeys.join(', ')}]`);
+              // Check required keys are present
+              const stillMissing = uniqueElements.filter(e => !savedKeys.map(k => k.toLowerCase()).includes(e.toLowerCase()));
+              if (stillMissing.length) {
+                appendLog(`   ⚠ Still missing keys: [${stillMissing.map(k => `"${k}"`).join(', ')}] — LLM will retry`);
+              }
+            } else {
+              appendLog(`   ✗ YAML validation failed — NOT saved. Reason: ${yamlParseErr}`);
+              appendLog('   → LLM will retry with the same (uncorrupted) YAML');
+            }
+          } else if (!fixedYaml?.trim()) {
+            appendLog('   ⚠ LLM returned empty YAML — keeping current file');
+          }
+        }
+        state.done = true;
+        await liveTab.close().catch(() => {});
+      })().catch((err) => {
+        state.log += `\n[FATAL] ${err instanceof Error ? err.message : String(err)}\n`;
+        state.statusLine = 'Fatal error in fix loop.';
+        state.done = true;
+        liveTab.close().catch(() => {});
+      });
+
+      return { loopId };
+    },
+  );
+
+  await page.exposeFunction(
+    'pwRecorderGetLoopStatus',
+    (args?: { loopId?: string }): LoopState & { found: boolean } => {
+      const id = String(args?.loopId || '');
+      const state = loopStates.get(id);
+      if (!state) return { found: false, done: true, passed: false, iterations: 0, log: 'Loop not found', statusLine: 'Error', finalFeature: '', finalYaml: '' };
+      return { found: true, ...state };
+    },
+  );
+
   await page.goto(startUrl, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
   await page.evaluate(getInjectScript(resetOnStart)).catch(() => undefined);
+  await injectAiGeneratePanel(page).catch(() => undefined);
+
+  // Re-inject AI Generate panel on every navigation (recorder pages only)
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) {
+      page.evaluate(getInjectScript(resetOnStart)).catch(() => undefined);
+      injectAiGeneratePanel(page).catch(() => undefined);
+    }
+  });
 
   await new Promise<void>((resolve) => {
     browser.on('disconnected', () => resolve());

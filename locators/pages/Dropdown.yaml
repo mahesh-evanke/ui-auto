@@ -1,0 +1,7 @@
+Dropdown:
+  - xpath
+  - //select[@id='dropdown']
+
+Option 1:
+  - xpath
+  - //select[@id='dropdown']/option[normalize-space()='Option 1']

@@ -131,6 +131,20 @@ export class AutomationWorld extends World {
     }
     return p.locator(expr);
   }
+
+  /**
+   * Locator inside the first iframe (matches legacy WebdriverIO switchToFrame flows).
+   * Prefer explicit iframe locators in YAML when multiple frames exist.
+   */
+  getLocatorInFirstFrame(name: string): Locator {
+    if (!this.page) throw new Error('Browser page not initialized. Ensure OPEN_BROWSER=true or MODE=API_UI.');
+    const [kind, expr] = this.resolveTarget(name);
+    const fl = this.page.frameLocator('iframe').first();
+    if (kind.toLowerCase() === 'xpath') {
+      return fl.locator(`xpath=${expr}`);
+    }
+    return fl.locator(expr);
+  }
 }
 
 setWorldConstructor(AutomationWorld);

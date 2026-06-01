@@ -16,3 +16,12 @@ apitesting:
 apiuitesting:
   - title: Misha House Billing
     label: Email Addresssss
+primereactcomponettest:
+  - title: React Checkbox Component
+    label: Get Started
+loginPage:
+  - title: Misha House Billing
+    label: Email
+billingfullflow:
+  - title: billingfullflow
+    label: Email textbox

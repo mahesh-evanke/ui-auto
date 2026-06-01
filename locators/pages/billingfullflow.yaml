@@ -1,0 +1,19 @@
+Email textbox:
+  - xpath
+  - //label[normalize-space()='Email']/following-sibling::input | //label[normalize-space()='Email']/..//input
+
+Password textbox:
+  - xpath
+  - //label[normalize-space()='Password']/following-sibling::input | //label[normalize-space()='Password']/..//input
+
+Login button:
+  - xpath
+  - //button[normalize-space()='Login']
+
+Welcome text:
+  - xpath
+  - //*[contains(text(),'Welcome')]
+
+Billing table:
+  - xpath
+  - //table

@@ -1,0 +1,15 @@
+Email:
+  - xpath
+  - //input[@id='email']
+Password:
+  - xpath
+  - //input[@id='password']
+Login button:
+  - xpath
+  - //button[normalize-space()='Login' or @type='submit']
+Welcome:
+  - xpath
+  - //*[contains(text(),'Welcome')]
+Billing Table:
+  - xpath
+  - //*[contains(text(),'Billing Table')]

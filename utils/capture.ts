@@ -28,6 +28,10 @@ export type ApiCaptureOptions = {
   maxCaptures?: number;
   /** Callback invoked after a merged request+response is captured. */
   onCaptured?: (api: CapturedApi) => void;
+  /** Only capture APIs whose URL contains this string. Empty/undefined = capture all. */
+  urlFilter?: string;
+  /** Capture only APIs whose URL matches at least one entry (OR logic). Overrides urlFilter when set. */
+  urlFilters?: string[];
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -98,12 +102,21 @@ export function attachApiCapture(page: Page, targetCapturedApis: CapturedApi[], 
   const bodyParseTimeoutMs = options?.bodyParseTimeoutMs ?? 5000;
   const maxCaptures = options?.maxCaptures ?? 2000;
   const onCaptured = options?.onCaptured;
+  const activeFilters: string[] = options?.urlFilters?.length
+    ? options.urlFilters.map((f) => f.trim()).filter(Boolean)
+    : options?.urlFilter?.trim()
+      ? [options.urlFilter.trim()]
+      : [];
+
+  const urlMatches = (url: string) =>
+    activeFilters.length === 0 || activeFilters.some((f) => url.includes(f));
 
   // Store partial request info so we can merge at response time.
   const inflightByKey = new Map<string, Array<{ timestamp: number; request: Request; headers: Record<string, string>; requestBody: unknown }>>();
 
   const onRequest = (req: Request) => {
     if (targetCapturedApis.length >= maxCaptures) return;
+    if (!urlMatches(req.url())) return;
     const key = makeRequestKey(req);
     const headers = redactHeaders(req.headers() as Record<string, string | undefined>);
     const postData = req.postData();
@@ -122,6 +135,7 @@ export function attachApiCapture(page: Page, targetCapturedApis: CapturedApi[], 
 
   const onResponse = async (resp: Response) => {
     if (targetCapturedApis.length >= maxCaptures) return;
+    if (!urlMatches(resp.url())) return;
 
     const status = resp.status();
     const req = resp.request();

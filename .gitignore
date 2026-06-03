@@ -3,5 +3,4 @@ dist/
 recorded-session.json
 test-results/
 playwright-report/
-.env
-.env.local
+

@@ -22,6 +22,13 @@ import {
 const ROOT = path.resolve(__dirname, '..');
 const AI_FIX_DIR = path.join(ROOT, 'test-results', 'ai-fix');
 
+// Toggle for the LLM-powered toolbar features ("AI Fix" + "✨ AI Generate").
+// On the main branch this is true. On the "no-llm" branch set it to false to
+// hide both buttons and ship a pure recorder with no LLM features.
+// Can also be forced off at runtime with env: NO_LLM=1 / SHOW_AI_FEATURES=0.
+const SHOW_AI_FEATURES =
+  process.env.NO_LLM === '1' || process.env.SHOW_AI_FEATURES === '0' ? false : true;
+
 type AiFixBundleRow = {
   id: string;
   stamp?: string;
@@ -534,12 +541,17 @@ type InspectorObjectRow = {
 
 async function injectAiGeneratePanel(page: import('playwright').Page): Promise<void> {
   await page.evaluate(() => {
-    if (document.getElementById('__pw_ai_gen_panel__')) return;
     const win = window as any;
+    // Avoid registering the poller twice on the same document.
+    if (win.__pwAiGenPollerActive) return;
+    win.__pwAiGenPollerActive = true;
+
+    const build = (): boolean => {
+      if (document.getElementById('__pw_ai_gen_panel__')) return true;
 
     // ── Toolbar button ────────────────────────────────────────────────────────
     const barRow = document.querySelector('[id^="__pw_rec_btn_ai_fix__"]')?.parentElement;
-    if (!barRow) return;
+    if (!barRow) return false;
 
     const aiGenBtn = document.createElement('button');
     aiGenBtn.type = 'button';
@@ -673,6 +685,119 @@ async function injectAiGeneratePanel(page: import('playwright').Page): Promise<v
     yamlNote.textContent = 'Multi-page: each page YAML is saved separately to locators/pages/<pageKey>.yaml';
     panel.appendChild(yamlNote);
 
+    // ── DOM Mode — Zero LLM ───────────────────────────────────────────────────
+    const domDiv = document.createElement('div');
+    domDiv.setAttribute('style', 'margin-top:16px;border-top:2px solid rgba(99,102,241,0.4);padding-top:14px');
+    panel.appendChild(domDiv);
+
+    const domTitle = document.createElement('div');
+    domTitle.textContent = '🔍 DOM Mode — Zero LLM';
+    domTitle.setAttribute('style', 'font-weight:900;font-size:12px;color:#c4b5fd');
+    domDiv.appendChild(domTitle);
+
+    const domMeta = document.createElement('div');
+    domMeta.setAttribute('style', 'margin-top:4px;font-size:11px;color:#94a3b8;line-height:1.5');
+    domMeta.innerHTML = 'Describe what to do in plain English. The browser navigates, reads the real DOM, and generates <b style="color:#c4b5fd">only the steps you described</b>. Zero LLM.';
+    domDiv.appendChild(domMeta);
+
+    domDiv.appendChild(lbl('Scenario description (plain English)'));
+    const domDescIn = document.createElement('textarea');
+    domDescIn.placeholder = 'go to https://the-internet.herokuapp.com/ click on "Dropdown". then verify "Dropdown List" text is present.';
+    domDescIn.setAttribute('style', 'margin-top:6px;width:100%;height:80px;padding:9px 12px;border-radius:10px;border:1px solid rgba(99,102,241,0.4);background:rgba(15,23,42,0.4);color:#e5e7eb;outline:none;font-size:12px;resize:vertical;box-sizing:border-box;font-family:inherit;line-height:1.5');
+    domDiv.appendChild(domDescIn);
+
+    const domHint = document.createElement('div');
+    domHint.setAttribute('style', 'margin-top:5px;font-size:10px;color:#6366f1;line-height:1.6');
+    domHint.innerHTML = [
+      '<b>Supported actions:</b>',
+      '• <b>go to / navigate to</b> https://url',
+      '• <b>click</b> "Element text" or click "Element" button/link',
+      '• <b>enter/type</b> "value" in "Field name"',
+      '• <b>verify/check</b> "some text" is present',
+      '• <b>select</b> "Option text" from dropdown',
+    ].join('<br>');
+    domDiv.appendChild(domHint);
+
+    domDiv.appendChild(lbl('Feature file name'));
+    const domFileIn = inp('my-flow', 'dom-generated-flow');
+    domDiv.appendChild(domFileIn);
+
+    const domBtnRow = document.createElement('div');
+    domBtnRow.setAttribute('style', 'display:flex;gap:8px;margin-top:10px;flex-wrap:wrap');
+    const domScanBtn = btn('🔍 Generate (No LLM)', 'rgba(99,102,241,0.9)');
+    const domSaveBtn = btn('💾 Save', 'rgba(59,130,246,0.9)');
+    const domRunBtn = btn('🔄 Run & DOM Auto-Fix', 'rgba(234,88,12,0.9)');
+    domSaveBtn.style.display = 'none';
+    domRunBtn.style.display = 'none';
+    domBtnRow.appendChild(domScanBtn);
+    domBtnRow.appendChild(domSaveBtn);
+    domBtnRow.appendChild(domRunBtn);
+    domDiv.appendChild(domBtnRow);
+
+    const domStatus = document.createElement('div');
+    domStatus.setAttribute('style', 'margin-top:8px;font-size:11px;color:#c4b5fd;min-height:16px');
+    domDiv.appendChild(domStatus);
+
+    domDiv.appendChild(lbl('Generated feature file'));
+    const domFeatOut = document.createElement('textarea');
+    domFeatOut.setAttribute('style', 'margin-top:6px;width:100%;height:120px;padding:9px 12px;border-radius:10px;border:1px solid rgba(99,102,241,0.2);background:rgba(15,23,42,0.5);color:#a5f3fc;outline:none;font-size:11px;resize:vertical;box-sizing:border-box;font-family:monospace');
+    domDiv.appendChild(domFeatOut);
+
+    domDiv.appendChild(lbl('Generated locators YAML'));
+    const domYamlOut = document.createElement('textarea');
+    domYamlOut.setAttribute('style', 'margin-top:6px;width:100%;height:120px;padding:9px 12px;border-radius:10px;border:1px solid rgba(99,102,241,0.2);background:rgba(15,23,42,0.5);color:#fde68a;outline:none;font-size:11px;resize:vertical;box-sizing:border-box;font-family:monospace');
+    domDiv.appendChild(domYamlOut);
+
+    let domSavedPath = '';
+    let domPageYamls: Record<string, string> = {};
+
+    domScanBtn.addEventListener('click', async () => {
+      const description = domDescIn.value.trim();
+      const fileName = (domFileIn.value.trim() || 'dom-generated-flow').replace(/[^a-zA-Z0-9_-]/g, '-');
+      if (!description) { domStatus.textContent = 'Please describe what to test.'; return; }
+
+      domScanBtn.disabled = true;
+      domSaveBtn.style.display = 'none';
+      domFeatOut.value = '';
+      domYamlOut.value = '';
+      domStatus.textContent = 'Parsing description → navigating browser → finding elements in DOM...';
+
+      try {
+        const r = await win.pwRecorderDomScan({ description, fileName });
+        domFeatOut.value = r.featureContent || '';
+        domYamlOut.value = Object.entries(r.pageYamls || {})
+          .map(([pk, yaml]) => '# === ' + pk + '.yaml ===\n' + yaml)
+          .join('\n\n');
+        domPageYamls = r.pageYamls || {};
+        domStatus.textContent = r.status || 'Done! Review and click Save.';
+        domSaveBtn.style.display = '';
+      } catch (e) {
+        domStatus.textContent = 'Error: ' + ((e as any).message || String(e));
+      }
+      domScanBtn.disabled = false;
+    });
+
+    domSaveBtn.addEventListener('click', async () => {
+      const fileName = (domFileIn.value.trim() || 'dom-generated-flow').replace(/[^a-zA-Z0-9_-]/g, '-');
+      if (!domFeatOut.value.trim()) { domStatus.textContent = 'Feature file is empty.'; return; }
+      domSaveBtn.disabled = true;
+      domStatus.textContent = 'Saving...';
+      try {
+        const r = await win.pwRecorderAiGenerateSave({ fileName, featureContent: domFeatOut.value, pageYamls: domPageYamls });
+        domSavedPath = r.featurePath || '';
+        domStatus.textContent = 'Saved: ' + (r.savedPaths || []).join(', ');
+        domRunBtn.style.display = '';
+      } catch (e) {
+        domStatus.textContent = 'Save error: ' + ((e as any).message || String(e));
+      }
+      domSaveBtn.disabled = false;
+    });
+
+    domRunBtn.addEventListener('click', () => {
+      if (!domSavedPath) { domStatus.textContent = 'Save first.'; return; }
+      void startLoop(domSavedPath, 0, domStatus, true /* domMode */);
+    });
+
     // ── Run Existing Feature section ─────────────────────────────────────────
     const divider = document.createElement('div');
     divider.setAttribute('style', 'margin-top:16px;border-top:1px solid rgba(148,163,184,0.2);padding-top:14px');
@@ -763,16 +888,16 @@ async function injectAiGeneratePanel(page: import('playwright').Page): Promise<v
     refreshBtn.addEventListener('click', () => { void loadFeatureFiles(); runExStatus.textContent = 'Refreshed.'; });
 
     // Run & auto-fix loop for an existing file
-    const startLoop = async (featurePath: string, maxIter: number, statusEl: HTMLElement) => {
+    const startLoop = async (featurePath: string, maxIter: number, statusEl: HTMLElement, domMode = false) => {
       if (!featurePath) { statusEl.textContent = 'Select a feature file first.'; return; }
       runExBtn.disabled = true;
       runBtn2.disabled = true;
       termOut.style.display = '';
-      termOut.style.color = '#86efac';
-      termOut.textContent = 'Starting auto-fix loop (max ' + maxIter + ' attempts)...\n';
+      termOut.style.color = domMode ? '#c4b5fd' : '#86efac';
+      termOut.textContent = (domMode ? 'DOM Auto-Fix mode (Zero LLM)' : 'Auto-Fix loop') + ' starting...\n';
       statusEl.textContent = 'Starting...';
       try {
-        const start = await win.pwRecorderStartFixLoop({ featurePath, maxIterations: maxIter });
+        const start = await win.pwRecorderStartFixLoop({ featurePath, maxIterations: maxIter, domMode });
         const loopId: string = start.loopId;
         const poll = async () => {
           const s = await win.pwRecorderGetLoopStatus({ loopId });
@@ -1023,6 +1148,16 @@ async function injectAiGeneratePanel(page: import('playwright').Page): Promise<v
 
     const root = document.getElementById('pw-recorder-ui-root') || document.body;
     root.appendChild(panel);
+      return true;
+    };
+
+    // The toolbar mounts on DOMContentLoaded; poll until it exists, then build once.
+    if (!build()) {
+      let tries = 0;
+      const timer = setInterval(() => {
+        if (build() || ++tries > 60) clearInterval(timer);
+      }, 200);
+    }
   });
 }
 
@@ -1034,6 +1169,7 @@ function getInjectScript(resetOnStart: boolean): string {
 
   const MARK = ${JSON.stringify(MARK_ATTR)};
   const RESET_ON_START = ${JSON.stringify(resetOnStart)};
+  const SHOW_AI_FEATURES = ${JSON.stringify(SHOW_AI_FEATURES)};
 
   let isRecording = false;
   let isGenerating = false;
@@ -1562,7 +1698,8 @@ function getInjectScript(resetOnStart: boolean): string {
         'box-shadow:0 8px 24px rgba(139,92,246,0.22)',
       ].join(';'),
     );
-    barRow.appendChild(aiFixBtn);
+    if (SHOW_AI_FEATURES) barRow.appendChild(aiFixBtn);  // hidden on the no-llm branch
+    root.appendChild(toolbarBody);   // ← was missing: attach buttons/inputs to toolbar
     wrapper.appendChild(root);
     wireDraggableResizable(root, toolbarDragHandle, { resize: false });
 
@@ -2702,6 +2839,21 @@ function getInjectScript(resetOnStart: boolean): string {
     updateToggleUi(toggleBtn);
     ensureHoverUi();
     try { void renderApiTab(); } catch {}
+
+    // Restore recording state after a navigation/page reload. The server keeps the
+    // real recording flag alive across page loads; sync this fresh page to it so
+    // recording continues seamlessly when the user clicks links/buttons that navigate.
+    if (window.pwRecorderGetRecordingState) {
+      window.pwRecorderGetRecordingState().then((s) => {
+        if (s && s.recording) {
+          isRecording = true;
+          updateToggleUi(toggleBtn);
+        }
+        // Always re-pull the accumulated feature preview so steps captured on
+        // earlier pages remain visible after navigating to a new page.
+        if (window.pwRecorderRequestSync) window.pwRecorderRequestSync().catch(() => {});
+      }).catch(() => {});
+    }
   }
 
   function hideElementInfoPopup() {
@@ -3131,6 +3283,33 @@ function getInjectScript(resetOnStart: boolean): string {
     } catch (e) {
       return false;
     }
+  }
+
+  // Returns the nearest interactive element to record a click on, or null.
+  // Covers custom/clickable elements (menu items, cards, div-buttons) that are
+  // NOT plain <a>/<button>/<input> — so clicks on them still generate a step.
+  function findClickableElement(start) {
+    try {
+      let el = start && start.nodeType === 1 ? start : (start && start.parentElement) || null;
+      const INTERACTIVE_ROLES = ['button', 'link', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'tab', 'option', 'checkbox', 'radio', 'switch', 'treeitem'];
+      let depth = 0;
+      while (el && el.nodeType === 1 && depth < 6) {
+        if (el.closest && el.closest('#pw-recorder-ui-root')) return null;
+        const tag = String(el.tagName || '').toLowerCase();
+        if (['a', 'button', 'input', 'select', 'textarea'].includes(tag)) return el;
+        const role = String(el.getAttribute && el.getAttribute('role') ? el.getAttribute('role') : '').toLowerCase();
+        if (role && INTERACTIVE_ROLES.includes(role)) return el;
+        if (el.hasAttribute && (el.hasAttribute('onclick') || el.hasAttribute('ng-click') || el.hasAttribute('@click') || el.hasAttribute('data-click'))) return el;
+        if (el.getAttribute && el.getAttribute('tabindex') !== null && el.getAttribute('tabindex') !== '-1') return el;
+        try {
+          const cs = window.getComputedStyle(el);
+          if (cs && cs.cursor === 'pointer') return el;
+        } catch (e) {}
+        el = el.parentElement;
+        depth++;
+      }
+    } catch (e) {}
+    return null;
   }
 
   function getVisibleTextFromElement(el) {
@@ -4185,7 +4364,8 @@ function getInjectScript(resetOnStart: boolean): string {
         const suggested = findNearestTableName(el) || (tableEl.id ? String(tableEl.id) : '');
         const cellText = getVisibleTextFromElement(el);
         showTableClickChooser(e.clientX || 10, e.clientY || 10, cellText, tableEl, suggested);
-        } else if (looksLikeTextElement(el)) {
+        } else if (looksLikeTextElement(el) && !findClickableElement(el)) {
+          // Only treat as a "verify text" target when it is NOT a clickable element.
           const t = getVisibleTextFromElement(el);
           if (t && t.length) {
             showTextConfirmTooltip(e.clientX || 10, e.clientY || 10, t);
@@ -4194,6 +4374,9 @@ function getInjectScript(resetOnStart: boolean): string {
       }
     } catch (err) {}
 
+    // The exposeFunction binding dispatches the report payload synchronously at
+    // call time, so the click is captured before the page navigates. (No need to
+    // hijack navigation — that broke SPA links and normal link recording.)
     if (raw.tagName === 'INPUT') {
       const t = (raw.getAttribute('type') || 'text').toLowerCase();
       if (t === 'checkbox') { void report('checkbox', raw, {}); return; }
@@ -4209,6 +4392,12 @@ function getInjectScript(resetOnStart: boolean): string {
 
     const roleBtn = raw.closest && raw.closest('[role=\"button\"]');
     if (roleBtn) { void report('click', roleBtn, {}); return; }
+
+    // Fallback: record clicks on other interactive elements (menu items, tabs,
+    // cards, div-buttons with click handlers or cursor:pointer) so they still
+    // generate a Gherkin step instead of being silently ignored.
+    const clickable = findClickableElement(raw);
+    if (clickable) { void report('click', clickable, {}); return; }
   }, true);
 
   document.addEventListener('contextmenu', (e) => {
@@ -4497,8 +4686,10 @@ async function main(): Promise<void> {
         },
         { featureContent, force: forceFeature },
       );
-    } catch {
-      // ignore UI sync errors
+    } catch (err) {
+      // Surface the error so we can diagnose why the preview isn't updating.
+      // eslint-disable-next-line no-console
+      console.error('[recorder] syncUi failed:', err instanceof Error ? err.stack || err.message : err);
     }
   };
 
@@ -4556,6 +4747,10 @@ async function main(): Promise<void> {
 
   await page.exposeFunction('pwRecorderReport', async (payload: ReportPayload) => {
     const href = payload.href || lastUrl;
+
+    // Diagnostic: confirm the browser→server bridge fires and which mode is active.
+    // eslint-disable-next-line no-console
+    console.log(`[recorder] report received: type=${payload?.type} mode=${captureSelection} recordUi=${shouldRecordUiActions()}`);
 
     // If the user selected API-only capture, ignore UI step recording altogether.
     if (!shouldRecordUiActions()) return;
@@ -5061,6 +5256,19 @@ async function main(): Promise<void> {
     }
 
     return { recording: !!value };
+  });
+
+  // Lets a freshly-loaded page (after navigation) restore the recording state,
+  // so recording continues across clicks/navigations instead of resetting.
+  await page.exposeFunction('pwRecorderGetRecordingState', () => {
+    return { recording: recorderIsRecording };
+  });
+
+  // Lets a freshly-loaded page (after navigation) re-pull the accumulated feature
+  // preview, so previously captured steps from earlier pages stay visible.
+  await page.exposeFunction('pwRecorderRequestSync', () => {
+    scheduleUiSync(true);
+    return { ok: true };
   });
 
   await page.exposeFunction('pwRecorderAiFixListBundles', (): AiFixBundleRow[] => {
@@ -5894,8 +6102,9 @@ ${[...pageCaptures.keys()].map(pk => `<PAGE_YAML key="${pk}">\n(YAML locators fo
 
   await page.exposeFunction(
     'pwRecorderStartFixLoop',
-    async (args?: { featurePath?: string; maxIterations?: number }): Promise<{ loopId: string }> => {
+    async (args?: { featurePath?: string; maxIterations?: number; domMode?: boolean }): Promise<{ loopId: string }> => {
       const featurePath = String(args?.featurePath || '').trim();
+      const domMode = !!args?.domMode;
       // 0 or negative = unlimited (cap at 100 for safety)
       const rawMax = Number(args?.maxIterations ?? 5);
       const maxIterations = rawMax <= 0 ? 100 : rawMax;
@@ -6067,7 +6276,124 @@ ${[...pageCaptures.keys()].map(pk => `<PAGE_YAML key="${pk}">\n(YAML locators fo
             appendLog('\n⚠ No URL found in feature file — skipping page capture');
           }
 
-          // Ask LLM to fix
+          // ── DOM Mode: find failing elements by scanning the live page ─────────
+          if (domMode) {
+            state.statusLine = `Iteration ${i} failed — DOM scanning for correct locators...`;
+            appendLog(`\n🔍 DOM Mode: searching live page for failing elements...`);
+
+            // Parse ALL "Element X not found" errors from the output
+            const failRegex = /Element "([^"]+)" not found in page "([^"]+)"/g;
+            let fm: RegExpExecArray | null;
+            const failures: Array<{ element: string; pageKey: string }> = [];
+            while ((fm = failRegex.exec(output)) !== null) {
+              failures.push({ element: fm[1], pageKey: fm[2] });
+            }
+
+            if (!failures.length) {
+              appendLog('   ⚠ Could not parse failing element from error — no DOM fix possible.');
+              state.statusLine = `❌ Could not auto-fix (unknown error type). Check test output.`;
+              break;
+            }
+
+            // Group by pageKey so we open each page once
+            const byPage = new Map<string, string[]>();
+            for (const { element, pageKey } of failures) {
+              if (!byPage.has(pageKey)) byPage.set(pageKey, []);
+              byPage.get(pageKey)!.push(element);
+            }
+
+            for (const [failPageKey, elements] of byPage.entries()) {
+              const locatorFile = path.join(ROOT, 'locators', 'pages', `${failPageKey}.yaml`);
+              const existingYaml = fs.existsSync(locatorFile)
+                ? (require('js-yaml').load(fs.readFileSync(locatorFile, 'utf8')) as Record<string, unknown>) || {}
+                : {};
+
+              appendLog(`   📄 Page: ${failPageKey} — fixing ${elements.length} element(s): [${elements.join(', ')}]`);
+
+              for (const elementName of elements) {
+                // Search the live tab DOM for the best matching element
+                const found = await liveTab.evaluate((name: string) => {
+                  const allEls = Array.from(document.querySelectorAll(
+                    'input,textarea,select,button,a,[role="button"],[role="link"],label,h1,h2,h3,h4,h5,h6'
+                  ));
+                  const n = name.toLowerCase().trim();
+
+                  const score = (el: Element) => {
+                    let s = 0;
+                    const e = el as HTMLInputElement;
+                    const id = (e.id || '').toLowerCase();
+                    const ph = (e.placeholder || '').toLowerCase();
+                    const txt = (e.textContent || e.value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+                    const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+                    const nm = (e.name || '').toLowerCase();
+                    let lblTxt = '';
+                    if (e.id) { const l = document.querySelector(`label[for="${e.id}"]`); if (l) lblTxt = (l.textContent || '').trim().toLowerCase(); }
+
+                    if (id === n) s += 100;
+                    else if (ph === n) s += 95;
+                    else if (lblTxt === n) s += 90;
+                    else if (aria === n) s += 90;
+                    else if (txt === n) s += 85;
+                    else if (nm === n) s += 80;
+                    else if (id.includes(n) || n.includes(id.replace(/[-_]/g, ''))) s += 55;
+                    else if (ph.includes(n) || n.includes(ph)) s += 50;
+                    else if (lblTxt.includes(n) || n.includes(lblTxt)) s += 45;
+                    else if (txt.startsWith(n) || n.startsWith(txt.slice(0, 20))) s += 40;
+                    return s;
+                  };
+
+                  const scored = allEls.map(el => ({ el, s: score(el) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s);
+                  if (!scored.length) return null;
+                  const best = scored[0].el as HTMLInputElement;
+                  const tag = best.tagName.toLowerCase();
+
+                  // Generate best unique XPath for the found element
+                  const candidates: Array<{ expr: string; p: number }> = [];
+                  if (best.id) candidates.push({ expr: `//*[@id='${best.id}']`, p: 100 });
+                  if (best.placeholder) candidates.push({ expr: `//input[@placeholder='${best.placeholder}']`, p: 90 });
+                  const t = (best.textContent || best.value || '').trim().replace(/\s+/g, ' ');
+                  if (t && (tag === 'button' || tag === 'a')) candidates.push({ expr: `//${tag}[normalize-space()='${t}']`, p: 88 });
+                  if (best.id) {
+                    const l = document.querySelector(`label[for="${best.id}"]`);
+                    if (l) {
+                      const lt = (l.textContent || '').trim();
+                      candidates.push({ expr: `//label[normalize-space()='${lt}']/following-sibling::input`, p: 82 });
+                      candidates.push({ expr: `//label[normalize-space()='${lt}']/..//input`, p: 81 });
+                    }
+                  }
+                  if (best.name) candidates.push({ expr: `//*[@name='${best.name}']`, p: 75 });
+                  if (best.type && ['email','password','tel','number','search'].includes(best.type)) {
+                    candidates.push({ expr: `//input[@type='${best.type}']`, p: 55 });
+                  }
+
+                  for (const c of candidates.sort((a, b) => b.p - a.p)) {
+                    try {
+                      const res = document.evaluate(c.expr, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                      if (res.snapshotLength === 1) return { strategy: 'xpath', expression: c.expr, score: scored[0].s };
+                    } catch {}
+                  }
+                  if (best.id) return { strategy: 'css', expression: `#${best.id}`, score: scored[0].s };
+                  return null;
+                }, elementName).catch(() => null);
+
+                if (found) {
+                  existingYaml[elementName] = [found.strategy, found.expression];
+                  appendLog(`   ✔ "${elementName}" → ${found.strategy}: ${found.expression} (score: ${found.score})`);
+                } else {
+                  appendLog(`   ✗ "${elementName}" — not found in DOM. Try a different element name in the feature file.`);
+                }
+              }
+
+              // Write updated YAML
+              ensureDir(path.dirname(locatorFile));
+              fs.writeFileSync(locatorFile, require('js-yaml').dump(existingYaml, { noRefs: true, lineWidth: 160 }), 'utf8');
+              appendLog(`   💾 Updated ${path.relative(ROOT, locatorFile).replace(/\\/g, '/')}`);
+            }
+
+            continue; // Skip LLM path
+          }
+
+          // Ask LLM to fix (LLM mode only)
           state.statusLine = `Iteration ${i} failed — asking LLM to fix...`;
           appendLog(`⚙ Sending error + live page HTML to LLM (model: ${ollamaModel()})...`);
 
@@ -6267,17 +6593,220 @@ Output ONLY in this format (no extra text):
     },
   );
 
-  await page.goto(startUrl, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
-  await page.evaluate(getInjectScript(resetOnStart)).catch(() => undefined);
-  await injectAiGeneratePanel(page).catch(() => undefined);
+  // ── DOM Scan: parse plain English, navigate browser, find only requested elements (Zero LLM) ──
+  await page.exposeFunction(
+    'pwRecorderDomScan',
+    async (args?: {
+      description?: string;
+      fileName?: string;
+    }): Promise<{ featureContent: string; pageYamls: Record<string, string>; status: string }> => {
+      const description = String(args?.description || '').trim();
+      const fileName = String(args?.fileName || 'dom-generated').replace(/[^a-zA-Z0-9_-]/g, '-');
+      if (!description) throw new Error('Description is required');
 
-  // Re-inject AI Generate panel on every navigation (recorder pages only)
-  page.on('framenavigated', (frame) => {
-    if (frame === page.mainFrame()) {
-      page.evaluate(getInjectScript(resetOnStart)).catch(() => undefined);
+      // ── Step 1: Parse plain English into structured actions ──────────────
+      type ParsedAction =
+        | { type: 'navigate'; url: string }
+        | { type: 'page'; pageKey: string }
+        | { type: 'click'; target: string }
+        | { type: 'fill'; target: string; value: string }
+        | { type: 'verify'; text: string }
+        | { type: 'select'; target: string };
+
+      const parseDesc = (text: string): ParsedAction[] => {
+        const acts: ParsedAction[] = [];
+        const segs = text
+          .replace(/\r?\n/g, '. ')
+          .split(/(?<=[.!?])\s+|\band\b|\bthen\b|\bafter\s+that\b|\bnext\b/i)
+          .map(s => s.trim()).filter(s => s.length > 2);
+
+        for (const seg of segs) {
+          // [pageKey] marker
+          const pageM = seg.match(/\[([a-zA-Z][a-zA-Z0-9]*)\]/);
+          if (pageM) acts.push({ type: 'page', pageKey: pageM[1] });
+
+          // Navigate
+          const navM = seg.match(/(?:go\s+to|navigate\s+to|open|visit|load)\s+(?:the\s+)?(?:url\s+)?["']?(https?:\/\/[^\s"',]+)["']?/i);
+          if (navM) { acts.push({ type: 'navigate', url: navM[1].replace(/[.,;]$/, '') }); continue; }
+
+          // Click "X"
+          const clickQ = seg.match(/click(?:\s+on)?(?:\s+the)?\s+["']([^"']+)["']/i);
+          if (clickQ) { acts.push({ type: 'click', target: clickQ[1].trim() }); continue; }
+          const clickU = seg.match(/click(?:\s+on)?(?:\s+the)?\s+([\w][\w\s]*?)\s+(?:button|link|option|tab|checkbox|icon|menu)/i);
+          if (clickU) { acts.push({ type: 'click', target: clickU[1].trim() }); continue; }
+
+          // Fill: enter "value" in "field"
+          const fillQ = seg.match(/(?:enter|type|input|fill|put)\s+["']([^"']+)["']\s+(?:in(?:to)?|for)\s+(?:the\s+)?["']([^"']+)["']/i);
+          if (fillQ) { acts.push({ type: 'fill', value: fillQ[1].trim(), target: fillQ[2].trim() }); continue; }
+          const fillU = seg.match(/(?:enter|type|input|fill)\s+["']([^"']+)["']\s+(?:in(?:to)?\s+)?(?:the\s+)?([a-zA-Z][\w\s]*?)\s+(?:field|input|textbox|box)/i);
+          if (fillU) { acts.push({ type: 'fill', value: fillU[1].trim(), target: fillU[2].trim() }); continue; }
+
+          // Select "X"
+          const selQ = seg.match(/(?:select|choose)\s+["']([^"']+)["']/i);
+          if (selQ) { acts.push({ type: 'select', target: selQ[1].trim() }); continue; }
+
+          // Verify "X"
+          const verQ = seg.match(/(?:verify|check|assert|confirm|see|ensure|validate)(?:\s+that)?(?:\s+the)?(?:\s+text)?\s+["']([^"']+)["']/i);
+          if (verQ) { acts.push({ type: 'verify', text: verQ[1].trim() }); continue; }
+          const verU = seg.match(/(?:verify|check|assert)\s+(?:that\s+)?["']([^"']+)["']\s+(?:is\s+)?(?:present|visible|shown|displayed)/i);
+          if (verU) { acts.push({ type: 'verify', text: verU[1].trim() }); continue; }
+        }
+        return acts;
+      };
+
+      const actions = parseDesc(description);
+      const firstNav = actions.find(a => a.type === 'navigate') as { type: 'navigate'; url: string } | undefined;
+      if (!firstNav) throw new Error('Description must include a URL. Example: go to https://example.com');
+
+      // ── Step 2: Open tab, execute actions, find DOM locators ─────────────
+      const domTab = await context.newPage();
+      const featureLines: string[] = [`Feature: ${fileName}`, `  Scenario: ${fileName.replace(/-/g, ' ')}`];
+      const pageYamls: Record<string, string> = {};
+      let currentPageKey = 'mainPage';
+      let pageHeaderAdded = false;
+      const locatorRoot = path.join(ROOT, 'locators');
+      const pagesYamlPath = resolvePagesYamlPath(locatorRoot);
+      const pageLocators: Record<string, Record<string, [string, string]>> = {};
+      const ensurePage = (pk: string) => { if (!pageLocators[pk]) pageLocators[pk] = {}; };
+
+      // Find the best XPath for an element name in the live DOM
+      const findLocator = async (name: string): Promise<[string, string] | null> => {
+        return domTab.evaluate((n: string) => {
+          const lower = n.toLowerCase().trim();
+          const all = Array.from(document.querySelectorAll(
+            'a,button,input,select,textarea,option,[role="button"],[role="link"],[role="option"]'
+          )).filter(el => !el.closest('#pw-recorder-ui-root') && !el.closest('[id^="__pw_"]'));
+
+          const score = (el: Element): number => {
+            const e = el as HTMLInputElement;
+            const txt  = (e.textContent || e.value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+            const ph   = (e.placeholder || '').toLowerCase();
+            const id   = (e.id || '').toLowerCase();
+            const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+            let lbl = '';
+            if (e.id) { const l = document.querySelector(`label[for="${e.id}"]`); if (l) lbl = (l.textContent || '').trim().toLowerCase(); }
+            if (txt === lower) return 100;
+            if (id === lower || ph === lower || lbl === lower || aria === lower) return 90;
+            if (txt.includes(lower) || lower.includes(txt.slice(0, Math.max(4, txt.length - 2)))) return 60;
+            if (ph.includes(lower) || lbl.includes(lower) || id.includes(lower)) return 50;
+            return 0;
+          };
+
+          const best = all.map(el => ({ el, s: score(el) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s)[0];
+          if (!best) return null;
+          const el = best.el as HTMLInputElement;
+          const tag = el.tagName.toLowerCase();
+          const txt = (el.textContent || el.value || '').trim().replace(/\s+/g, ' ');
+
+          const candidates: Array<{ expr: string; p: number }> = [];
+          if (el.id) candidates.push({ expr: `//*[@id='${el.id}']`, p: 100 });
+          if (el.placeholder) candidates.push({ expr: `//input[@placeholder='${el.placeholder}']`, p: 90 });
+          if (txt && ['button', 'a', 'option'].includes(tag)) candidates.push({ expr: `//${tag}[normalize-space()='${txt}']`, p: 88 });
+          if (el.id) {
+            const l = document.querySelector(`label[for="${el.id}"]`);
+            if (l) {
+              const lt = (l.textContent || '').trim();
+              candidates.push({ expr: `//label[normalize-space()='${lt}']/following-sibling::input`, p: 82 });
+            }
+          }
+          if (el.name) candidates.push({ expr: `//*[@name='${el.name}']`, p: 75 });
+          if (el.type && ['email','password','tel','number'].includes(el.type)) candidates.push({ expr: `//input[@type='${el.type}']`, p: 55 });
+
+          for (const c of candidates.sort((a, b) => b.p - a.p)) {
+            try {
+              const res = document.evaluate(c.expr, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+              if (res.snapshotLength === 1) return ['xpath', c.expr] as [string, string];
+            } catch {}
+          }
+          if (el.id) return ['css', `#${el.id}`] as [string, string];
+          return candidates[0] ? ['xpath', candidates[0].expr] as [string, string] : null;
+        }, name).catch(() => null);
+      };
+
+      try {
+        for (const action of actions) {
+          if (action.type === 'navigate') {
+            await domTab.goto(action.url, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
+            await domTab.waitForTimeout(1500);
+            featureLines.push(`    Given User navigates to "${action.url}" URL`);
+            if (!pageHeaderAdded) {
+              featureLines.push(`    And User is on "${currentPageKey}" screen`);
+              pageHeaderAdded = true;
+              ensurePage(currentPageKey);
+            }
+          } else if (action.type === 'page') {
+            currentPageKey = action.pageKey;
+            pageHeaderAdded = false;
+            ensurePage(currentPageKey);
+          } else if (action.type === 'click') {
+            const loc = await findLocator(action.target);
+            ensurePage(currentPageKey);
+            if (loc) {
+              pageLocators[currentPageKey][action.target] = loc;
+              featureLines.push(`    When User clicks on "${action.target}" button`);
+            } else {
+              featureLines.push(`    # ⚠ Could not find "${action.target}" in DOM — check element name`);
+              featureLines.push(`    When User clicks on "${action.target}" button`);
+            }
+            await domTab.waitForTimeout(2000);
+          } else if (action.type === 'select') {
+            const loc = await findLocator(action.target);
+            ensurePage(currentPageKey);
+            if (loc) pageLocators[currentPageKey][action.target] = loc;
+            featureLines.push(`    When User clicks on "${action.target}" button`);
+          } else if (action.type === 'fill') {
+            const loc = await findLocator(action.target);
+            ensurePage(currentPageKey);
+            if (loc) pageLocators[currentPageKey][action.target] = loc;
+            featureLines.push(`    Given enters "${action.value}" text in "${action.target}" textbox`);
+          } else if (action.type === 'verify') {
+            featureLines.push(`    Then verify "${action.text}" text is present on the screen`);
+          }
+        }
+      } finally {
+        await domTab.close().catch(() => {});
+      }
+
+      // ── Step 3: Write YAML files ────────────────────────────────────────────
+      let totalLocators = 0;
+      for (const [pk, locs] of Object.entries(pageLocators)) {
+        if (!Object.keys(locs).length) continue;
+        const lines: string[] = [];
+        for (const [name, [strategy, expression]] of Object.entries(locs)) {
+          lines.push(`${name}:`, `  - ${strategy}`, `  - ${expression}`, '');
+          totalLocators++;
+        }
+        pageYamls[pk] = lines.join('\n');
+        const locPath = resolvePageLocatorPath(pk, locatorRoot);
+        ensureDir(path.dirname(locPath));
+        fs.writeFileSync(locPath, lines.join('\n') + '\n', 'utf8');
+        registerPage(pagesYamlPath, pk, pk, Object.keys(locs)[0] || pk);
+      }
+
+      const actionCount = actions.filter(a => a.type !== 'page').length;
+      return {
+        featureContent: featureLines.join('\n') + '\n',
+        pageYamls,
+        status: `✅ Parsed ${actionCount} action(s), found ${totalLocators} locator(s) from real DOM. Review and Save.`,
+      };
+    },
+  );
+
+
+  await page.goto(startUrl, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
+  // The toolbar is auto-injected by addInitScript on every document; just add the
+  // AI Generate panel — but only when LLM features are enabled (hidden on no-llm branch).
+  if (SHOW_AI_FEATURES) {
+    await injectAiGeneratePanel(page).catch(() => undefined);
+
+    // Re-attach the AI Generate panel after each navigation. The toolbar itself is
+    // re-injected automatically by addInitScript, and injectAiGeneratePanel polls
+    // for the toolbar so timing never matters. We do NOT re-eval getInjectScript here
+    // (that races with addInitScript and can wipe toolbar state).
+    page.on('load', () => {
       injectAiGeneratePanel(page).catch(() => undefined);
-    }
-  });
+    });
+  }
 
   await new Promise<void>((resolve) => {
     browser.on('disconnected', () => resolve());

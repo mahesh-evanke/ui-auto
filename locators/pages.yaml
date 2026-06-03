@@ -5,8 +5,8 @@ tester:
   - title: Tester
     label: Email Addresssss
 recordedflow:
-  - title: Misha House Billing
-    label: Email Addresssss
+  - title: The Internet
+    label: Recordedflow
 webtable:
   - title: Misha House Billing
     label: Email Addresssss
@@ -25,3 +25,12 @@ loginPage:
 billingfullflow:
   - title: billingfullflow
     label: Email textbox
+homePage:
+  - title: The Internet
+    label: Enter file name...
+dropdownPage:
+  - title: The Internet
+    label: select-one
+mainPage:
+  - title: The Internet
+    label: Element Name

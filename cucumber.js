@@ -6,8 +6,11 @@ if (process.env.CUCUMBER_HTML_REPORT !== '0') {
 
 module.exports = {
   default: {
-    paths: ['features/**/*.feature'],
-    require: ['steps-def/**/*.ts'],
+    // No default paths: scripts/run.js always passes explicit feature paths,
+    // so those are authoritative (passing a single file runs ONLY that file).
+    // (Features now live under feature/generated/<category>/.)
+    paths: [],
+    require: ['e2e/stepdefinitions/**/*.ts'],
     requireModule: ['ts-node/register'],
     format: formats,
   },

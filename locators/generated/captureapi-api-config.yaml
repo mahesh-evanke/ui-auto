@@ -1,3 +1,0 @@
-# API URL aliases used during capture
-# Replace ${name} references in the feature file with the actual base URL
-api1: https://customer-billing-dev.vercel.app/

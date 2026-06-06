@@ -1,0 +1,6 @@
+Cancel:
+  - xpath
+  - (//button[normalize-space(.)='Cancel'])[1]
+Edit:
+  - xpath
+  - (//button[normalize-space(.)='Edit'])[1]

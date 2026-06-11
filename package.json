@@ -4,6 +4,7 @@
   "private": true,
   "description": "Playwright + Cucumber with custom recorder (no codegen inspector UI)",
   "scripts": {
+    "record": "node e2e/support/scripts/record.js",
     "pw": "ts-node e2e/support/recorder.ts",
     "generate": "node e2e/support/scripts/generate.js",
     "cucumber": "cucumber-js",
@@ -11,13 +12,15 @@
     "test:all": "node e2e/support/scripts/run.js",
     "test:web": "node e2e/support/scripts/run.js web",
     "test:api": "node e2e/support/scripts/run.js api",
-    "test:e2e": "node e2e/support/scripts/run.js endtoend"
+    "test:e2e": "node e2e/support/scripts/run.js endtoend",
+    "inspect": "node e2e/support/scripts/inspect.js"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11.3.0",
     "@playwright/test": "^1.53.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
+    "docx": "^9.7.1",
     "js-yaml": "^4.1.0",
     "playwright": "^1.53.0",
     "ts-node": "^10.9.2",

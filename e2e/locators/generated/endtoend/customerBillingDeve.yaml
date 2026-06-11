@@ -1,6 +1,6 @@
-Cancel:
+Close:
   - xpath
-  - (//button[normalize-space(.)='Cancel'])[1]
-Edit:
+  - //button[normalize-space(.)='Close']
+Edit Edit:
   - xpath
-  - (//button[normalize-space(.)='Edit'])[1]
+  - //*[@role='cell' and (normalize-space(.)='edit Edit' or @aria-label='edit Edit')]

@@ -269,6 +269,12 @@ Given('User is on {string} screen', async function (this: AutomationWorld, pageK
   this.currentPageKey = key;
   this.loadPageLocators(key);
 
+  // Wait for any in-progress navigation to settle before the next step acts on the page.
+  if (this.page) {
+    await this.page.waitForLoadState('load', { timeout: 20000 }).catch(() => undefined);
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => undefined);
+  }
+
   const rows = this.pagesRegistry[key];
   const title = rows && rows[0] ? rows[0].title : '';
   if (title && title !== key) {

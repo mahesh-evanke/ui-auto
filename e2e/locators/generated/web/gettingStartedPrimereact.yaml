@@ -1,8 +1,0 @@
-components:
-  - xpath
-  - //button[normalize-space()='Components']
-
-Editor:
-  - xpath
-  - //a[normalize-space()='Editor']
-

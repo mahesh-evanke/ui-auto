@@ -1,9 +1,0 @@
-Email Address:
-  - xpath
-  - //*[@id='email']
-Login:
-  - xpath
-  - //button[normalize-space(.)='Login']
-Password:
-  - xpath
-  - //*[@id='password']

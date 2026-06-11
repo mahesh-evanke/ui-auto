@@ -13,9 +13,12 @@ function escapeGherkinCellValue(s: string): string {
 }
 
 function formatKvDataTable(rows: DataTableKvRow[]): string {
-  const header = '| path  | value |';
-  if (!rows.length) return `${header}\n`;
-  const body = rows.map((r) => `| ${r.path} | "${escapeGherkinCellValue(String(r.value ?? ''))}" |`).join('\n');
+  if (!rows.length) return '| path  | value |\n';
+  const maxPath = Math.max('path'.length, ...rows.map((r) => r.path.length));
+  const header = `| ${'path'.padEnd(maxPath)} | value |`;
+  const body = rows
+    .map((r) => `| ${r.path.padEnd(maxPath)} | "${escapeGherkinCellValue(String(r.value ?? ''))}" |`)
+    .join('\n');
   return `${header}\n${body}\n`;
 }
 
@@ -41,9 +44,30 @@ function stripRawPrefix(path: string): string {
   return p.replace(/^raw(?=[.[])/, '').replace(/^\./, '') || 'value';
 }
 
+const MAX_RESPONSE_FIELDS = 8;
+
 /** Build the optional "And User validates response has fields:" block from the response body. */
 function formatResponseBlock(c: CapturedApi, indent: string, indentDt: string): string {
-  const rows = jsonToDataTable(c.responseBody).map((r) => ({ path: stripRawPrefix(r.path), value: r.value }));
+  let rows = jsonToDataTable(c.responseBody).map((r) => ({ path: stripRawPrefix(r.path), value: r.value }));
+  if (!rows.length) return '';
+
+  // Drop HTML blobs and excessively long values (base64, full HTML pages, etc.)
+  rows = rows.filter((r) => {
+    const v = String(r.value ?? '');
+    if (v.length > 500) return false;
+    const trimmed = v.trimStart();
+    if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) return false;
+    return true;
+  });
+
+  // For array responses: only show first item ([0].*), up to MAX_RESPONSE_FIELDS
+  const hasArrayPaths = rows.some((r) => r.path.startsWith('['));
+  if (hasArrayPaths) {
+    rows = rows.filter((r) => r.path.startsWith('[0]')).slice(0, MAX_RESPONSE_FIELDS);
+  } else {
+    rows = rows.slice(0, MAX_RESPONSE_FIELDS);
+  }
+
   if (!rows.length) return '';
   const table = formatKvDataTable(rows)
     .split('\n')

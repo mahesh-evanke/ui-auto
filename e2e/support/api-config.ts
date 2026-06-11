@@ -1,10 +1,10 @@
 /**
- * Resolves ${aliasName} variable references in API URLs by reading
- * *-api-config.yaml files from locators/generated/ at runtime.
+ * Resolves ${aliasName} variable references in API URLs.
  *
- * Format of api-config.yaml:
- *   api1: https://customer-billing-dev.vercel.app
- *   api2: https://auth.myapp.com
+ * Reads all *.yaml files recursively under locators/generated/ and collects
+ * URL aliases from:
+ *   - a top-level "urls:" map  (e.g. api.yaml → urls: { login: https://... })
+ *   - top-level string values  (e.g. api-config.yaml → login: https://...)
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -14,33 +14,46 @@ const GENERATED_DIR = path.join(__dirname, '..', 'locators', 'generated');
 
 let cachedAliases: Record<string, string> | null = null;
 
+function walkYamlFiles(dir: string, out: string[]): void {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkYamlFiles(full, out);
+    else if (entry.name.endsWith('.yaml') || entry.name.endsWith('.yml')) out.push(full);
+  }
+}
+
+function collectStrings(obj: Record<string, unknown>, into: Record<string, string>): void {
+  for (const [key, value] of Object.entries(obj)) {
+    if (key && typeof value === 'string' && value.trim()) {
+      into[key] = value.trim();
+    }
+  }
+}
+
 function loadAliases(): Record<string, string> {
   if (cachedAliases !== null) return cachedAliases;
 
   const aliases: Record<string, string> = {};
-  try {
-    if (!fs.existsSync(GENERATED_DIR)) {
-      cachedAliases = aliases;
-      return aliases;
-    }
-    const files = fs.readdirSync(GENERATED_DIR).filter((f) => f.endsWith('-api-config.yaml'));
-    for (const file of files) {
-      try {
-        const raw = fs.readFileSync(path.join(GENERATED_DIR, file), 'utf8');
-        const parsed = yaml.load(raw);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-            if (key && typeof value === 'string' && value.trim()) {
-              aliases[key] = value.trim();
-            }
-          }
-        }
-      } catch {
-        // skip malformed files
+  const files: string[] = [];
+  walkYamlFiles(GENERATED_DIR, files);
+
+  for (const file of files) {
+    try {
+      const parsed = yaml.load(fs.readFileSync(file, 'utf8'));
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+      const doc = parsed as Record<string, unknown>;
+
+      // Read from "urls:" section if present
+      if (doc.urls && typeof doc.urls === 'object' && !Array.isArray(doc.urls)) {
+        collectStrings(doc.urls as Record<string, unknown>, aliases);
       }
+
+      // Also read top-level string values (legacy api-config.yaml format)
+      collectStrings(doc, aliases);
+    } catch {
+      // skip malformed files
     }
-  } catch {
-    // ignore directory read errors
   }
 
   cachedAliases = aliases;
@@ -59,5 +72,7 @@ export function clearApiUrlAliasCache(): void {
 export function resolveApiUrl(url: string): string {
   if (!url || !url.includes('${')) return url;
   const aliases = loadAliases();
-  return url.replace(/\$\{([^}]+)\}/g, (_match, name: string) => aliases[name] ?? _match);
+  const resolved = url.replace(/\$\{([^}]+)\}/g, (_match, name: string) => aliases[name] ?? _match);
+  // Deduplicate consecutive slashes in the path (keep http:// and https:// intact)
+  return resolved.replace(/([^:])\/\/+/g, '$1/');
 }

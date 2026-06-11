@@ -6,4 +6,3 @@ playwright-report/
 .env
 .env.local
 # config.yaml contains the Ollama API key — keep it out of version control.
-

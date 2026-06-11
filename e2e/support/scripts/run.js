@@ -12,6 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { pathToFileURL } = require('url');
 
 // e2e/support/scripts/ → project root (3 levels up)
 const ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -147,12 +148,14 @@ const htmlReportRel = path
   .join('/');
 
 const cucumberEntry = path.join(ROOT, 'node_modules', '@cucumber', 'cucumber', 'bin', 'cucumber.js');
+const terminalFmt   = pathToFileURL(path.join(__dirname, 'terminal-formatter.js')).href;
 const args = [
   cucumberEntry,
   ...featurePaths,
   '--require-module', 'ts-node/register',
   '--require', 'e2e/stepdefinitions/**/*.ts',
   '--format', `html:${htmlReportRel}`,
+  '--format', terminalFmt,
 ];
 if (maxInstances > 1) args.push('--parallel', String(maxInstances));
 if (tags) args.push('--tags', tags);

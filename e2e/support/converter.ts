@@ -14,7 +14,8 @@ export type RecordedActionType =
   | 'checkbox'
   | 'radio'
   | 'assert_text'
-  | 'assert_web_table';
+  | 'assert_web_table'
+  | 'verify';
 
 export type RecordedAction = {
   type: RecordedActionType;
@@ -162,6 +163,8 @@ function renderActionStep(a: RecordedAction): string | null {
       }
     }
     case 'click':
+      // Textbox/select clicks are redundant — the fill/select step implies focus.
+      if (a.controlKind === 'textbox' || a.controlKind === 'select') return null;
       return a.controlKind === 'link' ? `When clicks on "${el}" link` : `When User clicks on "${el}" button`;
     case 'input':
       return `Given enters "${escapeFeatureString(a.value ?? '')}" text in "${el}" textbox`;
@@ -171,6 +174,10 @@ function renderActionStep(a: RecordedAction): string | null {
       return `Given select "${el}" Checkbox`;
     case 'radio':
       return `When clicks on "${el}" Radio button`;
+    case 'verify': {
+      const text = escapeFeatureString(a.value ?? a.element ?? '');
+      return `When verify "${text}" text is present on the screen`;
+    }
     default:
       return null;
   }
@@ -227,28 +234,32 @@ function toGherkinSteps(actions: RecordedAction[], scenarioUrl: string, pageKey?
   const lines: string[] = [];
   lines.push(`Given User navigates to "${escapeFeatureString(scenarioUrl || 'about:blank')}" URL`);
 
-  const pushUnique = (line: string) => {
-    if (line && !(lines.length && lines[lines.length - 1] === line)) lines.push(line);
+  const pushLine = (line: string) => {
+    if (line !== '' && lines.length && lines[lines.length - 1] === line) return;
+    if (line === '' && lines.length && lines[lines.length - 1] === '') return;
+    lines.push(line);
   };
 
   const segments = segmentActionsByPage(actions, pageKey);
   if (!segments.length && pageKey) {
-    lines.push(`Given User is on "${escapeFeatureString(pageKey)}" screen`);
+    pushLine('');
+    pushLine(`And User is on "${escapeFeatureString(pageKey)}" screen`);
   }
   for (const seg of segments) {
-    // One "User is on" boundary per page (redirected pages get their own).
-    pushUnique(`Given User is on "${escapeFeatureString(seg.pageKey)}" screen`);
+    pushLine('');
+    pushLine(`And User is on "${escapeFeatureString(seg.pageKey)}" screen`);
     for (const a of seg.actions) {
       const step = renderActionStep(a);
-      if (step) pushUnique(step);
+      if (step) pushLine(step);
     }
   }
   return lines;
 }
 
-export function buildFeatureContent(scenarioTitle: string, steps: string[]): string {
-  const body = steps.map((s) => indentStepLines(s, '    ')).join('\n');
-  return `Feature: Auto Generated Test\n\n  Scenario: ${scenarioTitle}\n\n${body}\n`;
+export function buildFeatureContent(scenarioTitle: string, steps: string[], featureName?: string): string {
+  const fName = featureName || 'Auto Generated Test';
+  const body = steps.map((s) => (s === '' ? '' : indentStepLines(s, '    '))).join('\n');
+  return `Feature: ${fName}\n\n  Scenario: ${scenarioTitle}\n\n${body}\n`;
 }
 
 /** Full pipeline: actions → feature text + locator map (paths are chosen by caller). */
@@ -261,6 +272,8 @@ export function convertToArtifacts(
     /** Clean flat page key (no prefixes) — drives screen step + locators/pages/<pageKey>.yaml */
     pageKey?: string;
     pageStepInput?: PageStepInput;
+    /** Human-readable name used as the Gherkin Feature title. */
+    featureName?: string;
   },
 ): GenerationResult {
   const scenarioTitle = optionsPages.scenarioTitle || 'User flow';
@@ -285,7 +298,7 @@ export function convertToArtifacts(
       : undefined;
 
   const steps = toGherkinSteps(actions, scenarioUrl, pageKey);
-  const featureContent = buildFeatureContent(scenarioTitle, steps);
+  const featureContent = buildFeatureContent(scenarioTitle, steps, optionsPages.featureName);
 
   // Per-page locators: group each action's locator under the page it ran on.
   const segments = segmentActionsByPage(actions, pageKey);
@@ -332,7 +345,7 @@ export function convertToArtifacts(
 export function convertToInterleavedArtifacts(
   actions: RecordedAction[],
   apiEvents: Array<{ timestamp: number; gherkin: string }>,
-  optionsPages: { scenarioTitle?: string; scenarioUrl?: string; featureFile?: string; pageKey?: string },
+  optionsPages: { scenarioTitle?: string; scenarioUrl?: string; featureFile?: string; pageKey?: string; featureName?: string },
 ): GenerationResult {
   const scenarioTitle = optionsPages.scenarioTitle || 'User flow';
   const scenarioUrl =
@@ -344,44 +357,87 @@ export function convertToInterleavedArtifacts(
 
   const uiActs = mergeRecordedActions(actions).filter((a) => a.type !== 'navigate');
 
-  // Sorted timeline of UI actions + API events (stable by timestamp).
-  type Ev = { ts: number; ui?: RecordedAction; api?: string };
-  const timeline: Ev[] = [
-    ...uiActs.map((a) => ({ ts: a.timestamp ?? 0, ui: a } as Ev)),
-    ...apiEvents.map((e) => ({ ts: e.timestamp ?? 0, api: e.gherkin } as Ev)),
-  ].sort((a, b) => a.ts - b.ts);
+  // Sort ALL ui actions by timestamp (including non-renderable phantom clicks —
+  // needed so group time windows are anchored to the earliest action on each page).
+  const allSortedUi = [...uiActs].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+  const sortedApi   = [...apiEvents].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+
+  // Group ALL ui actions by consecutive href.
+  // Each group's time window = [startTs, endTs) where startTs is the first action's
+  // timestamp and endTs is the first action timestamp of the next group.
+  // APIs are assigned to a group if their timestamp falls in (startTs, endTs].
+  // Within a group ALL renderable UI steps are emitted first, then APIs — so
+  // "fill Email / fill Password / click Login" always precede "POST /login"
+  // regardless of individual action timestamp precision.
+  type UiGroup = { href: string; actions: RecordedAction[]; startTs: number; endTs: number };
+  const uiGroups: UiGroup[] = [];
+  for (const a of allSortedUi) {
+    const href = a.href || '';
+    if (!uiGroups.length || uiGroups[uiGroups.length - 1].href !== href) {
+      uiGroups.push({ href, actions: [], startTs: a.timestamp ?? 0, endTs: Infinity });
+    }
+    uiGroups[uiGroups.length - 1].actions.push(a);
+  }
+  for (let i = 0; i < uiGroups.length - 1; i++) {
+    uiGroups[i].endTs = uiGroups[i + 1].startTs;
+  }
 
   const lines: string[] = [`Given User navigates to "${escapeFeatureString(scenarioUrl)}" URL`];
-  const pushUnique = (l: string) => {
-    if (l && !(lines.length && lines[lines.length - 1] === l)) lines.push(l);
+  const pushLine = (l: string) => {
+    if (l !== '' && lines.length && lines[lines.length - 1] === l) return;
+    if (l === '' && lines.length && lines[lines.length - 1] === '') return;
+    lines.push(l);
   };
 
-  // Emit the first page boundary up front (right after navigate).
-  const firstUiHref = uiActs[0]?.href || scenarioUrl;
+  const firstUiHref = uiGroups[0]?.href || scenarioUrl;
   let currentHref = firstUiHref;
   const keyByHref = new Map<string, string>([[firstUiHref, firstPageKey]]);
   let count = 1;
-  lines.push(`Given User is on "${escapeFeatureString(firstPageKey)}" screen`);
+  pushLine('');
+  pushLine(`And User is on "${escapeFeatureString(firstPageKey)}" screen`);
 
-  for (const ev of timeline) {
-    if (ev.ui) {
-      const href = ev.ui.href || '';
-      if (href !== currentHref) {
-        let key: string;
-        if (keyByHref.has(href)) key = keyByHref.get(href)!;
-        else key = makePageKeyFromUrl(href, ++count);
-        keyByHref.set(href, key);
-        currentHref = href;
-        pushUnique(`Given User is on "${escapeFeatureString(key)}" screen`);
-      }
-      const step = renderActionStep(ev.ui);
-      if (step) pushUnique(step);
-    } else if (ev.api) {
-      pushUnique(ev.api);
+  // APIs that fired before any UI action (pre-page-load calls).
+  const firstGroupStartTs = uiGroups[0]?.startTs ?? 0;
+  for (const e of sortedApi.filter((e) => (e.timestamp ?? 0) < firstGroupStartTs)) {
+    pushLine('');
+    lines.push(e.gherkin);
+  }
+
+  // For each page group:
+  //   1. Emit screen boundary step if the page changed.
+  //   2. Emit every renderable UI action in order (non-renderable phantom clicks skipped).
+  //   3. After ALL UI steps, emit every API whose timestamp falls in this group's window.
+  //      This guarantees the triggering action (e.g. "click Login") always appears
+  //      immediately before the API it caused (e.g. "POST /login").
+  for (const g of uiGroups) {
+    // Page boundary.
+    if (g.href !== currentHref) {
+      const key = keyByHref.has(g.href)
+        ? keyByHref.get(g.href)!
+        : makePageKeyFromUrl(g.href, ++count);
+      keyByHref.set(g.href, key);
+      currentHref = g.href;
+      pushLine('');
+      pushLine(`And User is on "${escapeFeatureString(key)}" screen`);
+    }
+
+    // Renderable UI steps in recorded order.
+    for (const a of g.actions) {
+      const step = renderActionStep(a);
+      if (step) pushLine(step);
+    }
+
+    // APIs owned by this page (fired within this group's time window).
+    for (const e of sortedApi.filter((e) => {
+      const ts = e.timestamp ?? 0;
+      return ts > g.startTs && ts <= g.endTs;
+    })) {
+      pushLine('');
+      lines.push(e.gherkin);
     }
   }
 
-  const featureContent = buildFeatureContent(scenarioTitle, lines);
+  const featureContent = buildFeatureContent(scenarioTitle, lines, optionsPages.featureName);
 
   // Per-page locators (UI only).
   const segments = segmentActionsByPage(actions, firstPageKey);

@@ -1,0 +1,12 @@
+urls:
+  login: https://customer-billing-dev.vercel.app/auth/login
+  service: https://customer-billing-dev.vercel.app/services/
+Email Address:
+  - xpath
+  - //*[self::input or self::textarea][@aria-label='Email Address' or @placeholder='Email Address' or @id=//label[normalize-space(.)='Email Address']/@for]
+Login:
+  - xpath
+  - //button[normalize-space(.)='Login']
+Password:
+  - xpath
+  - //*[self::input or self::textarea][@aria-label='Password' or @placeholder='Password' or @id=//label[normalize-space(.)='Password']/@for]

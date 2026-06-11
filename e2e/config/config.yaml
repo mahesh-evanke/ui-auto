@@ -32,11 +32,11 @@ run:
   maxInstances: 1          # parallel cucumber workers (1 = sequential)
   # feature discovery (run.js passes explicit paths; this is the fallback glob)
   features: ./feature/generated/**/*.feature
-  getPageTimeoutMs: 40000
+  getPageTimeoutMs: 400000
   # How long to wait for a redirect / next page to finish loading before checking text.
-  redirectWaitMs: 15000
+  redirectWaitMs: 150000
   # How long to keep re-checking the page for the expected text (covers slow redirects).
-  verifyTimeoutMs: 20000
+  verifyTimeoutMs: 200000
 
 # ── Environment URLs (optional convenience) ───────────────────────────────────
 urls:

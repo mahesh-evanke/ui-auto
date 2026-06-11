@@ -1,0 +1,15 @@
+Edit:
+  - xpath
+  - //*[@role='row' and (normalize-space(.)='1 KENNY, ANDERSON 06/12/1964' or @aria-label='1 KENNY, ANDERSON 06/12/1964')]
+Close:
+  - xpath
+  - //button[normalize-space(.)='Close']
+Email Address:
+  - xpath
+  - //*[self::input or self::textarea][@aria-label='Email Address' or @placeholder='Email Address' or @id=//label[normalize-space(.)='Email Address']/@for]
+Login:
+  - xpath
+  - //button[normalize-space(.)='Login']
+Password:
+  - xpath
+  - //*[self::input or self::textarea][@aria-label='Password' or @placeholder='Password' or @id=//label[normalize-space(.)='Password']/@for]

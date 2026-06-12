@@ -28,8 +28,8 @@ export type RecordedAction = {
   value?: string;
   /** xpath or css + expression */
   locator: [string, string];
-  /** button | link | textbox | select | checkbox | radio */
-  controlKind: 'button' | 'link' | 'textbox' | 'select' | 'checkbox' | 'radio';
+  /** button | link | textbox | select | checkbox | radio | table */
+  controlKind: 'button' | 'link' | 'textbox' | 'select' | 'checkbox' | 'radio' | 'table';
 };
 
 export type GeneratedPage = {

@@ -210,6 +210,108 @@ async function showConfigPanel(chromium) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// enrichTableActions — fills in live table data for assert_web_table actions
+//   that have no value yet (i.e. captured from Playwright Inspector via
+//   getByRole('table').toBeVisible() — the inspector only records visibility,
+//   not table content).
+//
+//   For each such action: opens a headless browser, navigates to action.href,
+//   finds the table by accessible name / caption / id, extracts headers + rows,
+//   and sets action.value = JSON.stringify({tableName, headers, rows}).
+// ─────────────────────────────────────────────────────────────────────────────
+async function enrichTableActions(actions) {
+  const { chromium } = require('@playwright/test');
+
+  const toEnrich = actions.filter(a => a.type === 'assert_web_table' && !String(a.value || '').trim());
+  if (!toEnrich.length) return;
+
+  log(`  🔍  Scraping table data for ${toEnrich.length} table assertion(s)...\n`);
+
+  const browser = await chromium.launch({ headless: true });
+  try {
+    // Group by href so we only load each page once
+    const byHref = {};
+    for (const a of toEnrich) {
+      const key = a.href || '';
+      if (!byHref[key]) byHref[key] = [];
+      byHref[key].push(a);
+    }
+
+    for (const [href, group] of Object.entries(byHref)) {
+      if (!href) { log(`  ⚠️   Table assertion has no URL — skipping.\n`); continue; }
+      const page = await browser.newPage();
+      try {
+        await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForTimeout(800);
+
+        for (const action of group) {
+          const tableName = (action.element || '').trim();
+          const data = await page.evaluate((name) => {
+            const tables = Array.from(document.querySelectorAll('table'));
+            if (!tables.length) return null;
+
+            // Score each table — highest score wins
+            function scoreTable(tbl) {
+              const n = (name || '').toLowerCase();
+              if (!n) return tbl === tables[0] ? 1 : 0;
+              let score = 0;
+              const caption = (tbl.caption && tbl.caption.textContent || '').toLowerCase().trim();
+              const ariaLabel = (tbl.getAttribute('aria-label') || '').toLowerCase().trim();
+              const summary   = (tbl.getAttribute('summary') || '').toLowerCase().trim();
+              const id        = (tbl.id || '').toLowerCase().trim();
+              if (caption   === n) score = Math.max(score, 100);
+              if (ariaLabel === n) score = Math.max(score, 100);
+              if (caption.includes(n) || n.includes(caption && caption))   score = Math.max(score, 60);
+              if (ariaLabel.includes(n) || n.includes(ariaLabel))          score = Math.max(score, 60);
+              if (summary.includes(n)  || n.includes(summary))             score = Math.max(score, 50);
+              if (id.includes(n)       || n.includes(id))                  score = Math.max(score, 50);
+              // score by th text
+              const ths = Array.from(tbl.querySelectorAll('th')).map(th => th.textContent.trim().toLowerCase());
+              if (ths.some(th => th === n || th.includes(n) || n.includes(th))) score = Math.max(score, 40);
+              return score;
+            }
+
+            const best = tables.reduce((b, t) => {
+              const s = scoreTable(t);
+              return s > b.score ? { tbl: t, score: s } : b;
+            }, { tbl: tables[0], score: -1 });
+
+            const tbl = best.tbl;
+            // Extract headers
+            const headerRow = tbl.querySelector('thead tr') || tbl.querySelector('tr');
+            const headers = headerRow
+              ? Array.from(headerRow.querySelectorAll('th, td')).map(c => c.textContent.trim())
+              : [];
+
+            // Extract up to 10 body rows
+            const bodyRows = Array.from(tbl.querySelectorAll('tbody tr')).slice(0, 10).map(tr =>
+              Array.from(tr.querySelectorAll('td, th')).map(c => c.textContent.trim())
+            );
+
+            const resolvedName = (tbl.caption && tbl.caption.textContent.trim()) ||
+                                 tbl.getAttribute('aria-label') || name || 'Table';
+            return { tableName: resolvedName, headers, rows: bodyRows };
+          }, tableName);
+
+          if (data) {
+            action.value = JSON.stringify(data);
+            log(`  ✅  Table "${data.tableName}" — ${data.headers.length} col(s), ${data.rows.length} row(s) captured.\n`);
+          } else {
+            log(`  ⚠️   No <table> found on ${href} for "${tableName}".\n`);
+          }
+        }
+      } catch (e) {
+        log(`  ⚠️   Could not load ${href} for table scraping: ${e.message}\n`);
+      } finally {
+        await page.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Step 2a — UI mode: Playwright codegen
 //   Spawns `npx playwright codegen --output <tmp.spec.ts> [url]`.
 //   Waits for the process to exit (user closes the browser / Inspector).
@@ -251,6 +353,7 @@ async function recordWithCodegen(config, uiActions) {
   try { fs.unlinkSync(TEMP_SPEC); } catch {}   // always clean up temp file
 
   const { actions, firstUrl } = parsePlaywrightSpec(specContent);
+  await enrichTableActions(actions);
   uiActions.push(...actions);
 
   log(`  ✔   Parsed ${actions.length} action(s) from recording.\n`);
@@ -302,6 +405,7 @@ async function recordWithCodegenAndHar(config, uiActions, capturedApis) {
     const specContent = fs.readFileSync(TEMP_SPEC, 'utf8');
     try { fs.unlinkSync(TEMP_SPEC); } catch {}
     const { actions, firstUrl: fu } = parsePlaywrightSpec(specContent);
+    await enrichTableActions(actions);
     uiActions.push(...actions);
     if (fu) firstUrl = fu;
     log(`  ✔   Parsed ${actions.length} UI action(s) from spec.\n`);
@@ -2292,6 +2396,17 @@ function parseDomDescription(text) {
       }
     }
 
+    // ── Verify web table ─────────────────────────────────────────────────────
+    {
+      const m = line.match(
+        /(?:verify|check|assert|confirm)\s+(?:data\s+from\s+|information\s+(?:from\s+|in\s+)|)?['"]?([^'"]+?)['"]?\s+(?:web\s*)?table/i
+      );
+      if (m) {
+        actions.push({ type: 'verify_table', tableName: m[1].trim() });
+        continue;
+      }
+    }
+
     // ── Verify text visible ───────────────────────────────────────────────────
     {
       const m = line.match(
@@ -2600,7 +2715,7 @@ async function recordWithDom(config, uiActions) {
       // ── Verify text visible ───────────────────────────────────────────────
       } else if (action.type === 'verify') {
         log(`  ${stepNum} 👁  Verify "${action.text}" is visible\n`);
-        await page.evaluate(t => window.__domStatus && window.__domStatus('Verifying → ' + t), action.text).catch(() => {});
+        await page.evaluate(t => window.__domStatus && window.__domStatus('Verifying text → ' + t), action.text).catch(() => {});
         const visible = await page.locator(`text=${action.text}`).first()
           .isVisible({ timeout: 5000 }).catch(() => false);
         if (visible) {
@@ -2613,6 +2728,84 @@ async function recordWithDom(config, uiActions) {
           });
         } else {
           log(`  ⚠️   "${action.text}" not visible on page — step skipped.\n`);
+        }
+
+      // ── Verify web table — scan live DOM, capture headers + rows ───────────
+      } else if (action.type === 'verify_table') {
+        log(`  ${stepNum} 📊  Verify web table "${action.tableName}"\n`);
+        await page.evaluate(t => window.__domStatus && window.__domStatus('Scanning table → ' + t), action.tableName).catch(() => {});
+
+        const tableData = await page.evaluate(({ name }) => {
+          const lower = name.toLowerCase().trim();
+          function scoreTable(el) {
+            // caption, aria-label, summary, id, or a th that contains the name
+            const caption  = (el.querySelector('caption') || {}).textContent || '';
+            const aria     = el.getAttribute('aria-label') || '';
+            const summary  = el.getAttribute('summary') || '';
+            const id       = el.id || '';
+            const thTexts  = [...el.querySelectorAll('thead th, tr:first-child th')]
+              .map(th => (th.textContent || '').trim()).join(' ');
+            const candidates = [caption, aria, summary, id, thTexts];
+            for (const c of candidates) {
+              const cl = c.toLowerCase();
+              if (cl === lower) return 100;
+              if (cl.includes(lower) || lower.includes(cl)) return 55;
+            }
+            return 0;
+          }
+
+          const tables = [...document.querySelectorAll('table')];
+          if (!tables.length) return null;
+
+          // Find best-matching table; fall back to the first table on the page
+          let best = tables[0], bestScore = 0;
+          for (const tbl of tables) {
+            const s = scoreTable(tbl);
+            if (s > bestScore) { bestScore = s; best = tbl; }
+          }
+
+          // Extract headers from <thead th> or first <tr th>
+          const headerEls = best.querySelectorAll('thead th, thead td');
+          const headers = headerEls.length
+            ? [...headerEls].map(h => (h.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean)
+            : [...(best.querySelector('tr') || { querySelectorAll: () => [] })
+                .querySelectorAll('th, td')]
+              .map(h => (h.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+
+          // Extract body rows (skip header row)
+          const bodyRows = best.querySelectorAll('tbody tr');
+          const srcRows  = bodyRows.length
+            ? [...bodyRows]
+            : [...best.querySelectorAll('tr')].slice(1);
+
+          const rows = srcRows.slice(0, 10).map(tr =>
+            [...tr.querySelectorAll('td, th')]
+              .map(td => (td.textContent || '').replace(/\s+/g, ' ').trim())
+          ).filter(r => r.some(c => c));
+
+          // Resolve a caption or aria-label to use as the table name
+          const resolvedName =
+            (best.querySelector('caption') || {}).textContent ||
+            best.getAttribute('aria-label') || name;
+
+          return { tableName: resolvedName.trim(), headers, rows };
+        }, { name: action.tableName });
+
+        if (tableData && (tableData.headers.length || tableData.rows.length)) {
+          const payload = JSON.stringify({
+            tableName: tableData.tableName,
+            headers  : tableData.headers,
+            rows     : tableData.rows,
+          });
+          uiActions.push({
+            type: 'assert_web_table', element: tableData.tableName, value: payload,
+            controlKind: 'table', href: page.url(),
+            locator: ['xpath', '//table'], timestamp: Date.now(),
+          });
+          log(`  ✔   Captured "${tableData.tableName}" — ` +
+              `${tableData.headers.length} column(s), ${tableData.rows.length} row(s).\n`);
+        } else {
+          log(`  ⚠️   No table found matching "${action.tableName}" — step skipped.\n`);
         }
       }
 

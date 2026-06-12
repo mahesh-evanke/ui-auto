@@ -64,14 +64,47 @@ function log(debug: boolean, msg: string): void {
 }
 
 async function resolveTableRoot(page: Page, objName: string, getLocator?: (name: string) => Locator): Promise<Locator> {
+  // 1. YAML locator registry
   if (getLocator) {
     try {
-      return getLocator(objName);
+      const loc = getLocator(objName);
+      if ((await loc.count().catch(() => 0)) > 0) return loc;
     } catch {
-      // fallback below
+      // fall through
     }
   }
-  // Fallback: //*[@id='objName']
+
+  // 2. ARIA role table with matching name
+  try {
+    const byRole = page.getByRole('table', { name: new RegExp(objName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+    if ((await byRole.count().catch(() => 0)) > 0) return byRole;
+  } catch { /* fall through */ }
+
+  // 3. <table> whose <caption> matches
+  try {
+    const byCaption = page.locator(`table:has(caption)`).filter({ hasText: objName });
+    if ((await byCaption.count().catch(() => 0)) > 0) return byCaption.first();
+  } catch { /* fall through */ }
+
+  // 4. <table> with aria-label matching
+  try {
+    const byAria = page.locator(`table[aria-label]`).filter({ hasText: objName });
+    if ((await byAria.count().catch(() => 0)) > 0) return byAria.first();
+  } catch { /* fall through */ }
+
+  // 5. id attribute
+  try {
+    const byId = page.locator(`xpath=//*[@id=${JSON.stringify(objName)}]`);
+    if ((await byId.count().catch(() => 0)) > 0) return byId;
+  } catch { /* fall through */ }
+
+  // 6. Only one table on the page — use it
+  try {
+    const all = page.locator('table');
+    if ((await all.count().catch(() => 0)) === 1) return all.first();
+  } catch { /* fall through */ }
+
+  // 7. Last resort — keep original id-based selector (will fail with a clear message)
   return page.locator(`xpath=//*[@id=${JSON.stringify(objName)}]`);
 }
 
@@ -84,16 +117,73 @@ async function ensureTableElement(root: Locator): Promise<Locator> {
   return count > 0 ? nested : root;
 }
 
-async function getHeaderTexts(table: Locator): Promise<string[]> {
-  const headerLoc = table.locator('thead tr th');
-  const count = await headerLoc.count();
-  if (count === 0) return [];
-  const texts: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const t = await headerLoc.nth(i).innerText().catch(() => '');
-    texts.push(normalizeSpaces(t));
+async function readTableData(table: Locator): Promise<{ headers: string[]; rows: string[][] }> {
+  // Wait for a data row (tbody tr) — header renders immediately but data loads async
+  try {
+    await table.locator('tbody tr').first().waitFor({ state: 'attached', timeout: 20000 });
+  } catch {
+    // No tbody tr — fall back to waiting for any tr (plain tables, no tbody)
+    try {
+      await table.locator('tr').nth(1).waitFor({ state: 'attached', timeout: 5000 });
+    } catch { /* proceed anyway */ }
   }
-  return texts;
+
+  return table.evaluate((el) => {
+    const tbl = el as HTMLTableElement;
+    const norm = (s: string) => (s || '').replace(/\s+/g, ' ').trim();
+
+    // Extract clean header text from a <th> — handles Ant Design, Material UI, plain HTML
+    const getThText = (th: Element): string => {
+      // 1. title attribute — Ant Design uses this for ellipsis columns (e.g. title="ID #")
+      const titleAttr = (th as HTMLElement).title;
+      if (titleAttr && titleAttr.trim()) return titleAttr.trim();
+
+      // 2. aria-label — Ant Design sortable columns set this (e.g. aria-label="Name")
+      const ariaLabel = th.getAttribute('aria-label');
+      if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+
+      // 3. Component-library column-title span (Ant Design, react-table wrappers)
+      const titleSpan = th.querySelector('[class*="column-title"],[class*="col-title"],[class*="header-title"]');
+      if (titleSpan && titleSpan.textContent?.trim()) return norm(titleSpan.textContent);
+
+      // 4. scope="col" plain th — strip SVG/icon text by reading only text nodes
+      const textNodes: string[] = [];
+      th.childNodes.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) textNodes.push(node.textContent || '');
+      });
+      const directText = norm(textNodes.join(''));
+      if (directText) return directText;
+
+      // 5. Full textContent fallback — remove known icon aria-labels that bleed in
+      return norm((th.textContent || '').replace(/caret-up|caret-down|sort-asc|sort-desc|▲|▼/gi, ''));
+    };
+
+    // Collect all rows
+    const allTrs = Array.from(tbl.querySelectorAll('tr'));
+    if (!allTrs.length) return { headers: [], rows: [] };
+
+    // Extract headers from <thead th> first, then first-row <th>
+    const theadThs = Array.from(tbl.querySelectorAll('thead th'));
+    const firstRowThs = Array.from(allTrs[0].querySelectorAll('th'));
+    const thElements = theadThs.length ? theadThs : firstRowThs;
+
+    let headers: string[] = [];
+    if (thElements.length) {
+      headers = thElements.map(th => getThText(th));
+    }
+
+    // Data rows from <tbody tr> — fall back to all tr except header row
+    const bodyTrs = Array.from(tbl.querySelectorAll('tbody tr'));
+    const dataRows = bodyTrs.length > 0
+      ? bodyTrs
+      : allTrs.slice(thElements.length > 0 ? 1 : 0);
+
+    const rows = dataRows
+      .map(tr => Array.from(tr.querySelectorAll('td')).map(td => norm(td.textContent || '')))
+      .filter(r => r.some(cell => cell !== ''));  // skip fully-empty rows
+
+    return { headers, rows };
+  });
 }
 
 type ExpectedRow = Record<string, string>;
@@ -164,20 +254,11 @@ export async function verifyWebTable(
   const expectedRows = dataTableToExpectedRows(dataTable);
   if (!expectedRows.length) throw new Error(`No expected rows provided for table "${objName}"`);
 
-  const headers = await getHeaderTexts(table);
+  const { headers, rows: allRows } = await readTableData(table);
   log(debug, `[verifyWebTable] Table "${objName}" headers detected: ${JSON.stringify(headers)}`);
+  log(debug, `[verifyWebTable] Cached ${allRows.length} data rows`);
 
   const headerIndex = buildHeaderIndex(headers);
-
-  // Cache DOM rows once (performance)
-  const rowLoc = table.locator('tbody tr');
-  const rowCount = await rowLoc.count();
-  const allRows: string[][] = [];
-  for (let r = 0; r < rowCount; r++) {
-    const cells = await rowLoc.nth(r).locator('td').allInnerTexts().catch(async () => rowLoc.nth(r).allInnerTexts());
-    allRows.push((cells || []).map((c) => normalizeSpaces(c)));
-  }
-  log(debug, `[verifyWebTable] Cached ${allRows.length} data rows`);
 
   const now = new Date();
   const resolvedExpectedRows = expectedRows.map((row) => {

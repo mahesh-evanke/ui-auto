@@ -114,6 +114,7 @@ function parseLine(raw: string, currentHref: string): LineResult {
 
   // ── Assertions ──────────────────────────────────────────────────────────────
 
+  // ── Verify TEXT patterns (Inspector "Assert text" button) ──────────────────
   // expect(page.getByText('X')).toBeVisible()
   const assertTextM = t.match(/await expect\(page\.getByText\(['"`]([^'"`]+)['"`](?:,\s*\{[^}]*\})?\)\)\.toBeVisible\(\)/);
   if (assertTextM) return {
@@ -121,11 +122,11 @@ function parseLine(raw: string, currentHref: string): LineResult {
     action: { type: 'assert_text', element: assertTextM[1], value: assertTextM[1], controlKind: 'button', href: currentHref, locator: ['xpath', ''] }
   };
 
-  // expect(page.getByRole('...', { name: 'X' })).toBeVisible()
-  const assertRoleM = t.match(/await expect\(page\.getByRole\(['"`][^'"`]+['"`],\s*\{[^}]*name:\s*['"`]([^'"`]+)['"`][^}]*\}\)\)\.toBeVisible\(\)/);
+  // expect(page.getByRole('...', { name: 'X' })).toBeVisible()  — non-table roles
+  const assertRoleM = t.match(/await expect\(page\.getByRole\(['"`](?!table)([^'"`]+)['"`],\s*\{[^}]*name:\s*['"`]([^'"`]+)['"`][^}]*\}\)\)\.toBeVisible\(\)/);
   if (assertRoleM) return {
     navigate: null,
-    action: { type: 'assert_text', element: assertRoleM[1], value: assertRoleM[1], controlKind: 'button', href: currentHref, locator: ['xpath', ''] }
+    action: { type: 'assert_text', element: assertRoleM[2], value: assertRoleM[2], controlKind: 'button', href: currentHref, locator: ['xpath', ''] }
   };
 
   // expect(page.locator('...')).toBeVisible()
@@ -133,6 +134,36 @@ function parseLine(raw: string, currentHref: string): LineResult {
   if (assertLocM) return {
     navigate: null,
     action: { type: 'assert_text', element: nameFromSelector(assertLocM[1]), value: nameFromSelector(assertLocM[1]), controlKind: 'button', href: currentHref, locator: ['xpath', ''] }
+  };
+
+  // expect(locator).toContainText('X')  — Inspector "Assert text" generates this
+  // (?:[^)(]+|\([^)]*\))+ handles nested parens like page.getByRole('heading')
+  const containTextM = t.match(/await expect\((?:[^)(]+|\([^)]*\))+\)\.toContainText\(['"`]([^'"`]+)['"`]\)/);
+  if (containTextM) return {
+    navigate: null,
+    action: { type: 'assert_text', element: containTextM[1], value: containTextM[1], controlKind: 'button', href: currentHref, locator: ['xpath', ''] }
+  };
+
+  // expect(locator).toHaveText('X')
+  const haveTextM = t.match(/await expect\((?:[^)(]+|\([^)]*\))+\)\.toHaveText\(['"`]([^'"`]+)['"`]\)/);
+  if (haveTextM) return {
+    navigate: null,
+    action: { type: 'assert_text', element: haveTextM[1], value: haveTextM[1], controlKind: 'button', href: currentHref, locator: ['xpath', ''] }
+  };
+
+  // ── Verify WEB TABLE patterns (Inspector click on table role) ──────────────
+  // expect(page.getByRole('table', { name: 'X' })).toBeVisible()
+  const assertTableRoleM = t.match(/await expect\(page\.getByRole\(['"`]table['"`],\s*\{[^}]*name:\s*['"`]([^'"`]+)['"`][^}]*\}\)\)\.toBeVisible\(\)/);
+  if (assertTableRoleM) return {
+    navigate: null,
+    action: { type: 'assert_web_table', element: assertTableRoleM[1], value: '', controlKind: 'table', href: currentHref, locator: ['xpath', ''] }
+  };
+
+  // expect(page.locator('table')).toBeVisible()  or  expect(page.locator('table#id')).toBeVisible()
+  const assertTableLocM = t.match(/await expect\(page\.locator\(['"`]((?:table|[^'"`]*\btable\b)[^'"`]*)['"`]\)\)\.toBeVisible\(\)/);
+  if (assertTableLocM) return {
+    navigate: null,
+    action: { type: 'assert_web_table', element: nameFromSelector(assertTableLocM[1]), value: '', controlKind: 'table', href: currentHref, locator: ['xpath', ''] }
   };
 
   // ── Extract method chain ─────────────────────────────────────────────────────

@@ -19,6 +19,10 @@ export type ElementSnapshot = {
   role?: string;
   value?: string;
   selectedLabel?: string;
+  /** True when the clicked element is an option inside a custom dropdown/listbox. */
+  isOption?: boolean;
+  /** True when the clicked element opens a custom dropdown (combobox/listbox trigger). */
+  isDropdownTrigger?: boolean;
 };
 
 export type LocatorStrategy = 'getByRole' | 'getByLabel' | 'getByPlaceholder' | 'getByText' | 'xpath';

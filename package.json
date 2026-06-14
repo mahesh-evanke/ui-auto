@@ -6,12 +6,15 @@
   "scripts": {
     "record": "node e2e/support/scripts/record.js",
     "pw": "ts-node e2e/support/recorder.ts",
+    "ai": "node e2e/support/scripts/ai-cli.js",
+    "ai:mcp": "node e2e/support/scripts/ai-mcp.js",
     "generate": "node e2e/support/scripts/generate.js",
     "cucumber": "cucumber-js",
     "run": "node e2e/support/scripts/run.js",
     "test:all": "node e2e/support/scripts/run.js",
     "test:web": "node e2e/support/scripts/run.js web",
     "test:api": "node e2e/support/scripts/run.js api",
+    "test:ai": "node e2e/support/scripts/test-ai.js",
     "test:e2e": "node e2e/support/scripts/run.js endtoend",
     "inspect": "node e2e/support/scripts/inspect.js"
   },

@@ -112,6 +112,22 @@ export async function verifyTextOnScreen(page: Page, text: string, opts?: TextVe
     await sleep(250);
   }
 
+  // Frame fallback: the text may live inside an iframe (embedded demos, editors,
+  // payment widgets, etc.). Search every child frame before giving up.
+  for (const frame of page.frames()) {
+    try {
+      if (await frame.getByText(needle, { exact: strict }).first().isVisible({ timeout: 500 })) {
+        if (debug) {
+          // eslint-disable-next-line no-console
+          console.log(`[verifyTextOnScreen] Text found inside iframe: "${needle}"`);
+        }
+        return;
+      }
+    } catch {
+      // ignore and try next frame
+    }
+  }
+
   if (debug) {
     // eslint-disable-next-line no-console
     console.log(`[verifyTextOnScreen] Text NOT found: "${needle}"`);

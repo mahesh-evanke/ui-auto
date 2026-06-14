@@ -23,8 +23,8 @@ const ROOT = path.resolve(__dirname, '..');
 export const FEATURE_ROOT = path.join(ROOT, 'features', 'generated');
 export const LOCATOR_ROOT = path.join(ROOT, 'locators', 'generated');
 
-export type FeatureCategory = 'endtoend' | 'web' | 'api';
-export const CATEGORIES: FeatureCategory[] = ['endtoend', 'web', 'api'];
+export type FeatureCategory = 'endtoend' | 'web' | 'api' | 'ai';
+export const CATEGORIES: FeatureCategory[] = ['endtoend', 'web', 'api', 'ai'];
 
 /** Decide endtoend / web / api from the feature file content. */
 export function classifyFeature(featureContent: string): FeatureCategory {
@@ -72,6 +72,9 @@ export function findLocatorFile(pageKey: string): string | null {
     const fp = locatorFilePath(cat, pageKey);
     if (fs.existsSync(fp)) return fp;
   }
+  // Per-page files written by ai-cli into the pages/ subfolder (combined-yaml mode).
+  const aiPages = path.join(LOCATOR_ROOT, 'ai', 'pages', `${pageKey}.yaml`);
+  if (fs.existsSync(aiPages)) return aiPages;
   // Legacy fallbacks (old layouts)
   const flat = path.join(LOCATOR_ROOT, `${pageKey}.yaml`);
   if (fs.existsSync(flat)) return flat;

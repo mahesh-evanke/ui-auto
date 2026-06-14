@@ -3,7 +3,7 @@
  * Designed to be called from step definitions without breaking existing flows.
  */
 import type { DataTable } from '@cucumber/cucumber';
-import type { Locator, Page } from 'playwright';
+import type { Frame, Locator, Page } from 'playwright';
 import { resolveDynamicTokens } from './textHelper';
 
 export type WebTableVerifyOptions = {
@@ -64,7 +64,7 @@ function log(debug: boolean, msg: string): void {
 }
 
 async function resolveTableRoot(page: Page, objName: string, getLocator?: (name: string) => Locator): Promise<Locator> {
-  // 1. YAML locator registry
+  // 1. YAML locator registry (page-scoped)
   if (getLocator) {
     try {
       const loc = getLocator(objName);
@@ -74,37 +74,43 @@ async function resolveTableRoot(page: Page, objName: string, getLocator?: (name:
     }
   }
 
-  // 2. ARIA role table with matching name
-  try {
-    const byRole = page.getByRole('table', { name: new RegExp(objName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
-    if ((await byRole.count().catch(() => 0)) > 0) return byRole;
-  } catch { /* fall through */ }
+  // Run the name-based strategies against a given scope (page or iframe).
+  const findInScope = async (scope: Page | Frame): Promise<Locator | null> => {
+    // ARIA role table with matching name
+    try {
+      const byRole = scope.getByRole('table', { name: new RegExp(objName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+      if ((await byRole.count().catch(() => 0)) > 0) return byRole;
+    } catch { /* next */ }
+    // <table> whose <caption> matches
+    try {
+      const byCaption = scope.locator(`table:has(caption)`).filter({ hasText: objName });
+      if ((await byCaption.count().catch(() => 0)) > 0) return byCaption.first();
+    } catch { /* next */ }
+    // <table> with aria-label matching
+    try {
+      const byAria = scope.locator(`table[aria-label]`).filter({ hasText: objName });
+      if ((await byAria.count().catch(() => 0)) > 0) return byAria.first();
+    } catch { /* next */ }
+    // id attribute
+    try {
+      const byId = scope.locator(`xpath=//*[@id=${JSON.stringify(objName)}]`);
+      if ((await byId.count().catch(() => 0)) > 0) return byId;
+    } catch { /* next */ }
+    // Only one table in this scope — use it
+    try {
+      const all = scope.locator('table');
+      if ((await all.count().catch(() => 0)) === 1) return all.first();
+    } catch { /* next */ }
+    return null;
+  };
 
-  // 3. <table> whose <caption> matches
-  try {
-    const byCaption = page.locator(`table:has(caption)`).filter({ hasText: objName });
-    if ((await byCaption.count().catch(() => 0)) > 0) return byCaption.first();
-  } catch { /* fall through */ }
+  // 2. Try the main page, then every iframe.
+  for (const scope of [page, ...page.frames()] as Array<Page | Frame>) {
+    const hit = await findInScope(scope);
+    if (hit) return hit;
+  }
 
-  // 4. <table> with aria-label matching
-  try {
-    const byAria = page.locator(`table[aria-label]`).filter({ hasText: objName });
-    if ((await byAria.count().catch(() => 0)) > 0) return byAria.first();
-  } catch { /* fall through */ }
-
-  // 5. id attribute
-  try {
-    const byId = page.locator(`xpath=//*[@id=${JSON.stringify(objName)}]`);
-    if ((await byId.count().catch(() => 0)) > 0) return byId;
-  } catch { /* fall through */ }
-
-  // 6. Only one table on the page — use it
-  try {
-    const all = page.locator('table');
-    if ((await all.count().catch(() => 0)) === 1) return all.first();
-  } catch { /* fall through */ }
-
-  // 7. Last resort — keep original id-based selector (will fail with a clear message)
+  // 3. Last resort — id-based selector on the page (fails with a clear message).
   return page.locator(`xpath=//*[@id=${JSON.stringify(objName)}]`);
 }
 

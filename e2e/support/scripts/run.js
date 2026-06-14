@@ -36,7 +36,7 @@ function allFeatureFiles() {
   return out;
 }
 
-const CATEGORIES = ['endtoend', 'web', 'api'];
+const CATEGORIES = ['endtoend', 'web', 'api', 'ai'];
 
 function filesInCategory(all, cat) {
   return all.filter((f) => f.includes(`${path.sep}generated${path.sep}${cat}${path.sep}`));
@@ -55,13 +55,13 @@ function resolveArg(arg) {
     if (m.length) return m;
   }
 
-  const globMatch = norm.match(/^(endtoend|web|api)\/\*(?:\.feature)?$/);
+  const globMatch = norm.match(/^(endtoend|web|api|ai)\/\*(?:\.feature)?$/);
   if (globMatch) {
     const m = filesInCategory(all, globMatch[1]);
     if (m.length) return m;
   }
 
-  const catName = norm.match(/^(endtoend|web|api)\/(.+?)(?:\.feature)?$/);
+  const catName = norm.match(/^(endtoend|web|api|ai)\/(.+?)(?:\.feature)?$/);
   if (catName) {
     const [, cat, name] = catName;
     const m = filesInCategory(all, cat).filter(

@@ -7,7 +7,7 @@ import {
   World,
 } from '@cucumber/cucumber';
 import type { APIRequestContext } from 'playwright';
-import type { Browser, BrowserContext, Locator, Page } from 'playwright';
+import type { Browser, BrowserContext, Frame, Locator, Page } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -168,6 +168,35 @@ export class AutomationWorld extends World {
       return fl.locator(`xpath=${expr}`).first();
     }
     return fl.locator(expr).first();
+  }
+
+  /**
+   * Resolve a locator that may live on the main page OR inside any iframe.
+   * Tries the main page first, then every child frame, returning the matching
+   * locator together with the scope it was found in (so option panels / nested
+   * queries can run in the same frame). Falls back to the main-page locator.
+   */
+  async resolveAcrossFrames(name: string): Promise<{ loc: Locator; scope: Page | Frame }> {
+    if (!this.page) throw new Error('Browser page not initialized. Ensure OPEN_BROWSER=true or MODE=API_UI.');
+    const tuple = this.tryResolveTuple(name);
+    const kind = tuple ? tuple[0].toLowerCase() : 'xpath';
+    const expr = tuple ? tuple[1] : null;
+    if (expr) {
+      // page.frames() includes the main frame; check the Page object first anyway.
+      const scopes: Array<Page | Frame> = [this.page, ...this.page.frames()];
+      for (const scope of scopes) {
+        try {
+          const loc = kind === 'xpath' ? scope.locator(`xpath=${expr}`).first() : scope.locator(expr).first();
+          if ((await loc.count().catch(() => 0)) > 0) return { loc, scope };
+        } catch { /* try next scope */ }
+      }
+      // Nothing matched yet — the frame may still be loading. Return the main-page
+      // locator so the caller's expect(visible) retries against the live DOM.
+      const main = kind === 'xpath' ? this.page.locator(`xpath=${expr}`).first() : this.page.locator(expr).first();
+      return { loc: main, scope: this.page };
+    }
+    // No YAML tuple — fall back to the smart heuristic locator (page-scoped).
+    return { loc: this.getLocator(name), scope: this.page };
   }
 }
 

@@ -30,6 +30,9 @@ export type RecordedAction = {
   locator: [string, string];
   /** button | link | textbox | select | checkbox | radio | table */
   controlKind: 'button' | 'link' | 'textbox' | 'select' | 'checkbox' | 'radio' | 'table';
+  /** Internal: marks a click on a dropdown option (role=option/menuitem) so the
+   *  parser can pair it with the preceding trigger click into one select step. */
+  fromOption?: boolean;
 };
 
 export type GeneratedPage = {
@@ -64,9 +67,10 @@ export function capitalizeWords(s: string): string {
     .filter(Boolean)
     .map((w) => {
       if (!w) return w;
-      if (/^[A-Z0-9_]+$/.test(w) && w.length > 1) return w; // acronyms
-      if (/^[a-z]+$/i.test(w)) return w[0].toUpperCase() + w.slice(1).toLowerCase();
-      return w;
+      if (/^[A-Z0-9_]+$/.test(w) && w.length > 1) return w;        // acronyms e.g. "ID"
+      if (/[a-z][A-Z]/.test(w)) return w;                          // camelCase/PascalCase e.g. "MultiSelect"
+      if (/^[a-z]+$/.test(w)) return w[0].toUpperCase() + w.slice(1); // all-lowercase → Title
+      return w;                                                    // already has caps, leave as-is
     })
     .join(' ');
 }
@@ -121,12 +125,17 @@ export function mergeRecordedActions(actions: RecordedAction[]): RecordedAction[
     }
 
     if (last) {
-      const sameType = last.type === a.type;
+      const sameType    = last.type      === a.type;
       const sameElement = elementKey(last.element) === elementKey(a.element);
-      const sameValue = (last.value ?? '') === (a.value ?? '');
+      const sameValue   = (last.value ?? '') === (a.value ?? '');
       const sameControl = last.controlKind === a.controlKind;
       const sameLocator = JSON.stringify(last.locator) === JSON.stringify(a.locator);
-      if (sameType && sameElement && sameValue && sameControl && sameLocator) continue;
+      if (sameType && sameElement && sameValue && sameControl && sameLocator) {
+        // Only deduplicate textbox focus-clicks (click before fill on the same element).
+        // Never collapse repeated button/radio/link clicks — those are intentional wizard
+        // steps where the same element appears across multiple pages/questions.
+        if (a.type === 'click' && a.controlKind === 'textbox') continue;
+      }
     }
 
     merged.push(a);
@@ -213,16 +222,34 @@ function segmentActionsByPage(actions: RecordedAction[], firstPageKey?: string):
   const acts = mergeRecordedActions(actions).filter((a) => a.type !== 'navigate');
   const segments: PageSegment[] = [];
   const keyByHref = new Map<string, string>();
+  const usedKeys = new Set<string>();
   let count = 1;
+
+  // Ensure each distinct href gets a UNIQUE page key. Two different pages that
+  // resolve to the same URL segment (e.g. /app/list and /admin/list → "list")
+  // would otherwise collide; append -2, -3, … to disambiguate.
+  const uniqueKey = (base: string): string => {
+    let key = base;
+    let n = 2;
+    while (usedKeys.has(key)) key = `${base}${n++}`;
+    usedKeys.add(key);
+    return key;
+  };
+
   for (const a of acts) {
     const href = a.href || '';
     const last = segments[segments.length - 1];
     if (!last || last.href !== href) {
       let key: string;
-      if (keyByHref.has(href)) key = keyByHref.get(href)!;
-      else if (segments.length === 0) key = (firstPageKey && firstPageKey.trim()) || 'mainPage';
-      else key = makePageKeyFromUrl(href, ++count);
-      keyByHref.set(href, key);
+      if (keyByHref.has(href)) {
+        key = keyByHref.get(href)!;
+      } else {
+        const base = segments.length === 0
+          ? (firstPageKey && firstPageKey.trim()) || 'mainPage'
+          : makePageKeyFromUrl(href, ++count);
+        key = uniqueKey(base);
+        keyByHref.set(href, key);
+      }
       segments.push({ pageKey: key, href, actions: [] });
     }
     segments[segments.length - 1].actions.push(a);

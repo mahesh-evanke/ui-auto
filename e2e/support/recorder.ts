@@ -1241,6 +1241,20 @@ function getInjectScript(resetOnStart: boolean): string {
       };
     }
 
+    // Detect custom-dropdown options/triggers (PrimeReact, MUI, Ant, React-Select…)
+    var roleAttr = (el.getAttribute('role') || '').toLowerCase();
+    var isOption = !!(
+      roleAttr === 'option' ||
+      (el.closest && (el.closest('[role="option"]') ||
+        el.closest('.p-dropdown-item,.p-multiselect-item,.ant-select-item-option,.MuiMenuItem-root,[class*="-option"],[class*="option-"],[class*="select__option"]')))
+    );
+    var hasPopup = (el.getAttribute('aria-haspopup') || '').toLowerCase();
+    var isDropdownTrigger = !!(
+      roleAttr === 'combobox' || roleAttr === 'listbox' ||
+      hasPopup === 'listbox' || hasPopup === 'true' ||
+      (el.closest && el.closest('.p-dropdown,.p-multiselect,.ant-select,.MuiSelect-root,[class*="dropdown"],[class*="select__control"],[class*="combobox"]'))
+    );
+
     return {
       tagName,
       type: type || '',
@@ -1253,6 +1267,8 @@ function getInjectScript(resetOnStart: boolean): string {
       href: tagName === 'a' ? (el.getAttribute('href') || '') : '',
       role: el.getAttribute('role') || '',
       value: (el.value || ''),
+      isOption: isOption,
+      isDropdownTrigger: isDropdownTrigger,
     };
   }
 
@@ -3910,6 +3926,29 @@ function getInjectScript(resetOnStart: boolean): string {
       if (t === 'submit' || t === 'button') { void report('click', raw, {}); return; }
     }
 
+    // Label wrapping a radio/checkbox — clicking the label triggers the input.
+    // Walk up to find a <label> or element with role="radio"/"checkbox", then
+    // locate the associated input so we record the correct action type.
+    const labelEl = raw.closest && raw.closest('label');
+    if (labelEl) {
+      // Explicit <label for="id"> association
+      const forId = labelEl.getAttribute('for');
+      const assocInput = forId ? document.getElementById(forId) : labelEl.querySelector('input[type="radio"],input[type="checkbox"]');
+      if (assocInput) {
+        const itype = (assocInput.getAttribute('type') || '').toLowerCase();
+        if (itype === 'radio')    { void report('radio',    assocInput, {}); return; }
+        if (itype === 'checkbox') { void report('checkbox', assocInput, {}); return; }
+      }
+    }
+
+    // ARIA role="radio" / role="checkbox" (e.g. custom component libraries)
+    const ariaRole = raw.closest && (raw.closest('[role="radio"]') || raw.closest('[role="checkbox"]'));
+    if (ariaRole) {
+      const role = ariaRole.getAttribute('role');
+      if (role === 'radio')    { void report('radio',    ariaRole, {}); return; }
+      if (role === 'checkbox') { void report('checkbox', ariaRole, {}); return; }
+    }
+
     const link = raw.closest && raw.closest('a');
     if (link) { void report('click', link, {}); return; }
 
@@ -4042,13 +4081,19 @@ function getInjectScript(resetOnStart: boolean): string {
   document.addEventListener('change', (e) => {
     if (!isRecording || isGenerating) return;
     const el = e.target;
-    if (!el || !el.matches || !el.matches('select')) return;
+    if (!el || !el.matches) return;
     if (el.closest && el.closest('#pw-recorder-ui-root')) return;
     const rect = el.getBoundingClientRect && el.getBoundingClientRect();
     if (!rect || rect.width <= 0 || rect.height <= 0) return;
     const cs = window.getComputedStyle && window.getComputedStyle(el);
     if (cs && cs.visibility === 'hidden') return;
-    void report('select', el, {});
+
+    if (el.matches('select')) { void report('select', el, {}); return; }
+
+    // Radio/checkbox change events — fired when state toggles via keyboard or
+    // programmatic click; acts as a safety net when the click listener misses them.
+    if (el.matches('input[type="radio"]'))    { void report('radio',    el, {}); return; }
+    if (el.matches('input[type="checkbox"]')) { void report('checkbox', el, {}); return; }
   }, true);
 
   if (document.readyState === 'loading') {
@@ -4068,6 +4113,20 @@ function mapPayloadToAction(payload: ReportPayload, resolvedName: string, locato
 
   switch (payload.type) {
     case 'click': {
+      // Custom-dropdown option pick → emit a select marked for pairing with the
+      // preceding trigger click (PrimeReact/MUI/Ant/React-Select render options as
+      // <li>/<div> with role=option, not native <option>).
+      if (snap.isOption) {
+        return {
+          type: 'select',
+          href,
+          element: resolvedName,
+          value: resolvedName,
+          locator,
+          controlKind: 'select',
+          fromOption: true,
+        };
+      }
       if (tag === 'a') {
         return {
           type: 'click',
@@ -4082,7 +4141,8 @@ function mapPayloadToAction(payload: ReportPayload, resolvedName: string, locato
         href,
         element: resolvedName,
         locator,
-        controlKind: 'button',
+        // Mark dropdown triggers so pairing can fold the next option pick into them.
+        controlKind: snap.isDropdownTrigger ? 'select' : 'button',
       };
     }
     case 'select': {
@@ -4115,6 +4175,56 @@ function mapPayloadToAction(payload: ReportPayload, resolvedName: string, locato
     default:
       return null;
   }
+}
+
+/**
+ * Folds custom-dropdown click sequences into single select steps, mirroring the
+ * codegen specParser logic:
+ *   Dropdown:    [trigger click]  + [option pick]            → select
+ *   AutoComplete:[field fill]      + [option pick]            → select
+ *   MultiSelect: [trigger click]  + [option pick] [pick]...  → select "a, b, c"
+ * Option picks are flagged with `fromOption` by mapPayloadToAction.
+ */
+function pairCustomDropdownActions(actions: RecordedAction[]): RecordedAction[] {
+  const out: RecordedAction[] = [];
+  for (const action of actions) {
+    if (action.fromOption) {
+      const prev = out[out.length - 1];
+      const optValue = String(action.value ?? action.element);
+
+      // MultiSelect: append to an already-built select
+      if (prev && prev.type === 'select') {
+        const existing = String(prev.value ?? '').trim();
+        const parts = existing ? existing.split(',').map((s) => s.trim()) : [];
+        if (!parts.includes(optValue)) parts.push(optValue);
+        prev.value = parts.join(', ');
+        continue;
+      }
+
+      // Fold trigger click / field fill into a select
+      const triggerOk = prev && (prev.type === 'click' || prev.type === 'input') &&
+        (prev.controlKind === 'select' || prev.controlKind === 'button' || prev.controlKind === 'textbox');
+      if (triggerOk) {
+        out[out.length - 1] = {
+          type: 'select',
+          element: prev.element,
+          value: optValue,
+          controlKind: 'select',
+          href: prev.href,
+          locator: prev.locator && prev.locator[1] ? prev.locator : action.locator,
+          timestamp: prev.timestamp,
+        };
+        continue;
+      }
+
+      // Standalone option pick — keep as a select on the option itself
+      const { fromOption, ...rest } = action;
+      out.push(rest);
+      continue;
+    }
+    out.push(action);
+  }
+  return out;
 }
 
 async function main(): Promise<void> {
@@ -4186,11 +4296,12 @@ async function main(): Promise<void> {
       const aliases = buildUrlAliases();
       const apiSteps = apiEnabled ? generateApiStepsFromCapturedApis(capturedApis, aliases) : '';
 
+      const previewActions = pairCustomDropdownActions(actions);
       let featureContent: string;
       if (uiEnabled && apiEnabled && actions.length && capturedApis.length) {
         // UI + API: interleave by timestamp so APIs sit where they actually fired.
         featureContent = rewriteWebTableStep(
-          convertToInterleavedArtifacts(actions, apiEventsFromCaptured(capturedApis, aliases), {
+          convertToInterleavedArtifacts(previewActions, apiEventsFromCaptured(capturedApis, aliases), {
             scenarioTitle,
             scenarioUrl: lastUrl,
             featureFile: '__pw_tmp.feature',
@@ -4201,7 +4312,7 @@ async function main(): Promise<void> {
         const uiFeature =
           uiEnabled && actions.length
             ? rewriteWebTableStep(
-                convertToArtifacts(actions, {
+                convertToArtifacts(previewActions, {
                   scenarioTitle,
                   scenarioUrl: lastUrl,
                   featureFile: '__pw_tmp.feature',
@@ -4610,15 +4721,16 @@ async function main(): Promise<void> {
     const startingTitle = initialPageTitle || websiteTitle;
     // UI + API → interleave by timestamp; UI-only → plain conversion.
     const interleaved = uiEnabled && apiEnabled && capturedApis.length > 0;
+    const finalActions = pairCustomDropdownActions(actions);
     const artifact = uiEnabled
       ? interleaved
-        ? convertToInterleavedArtifacts(actions, apiEventsFromCaptured(capturedApis, buildUrlAliases()), {
+        ? convertToInterleavedArtifacts(finalActions, apiEventsFromCaptured(capturedApis, buildUrlAliases()), {
             scenarioTitle,
             scenarioUrl: lastUrl,
             featureFile: featurePath,
             pageKey,
           })
-        : convertToArtifacts(actions, {
+        : convertToArtifacts(finalActions, {
             scenarioTitle,
             scenarioUrl: lastUrl,
             featureFile: featurePath,

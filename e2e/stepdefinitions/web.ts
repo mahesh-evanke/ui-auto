@@ -10,7 +10,7 @@ import {
   setDefaultTimeout,
   type DataTable,
 } from '@cucumber/cucumber';
-import { expect } from '@playwright/test';
+import { expect, type Locator, type Page, type Frame } from '@playwright/test';
 import { verifyTextOnScreen, resolveDynamicTokens } from '../support/textHelper';
 import { verifyWebTable, verifyWebTableDataFrom } from '../support/tableHelper';
 import type { AutomationWorld } from './world';
@@ -23,6 +23,138 @@ function normalizeWs(s: string): string {
   return String(s ?? '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * Frame-aware element resolution + visibility wait, shared by all recorder steps.
+ * Searches the main page and every iframe so elements inside frames Just Work.
+ * Returns the located element and the scope (page/frame) it lives in.
+ */
+async function resolveVisible(world: AutomationWorld, element: string, timeout = 15000): Promise<{ loc: Locator; scope: Page | Frame }> {
+  const { loc, scope } = await world.resolveAcrossFrames(element);
+  await expect(loc).toBeVisible({ timeout });
+  return { loc, scope };
+}
+
+/**
+ * Robust click: normal click first (respects actionability), then scroll +
+ * force-click fallback for elements behind sticky headers / animations / overlays.
+ */
+async function robustClick(loc: Locator): Promise<void> {
+  try {
+    await loc.click({ timeout: 10000 });
+    return;
+  } catch {
+    await loc.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+    try { await loc.click({ timeout: 5000, force: true }); return; }
+    catch { await loc.dispatchEvent('click'); } // last resort: synthetic DOM click
+  }
+}
+
+/**
+ * Robust check/toggle for checkboxes and radio buttons. Handles native inputs,
+ * label-wrapped inputs, and ARIA custom controls.
+ */
+async function robustCheck(loc: Locator): Promise<void> {
+  try { await loc.check({ force: true, timeout: 8000 }); return; }
+  catch { /* not a native checkable or intercepted */ }
+  await robustClick(loc);
+}
+
+/**
+ * Robust text entry: fills standard inputs/textareas; falls back to
+ * pressSequentially (custom masked inputs) and contenteditable elements.
+ */
+async function robustFill(loc: Locator, text: string): Promise<void> {
+  try { await loc.fill(text, { timeout: 8000 }); return; }
+  catch { /* fall through to alternative strategies */ }
+  // contenteditable or custom widgets don't support fill()
+  try {
+    await loc.click({ timeout: 5000 });
+    await loc.press('Control+A').catch(() => {});
+    await loc.press('Delete').catch(() => {});
+    await loc.pressSequentially(text, { timeout: 8000 });
+    return;
+  } catch { /* fall through */ }
+  // Final fallback: set value via DOM and fire input/change events
+  await loc.evaluate((el, val) => {
+    const node = el as HTMLInputElement;
+    node.value = val as string;
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  }, text);
+}
+
+/**
+ * Selects a single value from either a native <select> or a custom dropdown
+ * (PrimeReact, MUI, Ant Design, React-Select, etc.).
+ *
+ * Native <select>: codegen records the option's VALUE attribute (e.g. 'saab'),
+ * but the visible label may differ ('Saab') — so we try value, label, and a
+ * case-insensitive text match in turn.
+ *
+ * Custom dropdown: clicks the trigger to open the panel, then clicks the option
+ * matching `value` across the common component-library option markups.
+ */
+async function selectFromDropdown(scope: Page | Frame, loc: Locator, element: string, value: string): Promise<void> {
+  const tag = await loc.evaluate((el) => el.tagName.toLowerCase()).catch(() => '');
+
+  // ── Native <select> ────────────────────────────────────────────────────────
+  if (tag === 'select') {
+    // Try by value attribute, then by visible label, then case-insensitive text.
+    const attempts: Array<Parameters<Locator['selectOption']>[0]> = [value, { label: value }, { value }];
+    for (const opt of attempts) {
+      try { await loc.selectOption(opt as never); return; } catch { /* next */ }
+    }
+    const labels = await loc.locator('option').allInnerTexts().catch(() => [] as string[]);
+    const match = labels.find((l) => normalizeWs(l).toLowerCase() === value.toLowerCase());
+    if (match) { await loc.selectOption({ label: match }); return; }
+    throw new Error(`Could not select "${value}" from native <select> "${element}". Available: ${JSON.stringify(labels)}`);
+  }
+
+  // ── Custom dropdown ────────────────────────────────────────────────────────
+  // Option panels render in the same scope (page or frame) as the trigger.
+  const page = scope;
+  // The recorded locator may point at an inner label span that's covered by the
+  // dropdown wrapper — robustClick falls back to force/scroll so the panel opens.
+  await robustClick(loc);
+
+  // Wait for the options panel to appear (portals + open animations take a moment).
+  const panelSelectors = '[role="listbox"], [role="menu"], .p-dropdown-panel, .p-multiselect-panel, .ant-select-dropdown, [class*="dropdown-panel"], [class*="select__menu"], [class*="MuiMenu"]';
+  await page.locator(panelSelectors).first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+
+  // Exact-text option selectors first (avoids matching "Saab Turbo" when picking "Saab"),
+  // then substring fallback. Covers ARIA, Ant, PrimeReact, MUI, React-Select.
+  const exact = escapeRegExp(value);
+  const optionLocators: Locator[] = [
+    page.getByRole('option', { name: value, exact: true }),
+    page.getByRole('menuitem', { name: value, exact: true }),
+    page.locator('[role="option"], [role="menuitem"]').filter({ hasText: new RegExp(`^\\s*${exact}\\s*$`) }),
+    page.locator('.p-dropdown-item, .p-multiselect-item, li.p-dropdown-item').filter({ hasText: new RegExp(`^\\s*${exact}\\s*$`) }),
+    page.locator('.ant-select-item-option, .MuiMenuItem-root').filter({ hasText: new RegExp(`^\\s*${exact}\\s*$`) }),
+    page.locator('li, [class*="option"], [class*="item"]').filter({ hasText: new RegExp(`^\\s*${exact}\\s*$`) }),
+    page.getByText(value, { exact: true }),
+    // Substring fallbacks (last resort)
+    page.getByRole('option', { name: value }),
+    page.locator('[role="option"], li, [class*="option"]').filter({ hasText: value }),
+  ];
+
+  // Poll: options may render slightly after the panel becomes visible.
+  const deadline = Date.now() + 6000;
+  while (Date.now() < deadline) {
+    for (const opt of optionLocators) {
+      const first = opt.first();
+      if (await first.count().catch(() => 0)) {
+        try {
+          await first.scrollIntoViewIfNeeded({ timeout: 1500 }).catch(() => {});
+          await first.click({ timeout: 3000 });
+          return;
+        } catch { /* try next selector */ }
+      }
+    }
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`Could not select "${value}" from dropdown "${element}" (no matching option found).`);
 }
 
 async function setFieldFromValue(world: AutomationWorld, fieldName: string, raw: string): Promise<void> {
@@ -300,10 +432,8 @@ Given('enters {string} text in {string} textbox', async function (this: Automati
   else if (txt === '501 characters') txt = 'a'.repeat(501);
   else if (txt.includes('<CURRENT_DATE')) txt = resolveDynamicTokens(txt);
   else if (txt.includes('<DOB')) txt = resolveDynamicTokens(txt);
-  const loc = this.getLocator(element);
-  await expect(loc).toBeVisible({ timeout: 15000 });
-  if (txt === '<blank>') await loc.fill('');
-  else await loc.fill(txt);
+  const { loc } = await resolveVisible(this, element);
+  await robustFill(loc, txt === '<blank>' ? '' : txt);
 });
 
 Given('enters {string} text in {string} textbox in a frame', async function (this: AutomationWorld, txtInput: string, elementName: string) {
@@ -316,9 +446,8 @@ Given('enters {string} text in {string} textbox in a frame', async function (thi
 });
 
 Given('select {string} Checkbox', async function (this: AutomationWorld, element: string) {
-  const loc = this.getLocator(element);
-  await expect(loc).toBeVisible({ timeout: 15000 });
-  await loc.check({ force: true }).catch(async () => { await loc.click({ force: true }); });
+  const { loc } = await resolveVisible(this, element);
+  await robustCheck(loc);
 });
 
 Given('select {string} Checkbox with Wait', async function (this: AutomationWorld, element: string) {
@@ -366,74 +495,45 @@ When('User clicks on {string}', async function (this: AutomationWorld, elementNa
 });
 
 When('User clicks on {string} button', async function (this: AutomationWorld, element: string) {
-  const loc = this.getLocator(element);
-  await expect(loc).toBeVisible({ timeout: 15000 });
-  await loc.click();
+  const { loc } = await resolveVisible(this, element);
+  await robustClick(loc);
 });
 
 When('clicks on {string} button', async function (this: AutomationWorld, name: string) {
   if (name === '<blank>') return;
-  const loc = this.getLocator(name);
-  await expect(loc).toBeVisible({ timeout: 15000 });
-  await loc.click();
+  const { loc } = await resolveVisible(this, name);
+  await robustClick(loc);
 });
 
 When('clicks on {string} link', async function (this: AutomationWorld, element: string) {
-  const loc = this.getLocator(element);
-  await expect(loc).toBeVisible({ timeout: 15000 });
-  await loc.click();
+  const { loc } = await resolveVisible(this, element);
+  await robustClick(loc);
 });
 
 When('clicks on {string} Radio button', async function (this: AutomationWorld, element: string) {
-  const loc = this.getLocator(element);
-  await expect(loc).toBeVisible({ timeout: 15000 });
-  await loc.check({ force: true }).catch(async () => { await loc.click({ force: true }); });
+  const { loc } = await resolveVisible(this, element);
+  await robustCheck(loc);
 });
 
 When('selects {string} text from {string} Drop-down list', async function (this: AutomationWorld, value: string, element: string) {
   if (value === '<Skip>') return;
-  const loc = this.getLocator(element);
+  const { loc, scope } = await this.resolveAcrossFrames(element);
   await expect(loc).toBeVisible({ timeout: 15000 });
-
-  const tag = await loc.evaluate((el) => el.tagName.toLowerCase()).catch(() => '');
-  if (tag === 'select') {
-    await loc.selectOption({ label: value });
-    return;
-  }
-
-  const page = this.page!;
-  await loc.click();
-  await page.waitForTimeout(300);
-  const optionSelectors = [
-    `[role="option"]:has-text("${value}")`,
-    `li:has-text("${value}")`,
-    `.ant-select-item-option:has-text("${value}")`,
-    `[class*="option"]:has-text("${value}")`,
-    `text="${value}"`,
-  ];
-  let picked = false;
-  for (const sel of optionSelectors) {
-    const opt = page.locator(sel).first();
-    if (await opt.count().catch(() => 0)) {
-      try {
-        await opt.click({ timeout: 4000 });
-        picked = true;
-        break;
-      } catch {
-        // try next selector
-      }
-    }
-  }
-  if (!picked) {
-    throw new Error(`Could not select "${value}" from dropdown "${element}" (no matching option found).`);
+  // MultiSelect values are recorded comma-separated ("Cheese, Mushroom") — pick each.
+  const values = value.split(',').map((v) => v.trim()).filter(Boolean);
+  for (const v of values) {
+    await selectFromDropdown(scope, loc, element, v);
   }
 });
 
 When('selects {string} from {string} Drop-down list', async function (this: AutomationWorld, value: string, element: string) {
   if (value === '<Skip>') return;
-  const loc = this.getLocator(element);
+  const { loc, scope } = await this.resolveAcrossFrames(element);
   await expect(loc).toBeVisible({ timeout: 15000 });
-  await loc.selectOption({ label: value });
+  const values = value.split(',').map((v) => v.trim()).filter(Boolean);
+  for (const v of values) {
+    await selectFromDropdown(scope, loc, element, v);
+  }
 });
 
 When('verify {string} text is present on the screen', async function (this: AutomationWorld, text: string) {

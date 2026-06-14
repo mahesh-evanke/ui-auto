@@ -1,6 +1,41 @@
 recordedflow:
   - title: Recordedflow
-    label: Email Address
+    label: Get A Benefits Estimate
 mishaCustomerBilling:
   - title: Mishacustomerbilling
     label: Root
+who:
+  - title: Who
+    label: An Adult (age 18 And over)
+birthday:
+  - title: Birthday
+    label: Month
+paidTaxes:
+  - title: Paidtaxes
+    label: 'Yes'
+unableToWork:
+  - title: Unabletowork
+    label: 'No'
+married:
+  - title: Married
+    label: Yes, But We don't Live Together
+spouse:
+  - title: Spouse
+    label: 'Yes'
+disabledChildren:
+  - title: Disabledchildren
+    label: 'No'
+state:
+  - title: State
+    label: >-
+      Select The State Alabama Alaska American Samoa Arizona Arkansas California Colorado Connecticut Delaware Washington, District Of Columbia Federated States
+      Of Micronesia Florida Georgia Guam Hawaii Ida
+getBenefitsEstimate:
+  - title: Getbenefitsestimate
+    label: Check Eligibility For Benefits
+kidneyFailure:
+  - title: Kidneyfailure
+    label: 'No'
+droppw:
+  - title: Droppw
+    label: Select A City

@@ -209,6 +209,149 @@ async function showConfigPanel(chromium) {
   });
 }
 
+// Browser-side function (stringified, runs via loc.evaluate) that computes a
+// stable, UNIQUE xpath for the given element by trying attribute candidates in
+// priority order and verifying each resolves to exactly one node. Falls back to
+// an id-anchored or absolute path. Mirrors selectorEngine.ts ranking so both
+// recorders produce comparable locators.
+function computeUniqueXPathInBrowser(el) {
+  const lit = (s) => {
+    s = String(s);
+    if (!s.includes("'")) return `'${s}'`;
+    if (!s.includes('"')) return `"${s}"`;
+    return 'concat(' + s.split("'").map((p) => `"${p}"`).join(`,"'",`) + ')';
+  };
+  const count = (xp) => {
+    try {
+      return document.evaluate(xp, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null).snapshotLength;
+    } catch { return -1; }
+  };
+  const tag = el.tagName.toLowerCase();
+  const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  const candidates = [];
+
+  const id = el.getAttribute('id');
+  const aria = el.getAttribute('aria-label');
+  const ph = el.getAttribute('placeholder');
+  const name = el.getAttribute('name');
+  if (id) candidates.push(`//*[@id=${lit(id)}]`);
+  if (aria) candidates.push(`//*[@aria-label=${lit(aria)}]`);
+  if (ph) candidates.push(`//${tag}[@placeholder=${lit(ph)}]`);
+  if (name) candidates.push(`//${tag}[@name=${lit(name)}]`);
+  // data-* attributes (data-test, data-testid, data-cy, ...)
+  for (const attr of Array.from(el.attributes)) {
+    if (attr.name.indexOf('data-') === 0 && attr.value) candidates.push(`//${tag}[@${attr.name}=${lit(attr.value)}]`);
+  }
+  // tag + visible text for links/buttons
+  if ((tag === 'a' || tag === 'button') && text && text.length < 80) {
+    candidates.push(`//${tag}[normalize-space(.)=${lit(text)}]`);
+  }
+
+  // Pass 1: first candidate that uniquely matches
+  for (const c of candidates) if (count(c) === 1) return c;
+  // Pass 2: first candidate with at least one match → indexed
+  for (const c of candidates) if (count(c) >= 1) return `(${c})[1]`;
+
+  // Pass 3: walk up, anchoring at the nearest ancestor with a unique id
+  const parts = [];
+  let node = el;
+  while (node && node.nodeType === 1 && node !== document.documentElement) {
+    const nid = node.getAttribute && node.getAttribute('id');
+    if (nid && count(`//*[@id=${lit(nid)}]`) === 1) {
+      return `//*[@id=${lit(nid)}]` + (parts.length ? '/' + parts.join('/') : '');
+    }
+    let index = 1;
+    let sib = node.previousElementSibling;
+    while (sib) { if (sib.tagName === node.tagName) index++; sib = sib.previousElementSibling; }
+    parts.unshift(`${node.tagName.toLowerCase()}[${index}]`);
+    node = node.parentElement;
+  }
+  return '/html/' + parts.join('/');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// enrichActionsByReplay — replays the parsed actions in a headless browser to:
+//   1. Capture the REAL URL each action ran on (page boundaries → multi screens).
+//   2. Compute an EXACT, DOM-verified unique xpath for each element and overwrite
+//      the template xpath in the locator YAML — same quality as `npm run pw`.
+//
+//   Playwright codegen only emits page.goto() for the first navigation and its
+//   xpaths are static templates; replaying against the live DOM fixes both.
+//
+//   Best-effort: any step that fails to replay keeps its template xpath / last
+//   known URL so a flaky selector never aborts generation.
+// ─────────────────────────────────────────────────────────────────────────────
+async function enrichActionsByReplay(actions, firstUrl) {
+  if (!actions.length || !firstUrl) return;
+  const { chromium } = require('@playwright/test');
+
+  log(`  🧭  Replaying ${actions.length} step(s) to capture exact xpaths + page navigations...\n`);
+
+  const browser = await chromium.launch({ headless: true });
+  const distinctUrls = new Set();
+  let xpathFixed = 0;
+  try {
+    const page = await browser.newPage();
+    try {
+      await page.goto(firstUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    } catch { /* continue — page may still be usable */ }
+
+    for (const a of actions) {
+      const xpath = a.locator && a.locator[1];
+      if (xpath) {
+        try {
+          const loc = page.locator(`xpath=${xpath}`);
+          const cnt = await loc.count();
+          // Pick the element to operate on. When the template matches exactly one,
+          // use it. When it matches MANY (ambiguous text selectors on pages with
+          // repeated widgets), pick the first VISIBLE one — that's the element the
+          // user actually interacted with — so we can still derive a unique xpath.
+          let target = loc.first();
+          if (cnt > 1) {
+            const visible = loc.filter({ visible: true }).first();
+            if (await visible.count().catch(() => 0)) target = visible;
+          }
+
+          // Recompute an exact, unique xpath from the resolved element.
+          if (cnt >= 1) {
+            const exact = await target.evaluate(computeUniqueXPathInBrowser).catch(() => '');
+            if (exact && exact !== xpath) { a.locator = ['xpath', exact]; xpathFixed++; }
+          }
+
+          // Perform the action so any navigation it triggers is reflected in page.url()
+          const act = target;
+          if (a.type === 'input') {
+            await act.fill(String(a.value ?? ''), { timeout: 5000 });
+          } else if (a.type === 'select') {
+            try { await act.selectOption({ label: String(a.value ?? '') }, { timeout: 5000 }); }
+            catch { await act.selectOption(String(a.value ?? ''), { timeout: 5000 }); }
+          } else if (a.type === 'checkbox' || a.type === 'radio') {
+            try { await act.check({ timeout: 5000 }); }
+            catch { await act.click({ timeout: 5000 }); }
+          } else if (a.type === 'click') {
+            await act.click({ timeout: 5000 });
+          }
+          await page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+          await page.waitForTimeout(300);
+        } catch { /* step failed to replay — keep template xpath / last known href */ }
+      }
+      try { a.href = page.url() || a.href; } catch {}
+      if (a.href) distinctUrls.add(a.href);
+    }
+  } catch (e) {
+    log(`  ⚠️   Replay enrichment skipped: ${e.message}\n`);
+  } finally {
+    await browser.close();
+  }
+
+  log(`  ✅  Exact xpath captured for ${xpathFixed} element(s).\n`);
+  if (distinctUrls.size > 1) {
+    log(`  ✅  Detected ${distinctUrls.size} distinct page(s) — separate screens will be generated.\n`);
+  } else {
+    log(`  ℹ️   Single page detected — one screen will be generated.\n`);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // enrichTableActions — fills in live table data for assert_web_table actions
 //   that have no value yet (i.e. captured from Playwright Inspector via
@@ -353,6 +496,7 @@ async function recordWithCodegen(config, uiActions) {
   try { fs.unlinkSync(TEMP_SPEC); } catch {}   // always clean up temp file
 
   const { actions, firstUrl } = parsePlaywrightSpec(specContent);
+  await enrichActionsByReplay(actions, firstUrl || config.startUrl || '');
   await enrichTableActions(actions);
   uiActions.push(...actions);
 

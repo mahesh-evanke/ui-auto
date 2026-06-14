@@ -1,3 +1,0 @@
-urls:
-  login: https://customer-billing-dev.vercel.app/auth/login
-  service: https://customer-billing-dev.vercel.app/services

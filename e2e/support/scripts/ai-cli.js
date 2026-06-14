@@ -103,14 +103,23 @@ function notesBlock() {
 // `copilot` is a command TEMPLATE. Use {prompt} where the prompt text should go
 // as a single argument; if {prompt} is omitted, the prompt is piped via stdin.
 // mode controls what the LLM generates:
-//   'gherkin' — .feature + combined locators.yaml  (default)
+//   'gherkin' — .feature + locators yaml  (default)
 //   'spec'    — Playwright spec.ts only
-//   'both'    — .feature + combined locators.yaml + spec.ts
+//   'both'    — .feature + locators yaml + spec.ts
+//
+// yamlformat controls how locator yaml files are written:
+//   'combined' — ONE file with all pages as top-level sections (default)
+//                  birthday:
+//                    MONTH:
+//                      - xpath
+//                      - //*[@id='B-month']
+//   'perpage'  — one <pageKey>.yaml file per page (legacy format)
 const DEFAULT_CONFIG = {
   copilot: 'copilot -p {prompt} --allow-all-tools',  // adjust to match your CLI; verify with /testllm
   url: '',
   fileName: '',
   mode: 'gherkin',
+  yamlformat: 'combined',
 };
 
 function loadConfig() {
@@ -128,7 +137,7 @@ function loadConfig() {
 }
 
 function saveConfig(cfg) {
-  const toSave = { copilot: cfg.copilot, url: cfg.url, mode: cfg.mode };
+  const toSave = { copilot: cfg.copilot, url: cfg.url, mode: cfg.mode, yamlformat: cfg.yamlformat };
   fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(toSave, null, 2), 'utf8');
 }
@@ -145,43 +154,84 @@ function tokenizeCommand(tpl) {
 // passing the prompt as a -p <arg> (copilot reads from stdin when no -p given).
 const CMD_LINE_LIMIT = 7000;
 
+// Resolve bare "copilot" to the actual platform executable path so the spawned
+// shell can find it regardless of how the parent process was launched.
+// Returns the resolved command string (may be unchanged if already a full path).
+function resolveCopilotBin(cmd) {
+  // Already a full/relative path — use as-is.
+  if (cmd.includes('/') || cmd.includes('\\')) return cmd;
+
+  if (process.platform === 'win32') {
+    // npm global bin on Windows is %APPDATA%\npm\<name>.cmd
+    const npmBin = process.env.APPDATA ? require('path').join(process.env.APPDATA, 'npm') : '';
+    const candidate = npmBin ? require('path').join(npmBin, `${cmd}.cmd`) : '';
+    if (candidate && fs.existsSync(candidate)) return candidate;
+  } else {
+    // Linux / macOS: npm global prefix is usually /usr/local or ~/.npm-global
+    const prefixCandidates = ['/usr/local/bin', '/usr/bin', `${process.env.HOME || ''}/.npm-global/bin`];
+    for (const dir of prefixCandidates) {
+      const candidate = require('path').join(dir, cmd);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return cmd; // fall back to bare name — rely on PATH
+}
+
+// Build a PATH string that includes both the npm global bin dir and the Node.js
+// binary dir. copilot.cmd calls "node" internally, so node must be findable.
+function buildSpawnEnv() {
+  const env = { ...process.env };
+  const sep = process.platform === 'win32' ? ';' : ':';
+  const extra = [];
+
+  // npm global bin (so bare "copilot" resolves)
+  if (process.platform === 'win32' && process.env.APPDATA) {
+    extra.push(require('path').join(process.env.APPDATA, 'npm'));
+  }
+  // Node.js binary dir (copilot.cmd calls "node"; it must be on PATH in the subshell)
+  const nodeBin = require('path').dirname(process.execPath);
+  if (nodeBin) extra.push(nodeBin);
+
+  const currentPath = env.PATH || env.Path || '';
+  const additions = extra.filter((d) => d && !currentPath.includes(d)).join(sep);
+  if (additions) env.PATH = additions + sep + currentPath;
+  return env;
+}
+
 function runCopilot(cfg, prompt) {
   return new Promise((resolve, reject) => {
     const { spawn } = require('child_process');
     const tokens = tokenizeCommand(cfg.copilot || 'copilot -p {prompt}');
     if (!tokens.length) return reject(new Error('Empty copilot command. Set it with /copilot <command>.'));
-    const cmd = tokens[0];
+
+    // Resolve the executable and build an enriched PATH for the child process.
+    const rawCmd = tokens[0];
+    const cmd = resolveCopilotBin(rawCmd);
+    const spawnEnv = buildSpawnEnv();
     const usesPlaceholder = tokens.includes('{prompt}');
 
-    // Ensure the npm global bin dir is on PATH so bare "copilot" resolves even
-    // when the parent shell didn't inherit it (common in VS Code / node spawns).
-    const spawnEnv = { ...process.env };
-    if (process.platform === 'win32') {
-      const npmGlobalBin = process.env.APPDATA ? `${process.env.APPDATA}\\npm` : '';
-      if (npmGlobalBin && !(spawnEnv.PATH || '').includes(npmGlobalBin)) {
-        spawnEnv.PATH = `${npmGlobalBin};${spawnEnv.PATH || ''}`;
-      }
-    }
+    // .cmd/.bat shims on Windows must be run through a shell.
+    // On Linux/Mac we never need a shell (avoids all quoting pitfalls).
+    const useShell = process.platform === 'win32' && (cmd.endsWith('.cmd') || cmd.endsWith('.bat'));
 
-    // On Windows cmd.exe truncates args beyond ~8191 chars. For large prompts we
-    // drop the {prompt} arg entirely and pipe via stdin instead (copilot supports this).
-    const useShell = process.platform === 'win32';
+    // On Windows, cmd.exe mangles quoted args (outer-quote stripping, newline truncation,
+    // 8191-char limit). The safest fix: always pipe via stdin when running through a shell.
+    // On Linux/Mac the -p arg works fine so only fall back on very long prompts.
     const promptTooLong = usesPlaceholder && (cmd.length + prompt.length) > CMD_LINE_LIMIT;
-    const useStdin = !usesPlaceholder || promptTooLong;
+    const useStdin = !usesPlaceholder || (useShell && usesPlaceholder) || promptTooLong;
 
-    // When shell:true on Windows, cmd.exe uses "" to escape a literal double-quote.
-    // Newlines inside cmd.exe quoted args terminate the string early — collapse to space.
+    // When shell:true on Windows, cmd.exe uses "" to escape a double-quote inside
+    // a quoted arg. Newlines inside cmd.exe quoted args terminate the string — collapse.
     const quoteArg = (s) => useShell
       ? `"${s.replace(/\r?\n/g, ' ').replace(/"/g, '""')}"`
       : s;
 
-    // Build args: if using stdin, strip the {prompt} placeholder AND the flag
-    // immediately before it (e.g. "-p {prompt}" → both removed so copilot reads stdin).
+    // Build args: when using stdin, drop the -p flag and {prompt} placeholder.
     const tailTokens = tokens.slice(1);
     const args = useStdin
       ? tailTokens.filter((t, i) => {
           if (t === '{prompt}') return false;
-          if (tailTokens[i + 1] === '{prompt}') return false; // drop flag before placeholder
+          if (tailTokens[i + 1] === '{prompt}') return false;
           return true;
         })
       : tailTokens.map((t) => (t === '{prompt}' ? quoteArg(prompt) : t));
@@ -413,9 +463,10 @@ function systemPrompt() {
     'rules, allowed/disallowed values) — those define what "what happens if…" should check.',
     '',
     'Output discipline:',
-    '- Produce up to 18 high-value scenarios (merge trivial duplicates). Keep step text concise.', 
-    //it should be generate the all possible scenarios for the given page
-    
+    '- Generate ALL scenarios needed to fully cover the page/flow (happy path, every negative',
+    '  case, every validation, every branch, every meaningful combination). Do NOT cap or',
+    '  merge scenarios unless they are truly identical. More coverage is always better.',
+    '- Keep each step text concise.',
     '- CRITICAL: inside any step string, escape double-quotes as \\". For injection/edge',
     '  values prefer single quotes (e.g. enters "\' OR 1=1" ...) so the JSON stays valid.',
     '- Output MINIFIED JSON, complete and not truncated.',
@@ -827,10 +878,36 @@ function writeScenarioFeatureFiles(prefix, featureName, url, scenarios) {
   return written;
 }
 
-// Write a single combined YAML + per-page runtime files.
-// Returns [combinedYamlPath] for reporting.
-function writeYamlsForScenarios(name, elementsByPage, scenarios) {
+// Write locator yaml(s) based on cfg.yamlformat:
+//   'combined' (default) — one file, all pages as top-level sections
+//   'perpage'            — one <pageKey>.yaml per page (legacy)
+function writeYamlsForScenarios(cfg, name, elementsByPage, scenarios) {
+  if ((cfg.yamlformat || 'combined') === 'perpage') {
+    return writePerPageYamls(elementsByPage, scenarios);
+  }
   return [writeCombinedYaml(name, elementsByPage, scenarios)];
+}
+
+// Legacy per-page format: one <pageKey>.yaml per page in LOCATOR_DIR.
+function writePerPageYamls(elementsByPage, scenarios) {
+  const stepsByPage = new Map();
+  for (const sc of scenarios) {
+    for (const pg of sc.pages || []) {
+      if (!pg.pageKey) continue;
+      if (!stepsByPage.has(pg.pageKey)) stepsByPage.set(pg.pageKey, []);
+      stepsByPage.get(pg.pageKey).push(...(pg.steps || []));
+    }
+  }
+  fs.mkdirSync(LOCATOR_DIR, { recursive: true });
+  const written = [];
+  for (const [pageKey, steps] of stepsByPage) {
+    const lines = buildPageLocatorLines(pageKey, elementsByPage.get(pageKey) || [], steps);
+    if (!lines.length) continue;
+    const fp = path.join(LOCATOR_DIR, `${pageKey}.yaml`);
+    fs.writeFileSync(fp, lines.join('\n') + '\n', 'utf8');
+    written.push(fp);
+  }
+  return written;
 }
 
 // Ask the LLM to generate a Playwright spec.ts from scenarios + locators, then
@@ -912,7 +989,7 @@ async function generateMultiScenario(cfg, prompt, pageInfo, prefix) {
 
   if (mode === 'gherkin' || mode === 'both') {
     featureFiles = writeScenarioFeatureFiles(prefix, featureName, cfg.url, scenarios);
-    yamlFiles = writeYamlsForScenarios(specName, elementsByPage, scenarios);
+    yamlFiles = writeYamlsForScenarios(cfg, specName, elementsByPage, scenarios);
   }
   if (mode === 'spec' || mode === 'both') {
     info('  📝 Generating Playwright spec.ts ...');
@@ -974,7 +1051,7 @@ async function generateMultiPath(cfg, prompt, visited, prefix) {
 
   if (mode === 'gherkin' || mode === 'both') {
     featureFiles = writeScenarioFeatureFiles(prefix, featureName, cfg.url, scenarios);
-    yamlFiles = writeYamlsForScenarios(specName, elementsByPage, scenarios);
+    yamlFiles = writeYamlsForScenarios(cfg, specName, elementsByPage, scenarios);
   }
   if (mode === 'spec' || mode === 'both') {
     info('  📝 Generating Playwright spec.ts ...');
@@ -1199,9 +1276,14 @@ ${c.bold}AI Scenario CLI — commands  (backend: GitHub Copilot CLI)${c.reset}
                      /copilot copilot -p {prompt} --allow-all-tools
   ${c.cyan}/testllm${c.reset}           run a tiny prompt to verify the Copilot backend works
   ${c.cyan}/mode gherkin|spec|both${c.reset}
-                     gherkin — generate .feature + single locators yaml (default)
+                     gherkin — generate .feature + locators yaml (default)
                      spec    — generate Playwright spec.ts only
                      both    — generate .feature + yaml + spec.ts
+  ${c.cyan}/yamlformat combined|perpage${c.reset}
+                     combined — one yaml file, all pages as top-level sections (default)
+                                  birthday:
+                                    MONTH: [xpath, //*[@id='B-month']]
+                     perpage  — one <pageKey>.yaml file per page (legacy)
   ${c.cyan}/url <url>${c.reset}         set the target URL to analyze
   ${c.cyan}/name <prefix>${c.reset}     optional filename prefix (default: AI names each file by scenario)
   ${c.cyan}/notes <path>${c.reset}      attach a .txt/.md/.docx requirements file as context
@@ -1226,7 +1308,8 @@ function showConfig(cfg) {
 ${c.bold}Current config${c.reset}
   backend  : GitHub Copilot CLI
   copilot  : ${cfg.copilot}
-  mode     : ${cfg.mode || 'gherkin'}  (gherkin=feature+yaml | spec=spec.ts | both=all)
+  mode       : ${cfg.mode || 'gherkin'}  (gherkin=feature+yaml | spec=spec.ts | both=all)
+  yamlformat : ${cfg.yamlformat || 'combined'}  (combined=single file | perpage=one file per page)
   url      : ${cfg.url || '(not set)'}
   name     : ${cfg.fileName || '(AI names files per scenario)'}
 `);
@@ -1258,6 +1341,7 @@ function parseCliArgs(argv) {
       case '--name': o.name = val(); break;
       case '--copilot': o.copilot = val(); break;
       case '--mode': o.mode = val(); break;
+      case '--yamlformat': o.yamlformat = val(); break;
       case '--help': case '-h': o.help = true; break;
       default: break;
     }
@@ -1274,6 +1358,7 @@ async function main() {
   if (opts.url) cfg.url = opts.url;
   if (opts.name) cfg.fileName = opts.name;
   if (opts.mode && ['gherkin', 'spec', 'both'].includes(opts.mode)) cfg.mode = opts.mode;
+  if (opts.yamlformat && ['combined', 'perpage'].includes(opts.yamlformat)) cfg.yamlformat = opts.yamlformat;
   for (const np of opts.notes) {
     try {
       const abs = path.isAbsolute(np) ? np : path.join(ROOT, np);
@@ -1329,6 +1414,14 @@ async function main() {
             cfg.mode = m; saveConfig(cfg);
             ok(`  ✓ Mode set to: ${m}  (${m === 'gherkin' ? 'feature + yaml only' : m === 'spec' ? 'Playwright spec.ts only' : 'feature + yaml + spec.ts'})`);
           } else warn('  Usage: /mode gherkin|spec|both');
+          return true;
+        }
+        case '/yamlformat': {
+          const f = arg.toLowerCase();
+          if (f === 'combined' || f === 'perpage') {
+            cfg.yamlformat = f; saveConfig(cfg);
+            ok(`  ✓ YAML format set to: ${f}  (${f === 'combined' ? 'single file, all pages as sections' : 'one <pageKey>.yaml per page'})`);
+          } else warn('  Usage: /yamlformat combined|perpage');
           return true;
         }
         case '/testllm': {

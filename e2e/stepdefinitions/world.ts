@@ -48,18 +48,25 @@ export class AutomationWorld extends World {
     super(props);
   }
 
+  /** Parse a locator file — supports both .yaml and .json extensions. */
+  private parseLocatorFile(fp: string): Record<string, unknown> | null {
+    try {
+      const raw = fs.readFileSync(fp, 'utf8');
+      const doc = fp.endsWith('.json') ? JSON.parse(raw) : yaml.load(raw);
+      if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return null;
+      return doc as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
   loadCommonLocators(): void {
     this.commonLocatorByName.clear();
     for (const fp of findCommonFiles()) {
-      try {
-        const raw = fs.readFileSync(fp, 'utf8');
-        const doc = yaml.load(raw) as unknown;
-        if (!doc || typeof doc !== 'object' || Array.isArray(doc)) continue;
-        for (const [k, v] of Object.entries(doc as Record<string, unknown>)) {
-          if (Array.isArray(v) && v.length >= 2) this.commonLocatorByName.set(k, [String(v[0]), String(v[1])]);
-        }
-      } catch {
-        // skip unreadable common file
+      const doc = this.parseLocatorFile(fp);
+      if (!doc) continue;
+      for (const [k, v] of Object.entries(doc)) {
+        if (Array.isArray(v) && v.length >= 2) this.commonLocatorByName.set(k, [String(v[0]), String(v[1])]);
       }
     }
   }
@@ -98,15 +105,14 @@ export class AutomationWorld extends World {
     this.pageLocatorByName.clear();
     let fp = findLocatorFile(pageKey);
     if (!fp) {
-      // Create a placeholder in the legacy pages/ subfolder so the run can continue.
+      // Create a placeholder yaml so the run can continue.
       fp = path.join(__dirname, '..', 'locators', 'pages', `${pageKey}.yaml`);
       fs.mkdirSync(path.dirname(fp), { recursive: true });
       fs.writeFileSync(fp, yaml.dump({}, { noRefs: true, lineWidth: 160 }), 'utf8');
     }
-    const raw = fs.readFileSync(fp, 'utf8');
-    const doc = yaml.load(raw) as unknown;
-    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return;
-    for (const [k, v] of Object.entries(doc as Record<string, unknown>)) {
+    const doc = this.parseLocatorFile(fp);
+    if (!doc) return;
+    for (const [k, v] of Object.entries(doc)) {
       if (Array.isArray(v) && v.length >= 2) this.pageLocatorByName.set(k, [String(v[0]), String(v[1])]);
     }
   }

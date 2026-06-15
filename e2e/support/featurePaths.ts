@@ -51,8 +51,8 @@ export function featureFilePath(cat: FeatureCategory, name: string): string {
 export function locatorDir(cat: FeatureCategory): string {
   return path.join(LOCATOR_ROOT, cat);
 }
-export function locatorFilePath(cat: FeatureCategory, pageKey: string): string {
-  return path.join(LOCATOR_ROOT, cat, `${pageKey}.yaml`);
+export function locatorFilePath(cat: FeatureCategory, pageKey: string, ext: 'yaml' | 'json' = 'yaml'): string {
+  return path.join(LOCATOR_ROOT, cat, `${pageKey}.${ext}`);
 }
 export function commonFilePath(cat: FeatureCategory): string {
   return path.join(LOCATOR_ROOT, cat, 'common.yaml');
@@ -66,41 +66,52 @@ export function ensureCategoryDirs(cat: FeatureCategory): void {
   if (!fs.existsSync(cp)) fs.writeFileSync(cp, '', 'utf8');
 }
 
-/** Runtime: locate a page's locator YAML across category folders, with legacy fallbacks. */
+/** Runtime: locate a page's locator file (yaml or json) across category folders, with legacy fallbacks. */
 export function findLocatorFile(pageKey: string): string | null {
+  const exts: Array<'yaml' | 'json'> = ['yaml', 'json'];
   for (const cat of CATEGORIES) {
-    const fp = locatorFilePath(cat, pageKey);
-    if (fs.existsSync(fp)) return fp;
+    for (const ext of exts) {
+      const fp = locatorFilePath(cat, pageKey, ext);
+      if (fs.existsSync(fp)) return fp;
+    }
   }
-  // Per-page files written by ai-cli into the pages/ subfolder (combined-yaml mode).
-  const aiPages = path.join(LOCATOR_ROOT, 'ai', 'pages', `${pageKey}.yaml`);
-  if (fs.existsSync(aiPages)) return aiPages;
+  // Per-page files written by ai-cli into the pages/ subfolder (combined mode).
+  for (const ext of exts) {
+    const aiPages = path.join(LOCATOR_ROOT, 'ai', 'pages', `${pageKey}.${ext}`);
+    if (fs.existsSync(aiPages)) return aiPages;
+  }
   // Legacy fallbacks (old layouts)
-  const flat = path.join(LOCATOR_ROOT, `${pageKey}.yaml`);
-  if (fs.existsSync(flat)) return flat;
-  for (const cat of CATEGORIES) {
-    const legacyCat = path.join(ROOT, 'generated', cat, 'locator', `${pageKey}.yaml`);
-    if (fs.existsSync(legacyCat)) return legacyCat;
+  for (const ext of exts) {
+    const flat = path.join(LOCATOR_ROOT, `${pageKey}.${ext}`);
+    if (fs.existsSync(flat)) return flat;
   }
-  const legacyPages = path.join(ROOT, 'locators', 'pages', `${pageKey}.yaml`);
-  if (fs.existsSync(legacyPages)) return legacyPages;
+  for (const cat of CATEGORIES) {
+    for (const ext of exts) {
+      const legacyCat = path.join(ROOT, 'generated', cat, 'locator', `${pageKey}.${ext}`);
+      if (fs.existsSync(legacyCat)) return legacyCat;
+    }
+  }
+  for (const ext of exts) {
+    const legacyPages = path.join(ROOT, 'locators', 'pages', `${pageKey}.${ext}`);
+    if (fs.existsSync(legacyPages)) return legacyPages;
+  }
   return null;
 }
 
-/** Runtime: every common.yaml across categories (+ legacy locations). */
+/** Runtime: every common locator file (yaml or json) across categories (+ legacy locations). */
 export function findCommonFiles(): string[] {
   const out: string[] = [];
+  const push = (...candidates: string[]) => candidates.forEach((f) => fs.existsSync(f) && out.push(f));
   for (const cat of CATEGORIES) {
-    const cp = commonFilePath(cat);
-    if (fs.existsSync(cp)) out.push(cp);
+    push(commonFilePath(cat), path.join(LOCATOR_ROOT, cat, 'common.json'));
   }
-  const flat = path.join(LOCATOR_ROOT, 'common.yaml');
-  if (fs.existsSync(flat)) out.push(flat);
+  push(path.join(LOCATOR_ROOT, 'common.yaml'), path.join(LOCATOR_ROOT, 'common.json'));
   for (const cat of CATEGORIES) {
-    const legacy = path.join(ROOT, 'generated', cat, 'locator', 'common.yaml');
-    if (fs.existsSync(legacy)) out.push(legacy);
+    push(
+      path.join(ROOT, 'generated', cat, 'locator', 'common.yaml'),
+      path.join(ROOT, 'generated', cat, 'locator', 'common.json'),
+    );
   }
-  const legacyTop = path.join(ROOT, 'locators', 'common.yaml');
-  if (fs.existsSync(legacyTop)) out.push(legacyTop);
+  push(path.join(ROOT, 'locators', 'common.yaml'), path.join(ROOT, 'locators', 'common.json'));
   return out;
 }

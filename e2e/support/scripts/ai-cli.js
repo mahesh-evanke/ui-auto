@@ -107,7 +107,7 @@ function notesBlock() {
 //   'spec'    — Playwright spec.ts only
 //   'both'    — .feature + locators yaml + spec.ts
 //
-// yamlformat controls how locator yaml files are written:
+// locatorlayout controls how locator files are written:
 //   'combined' — ONE file with all pages as top-level sections (default)
 //                  birthday:
 //                    MONTH:
@@ -119,7 +119,8 @@ const DEFAULT_CONFIG = {
   url: '',
   fileName: '',
   mode: 'gherkin',
-  yamlformat: 'combined',
+  locatorlayout: 'combined',   // 'combined' | 'perpage'
+  locatorformat: 'yaml',    // 'yaml' | 'json'
 };
 
 function loadConfig() {
@@ -137,7 +138,7 @@ function loadConfig() {
 }
 
 function saveConfig(cfg) {
-  const toSave = { copilot: cfg.copilot, url: cfg.url, mode: cfg.mode, yamlformat: cfg.yamlformat };
+  const toSave = { copilot: cfg.copilot, url: cfg.url, mode: cfg.mode, locatorlayout: cfg.locatorlayout, locatorformat: cfg.locatorformat };
   fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(toSave, null, 2), 'utf8');
 }
@@ -608,6 +609,29 @@ function buildPageLocatorLines(pageKey, elements, steps) {
   return lines;
 }
 
+// Serialize a locator document to either YAML or JSON string.
+function serializeLocators(doc, format) {
+  if (format === 'json') return JSON.stringify(doc, null, 2);
+  // YAML: build lines manually (avoids js-yaml dependency in ai-cli).
+  const lines = [];
+  for (const [pageOrEl, val] of Object.entries(doc)) {
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      // Top-level section (combined format: page → elements)
+      lines.push(`${yamlKey(pageOrEl)}:`);
+      for (const [el, tuple] of Object.entries(val)) {
+        lines.push(`  ${yamlKey(el)}:`);
+        for (const t of (Array.isArray(tuple) ? tuple : [])) lines.push(`    - ${t}`);
+      }
+      lines.push('');
+    } else if (Array.isArray(val)) {
+      // Flat per-page entry: elementName → [type, expr]
+      lines.push(`${yamlKey(pageOrEl)}:`);
+      for (const t of val) lines.push(`  - ${t}`);
+    }
+  }
+  return lines.join('\n');
+}
+
 // Write ONE combined YAML file that contains all pages as top-level sections:
 //
 //   birthday:
@@ -622,7 +646,8 @@ function buildPageLocatorLines(pageKey, elements, steps) {
 //
 // Separately writes per-page yamls to LOCATOR_PAGES_DIR so the Cucumber runtime
 // (findLocatorFile) can still resolve each page independently.
-function writeCombinedYaml(name, elementsByPage, scenarios) {
+function writeCombinedYaml(name, elementsByPage, scenarios, format) {
+  const fmt = format || 'yaml';
   // Collect all steps per page across all scenarios.
   const stepsByPage = new Map();
   for (const sc of scenarios) {
@@ -633,27 +658,32 @@ function writeCombinedYaml(name, elementsByPage, scenarios) {
     }
   }
 
-  const combinedLines = [];
   fs.mkdirSync(LOCATOR_DIR, { recursive: true });
   fs.mkdirSync(LOCATOR_PAGES_DIR, { recursive: true });
 
+  const combinedDoc = {};
   for (const [pageKey, steps] of stepsByPage) {
     const pageLines = buildPageLocatorLines(pageKey, elementsByPage.get(pageKey) || [], steps);
     if (!pageLines.length) continue;
 
-    // Combined file: indent each locator line by 2 spaces under the page key.
-    combinedLines.push(`${yamlKey(pageKey)}:`);
-    for (const l of pageLines) combinedLines.push(`  ${l}`);
-    combinedLines.push('');
+    // Build per-page doc from the flat lines array: [key:, - type, - expr, ...]
+    const pageDoc = {};
+    for (let i = 0; i < pageLines.length; i += 3) {
+      const key = pageLines[i].replace(/:$/, '').replace(/^'|'$/g, '');
+      const type = pageLines[i + 1] ? pageLines[i + 1].trim().replace(/^- /, '') : 'xpath';
+      const expr = pageLines[i + 2] ? pageLines[i + 2].trim().replace(/^- /, '') : '';
+      pageDoc[key] = [type, expr];
+    }
+    combinedDoc[pageKey] = pageDoc;
 
-    // Per-page file for the runtime (findLocatorFile looks in LOCATOR_PAGES_DIR).
-    const pagePath = path.join(LOCATOR_PAGES_DIR, `${pageKey}.yaml`);
-    fs.writeFileSync(pagePath, pageLines.join('\n') + '\n', 'utf8');
+    // Per-page runtime file (findLocatorFile checks LOCATOR_PAGES_DIR).
+    const pagePath = path.join(LOCATOR_PAGES_DIR, `${pageKey}.${fmt}`);
+    fs.writeFileSync(pagePath, serializeLocators(pageDoc, fmt) + '\n', 'utf8');
   }
 
   const combinedName = (name || 'locators').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const combinedPath = path.join(LOCATOR_DIR, `${combinedName}.yaml`);
-  fs.writeFileSync(combinedPath, combinedLines.join('\n'), 'utf8');
+  const combinedPath = path.join(LOCATOR_DIR, `${combinedName}.${fmt}`);
+  fs.writeFileSync(combinedPath, serializeLocators(combinedDoc, fmt) + '\n', 'utf8');
   return combinedPath;
 }
 
@@ -878,18 +908,20 @@ function writeScenarioFeatureFiles(prefix, featureName, url, scenarios) {
   return written;
 }
 
-// Write locator yaml(s) based on cfg.yamlformat:
+// Write locator files based on cfg.locatorlayout:
 //   'combined' (default) — one file, all pages as top-level sections
 //   'perpage'            — one <pageKey>.yaml per page (legacy)
 function writeYamlsForScenarios(cfg, name, elementsByPage, scenarios) {
-  if ((cfg.yamlformat || 'combined') === 'perpage') {
-    return writePerPageYamls(elementsByPage, scenarios);
+  const fmt = cfg.locatorformat || 'yaml';
+  if ((cfg.locatorlayout || 'combined') === 'perpage') {
+    return writePerPageYamls(elementsByPage, scenarios, fmt);
   }
-  return [writeCombinedYaml(name, elementsByPage, scenarios)];
+  return [writeCombinedYaml(name, elementsByPage, scenarios, fmt)];
 }
 
-// Legacy per-page format: one <pageKey>.yaml per page in LOCATOR_DIR.
-function writePerPageYamls(elementsByPage, scenarios) {
+// Legacy per-page format: one <pageKey>.<ext> per page in LOCATOR_DIR.
+function writePerPageYamls(elementsByPage, scenarios, format) {
+  const fmt = format || 'yaml';
   const stepsByPage = new Map();
   for (const sc of scenarios) {
     for (const pg of sc.pages || []) {
@@ -903,8 +935,16 @@ function writePerPageYamls(elementsByPage, scenarios) {
   for (const [pageKey, steps] of stepsByPage) {
     const lines = buildPageLocatorLines(pageKey, elementsByPage.get(pageKey) || [], steps);
     if (!lines.length) continue;
-    const fp = path.join(LOCATOR_DIR, `${pageKey}.yaml`);
-    fs.writeFileSync(fp, lines.join('\n') + '\n', 'utf8');
+    // Build per-page doc from flat lines: [key:, - type, - expr, ...]
+    const pageDoc = {};
+    for (let i = 0; i < lines.length; i += 3) {
+      const key = lines[i].replace(/:$/, '').replace(/^'|'$/g, '');
+      const type = lines[i + 1] ? lines[i + 1].trim().replace(/^- /, '') : 'xpath';
+      const expr = lines[i + 2] ? lines[i + 2].trim().replace(/^- /, '') : '';
+      pageDoc[key] = [type, expr];
+    }
+    const fp = path.join(LOCATOR_DIR, `${pageKey}.${fmt}`);
+    fs.writeFileSync(fp, serializeLocators(pageDoc, fmt) + '\n', 'utf8');
     written.push(fp);
   }
   return written;
@@ -1279,11 +1319,14 @@ ${c.bold}AI Scenario CLI — commands  (backend: GitHub Copilot CLI)${c.reset}
                      gherkin — generate .feature + locators yaml (default)
                      spec    — generate Playwright spec.ts only
                      both    — generate .feature + yaml + spec.ts
-  ${c.cyan}/yamlformat combined|perpage${c.reset}
-                     combined — one yaml file, all pages as top-level sections (default)
+  ${c.cyan}/locatorlayout combined|perpage${c.reset}
+                     combined — one file, all pages as top-level sections (default)
                                   birthday:
                                     MONTH: [xpath, //*[@id='B-month']]
-                     perpage  — one <pageKey>.yaml file per page (legacy)
+                     perpage  — one file per page  (login.yaml, dashboard.yaml …)
+  ${c.cyan}/locatorformat yaml|json${c.reset}
+                     yaml — generate locator files as YAML (default)
+                     json — generate locator files as JSON
   ${c.cyan}/url <url>${c.reset}         set the target URL to analyze
   ${c.cyan}/name <prefix>${c.reset}     optional filename prefix (default: AI names each file by scenario)
   ${c.cyan}/notes <path>${c.reset}      attach a .txt/.md/.docx requirements file as context
@@ -1308,9 +1351,10 @@ function showConfig(cfg) {
 ${c.bold}Current config${c.reset}
   backend  : GitHub Copilot CLI
   copilot  : ${cfg.copilot}
-  mode       : ${cfg.mode || 'gherkin'}  (gherkin=feature+yaml | spec=spec.ts | both=all)
-  yamlformat : ${cfg.yamlformat || 'combined'}  (combined=single file | perpage=one file per page)
-  url      : ${cfg.url || '(not set)'}
+  mode         : ${cfg.mode || 'gherkin'}  (gherkin=feature+yaml | spec=spec.ts | both=all)
+  locatorlayout: ${cfg.locatorlayout || 'combined'}  (combined=single file | perpage=one file per page)
+  locatorformat: ${cfg.locatorformat || 'yaml'}  (yaml | json)
+  url          : ${cfg.url || '(not set)'}
   name     : ${cfg.fileName || '(AI names files per scenario)'}
 `);
 }
@@ -1341,7 +1385,8 @@ function parseCliArgs(argv) {
       case '--name': o.name = val(); break;
       case '--copilot': o.copilot = val(); break;
       case '--mode': o.mode = val(); break;
-      case '--yamlformat': o.yamlformat = val(); break;
+      case '--locatorlayout': o.locatorlayout = val(); break;
+      case '--locatorformat': o.locatorformat = val(); break;
       case '--help': case '-h': o.help = true; break;
       default: break;
     }
@@ -1358,7 +1403,8 @@ async function main() {
   if (opts.url) cfg.url = opts.url;
   if (opts.name) cfg.fileName = opts.name;
   if (opts.mode && ['gherkin', 'spec', 'both'].includes(opts.mode)) cfg.mode = opts.mode;
-  if (opts.yamlformat && ['combined', 'perpage'].includes(opts.yamlformat)) cfg.yamlformat = opts.yamlformat;
+  if (opts.locatorlayout && ['combined', 'perpage'].includes(opts.locatorlayout)) cfg.locatorlayout = opts.locatorlayout;
+  if (opts.locatorformat && ['yaml', 'json'].includes(opts.locatorformat)) cfg.locatorformat = opts.locatorformat;
   for (const np of opts.notes) {
     try {
       const abs = path.isAbsolute(np) ? np : path.join(ROOT, np);
@@ -1416,12 +1462,20 @@ async function main() {
           } else warn('  Usage: /mode gherkin|spec|both');
           return true;
         }
-        case '/yamlformat': {
+        case '/locatorlayout': {
           const f = arg.toLowerCase();
           if (f === 'combined' || f === 'perpage') {
-            cfg.yamlformat = f; saveConfig(cfg);
-            ok(`  ✓ YAML format set to: ${f}  (${f === 'combined' ? 'single file, all pages as sections' : 'one <pageKey>.yaml per page'})`);
-          } else warn('  Usage: /yamlformat combined|perpage');
+            cfg.locatorlayout = f; saveConfig(cfg);
+            ok(`  ✓ Locator layout set to: ${f}  (${f === 'combined' ? 'single file, all pages as sections' : 'one file per page'})`);
+          } else warn('  Usage: /locatorlayout combined|perpage');
+          return true;
+        }
+        case '/locatorformat': {
+          const lf = arg.toLowerCase();
+          if (lf === 'yaml' || lf === 'json') {
+            cfg.locatorformat = lf; saveConfig(cfg);
+            ok(`  ✓ Locator format set to: ${lf}`);
+          } else warn('  Usage: /locatorformat yaml|json');
           return true;
         }
         case '/testllm': {

@@ -192,6 +192,8 @@ async function showConfigPanel(chromium) {
         excludePatterns: (Array.isArray(cfg.excludePatterns) ? cfg.excludePatterns : [])
                           .map(p => String(p || '').trim())
                           .filter(Boolean),
+        locatorFormat  : cfg.locatorFormat === 'json' ? 'json' : 'yaml',
+        locatorLayout  : cfg.locatorLayout === 'combined' ? 'combined' : 'perpage',
       };
       try { await browser.close(); } catch {}
       resolve(config);
@@ -1191,7 +1193,7 @@ function buildSetupPanel() {
       <div class="pw-hint">Leave blank to type the URL directly in the browser address bar.</div>
     </div>
 
-    <!-- Save spec.ts toggle — only for UI (codegen) mode -->
+    <!-- Output Options -->
     <div class="pw-field" id="pw-spec-toggle-section">
       <label class="pw-label">Output Options</label>
       <div class="pw-toggle-row">
@@ -1202,6 +1204,31 @@ function buildSetupPanel() {
         </div>
         <label class="pw-toggle">
           <input type="checkbox" id="pw-save-spec" />
+          <span class="pw-toggle-slider"></span>
+        </label>
+      </div>
+      <div class="pw-toggle-row" style="margin-top:8px;">
+        <div class="pw-toggle-label-block">
+          <div class="pw-toggle-title">🗂 Locator format</div>
+          <div class="pw-toggle-sub">
+            <span id="pw-locator-format-label">YAML</span> —
+            locators/generated/&lt;cat&gt;/&lt;page&gt;.<span id="pw-locator-format-ext">yaml</span>
+          </div>
+        </div>
+        <label class="pw-toggle">
+          <input type="checkbox" id="pw-locator-format-json" />
+          <span class="pw-toggle-slider"></span>
+        </label>
+      </div>
+      <div class="pw-toggle-row" style="margin-top:8px;">
+        <div class="pw-toggle-label-block">
+          <div class="pw-toggle-title">📦 Locator layout</div>
+          <div class="pw-toggle-sub" id="pw-locator-layout-sub">
+            Per-page — one file per page
+          </div>
+        </div>
+        <label class="pw-toggle">
+          <input type="checkbox" id="pw-locator-layout-combined" />
           <span class="pw-toggle-slider"></span>
         </label>
       </div>
@@ -1407,12 +1434,29 @@ Verify Welcome text is present"
     if (e.key === 'Enter') { e.preventDefault(); addExcludePattern(excInput.value); }
   });
 
+  // ── Locator format toggle label ───────────────────────────────────────────
+  document.getElementById('pw-locator-format-json').addEventListener('change', function () {
+    const isJson = this.checked;
+    document.getElementById('pw-locator-format-label').textContent = isJson ? 'JSON' : 'YAML';
+    document.getElementById('pw-locator-format-ext').textContent   = isJson ? 'json' : 'yaml';
+  });
+
+  // ── Locator layout toggle label ───────────────────────────────────────────
+  document.getElementById('pw-locator-layout-combined').addEventListener('change', function () {
+    const isCombined = this.checked;
+    document.getElementById('pw-locator-layout-sub').textContent = isCombined
+      ? 'Combined — all pages in one file'
+      : 'Per-page — one file per page';
+  });
+
   // ── Start Recording button ────────────────────────────────────────────────
   document.getElementById('pw-start').addEventListener('click', async () => {
     const btn            = document.getElementById('pw-start');
     const fileName       = (document.getElementById('pw-fn').value  || '').trim() || 'recordedflow';
     const startUrl       = (document.getElementById('pw-url').value || '').trim();
     const saveSpec       = document.getElementById('pw-save-spec').checked;
+    const locatorFormat  = document.getElementById('pw-locator-format-json').checked ? 'json' : 'yaml';
+    const locatorLayout  = document.getElementById('pw-locator-layout-combined').checked ? 'combined' : 'perpage';
     const domDescription = mode === 'DOM'
       ? ((document.getElementById('pw-dom-desc') || {}).value || '').trim()
       : '';
@@ -1443,7 +1487,7 @@ Verify Welcome text is present"
 
     try {
       if (window.pwRecorderStart) {
-        await window.pwRecorderStart({ fileName, mode, startUrl, saveSpec, urlFilters, excludePatterns, domDescription });
+        await window.pwRecorderStart({ fileName, mode, startUrl, saveSpec, locatorFormat, locatorLayout, urlFilters, excludePatterns, domDescription });
       }
       // This browser is closed by Node.js after pwRecorderStart resolves.
     } catch {
@@ -1618,19 +1662,34 @@ function buildRecordingScript({ fileName, mode }) {
 //     - xpath
 //     - //input[@placeholder='Email']
 // ─────────────────────────────────────────────────────────────────────────────
-function writeLocatorYaml(filePath, locatorMap, urlAliases) {
-  const yaml = require('js-yaml');
-  // Build a plain object — JS insertion order is preserved by js-yaml
+function buildLocatorDoc(locatorMap, urlAliases) {
   const doc = {};
-  if (urlAliases && Object.keys(urlAliases).length > 0) {
-    doc.urls = { ...urlAliases };        // urls: block first
-  }
+  if (urlAliases && Object.keys(urlAliases).length > 0) doc.urls = { ...urlAliases };
   if (locatorMap) {
     const sorted = [...locatorMap.keys()].sort((a, b) => a.localeCompare(b));
     for (const k of sorted) doc[k] = locatorMap.get(k);
   }
+  return doc;
+}
+
+function writeLocatorYaml(filePath, locatorMap, urlAliases) {
+  const doc = buildLocatorDoc(locatorMap, urlAliases);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, yaml.dump(doc, { noRefs: true, lineWidth: 160 }), 'utf8');
+  fs.writeFileSync(filePath, require('js-yaml').dump(doc, { noRefs: true, lineWidth: 160 }), 'utf8');
+}
+
+function writeLocatorJson(filePath, locatorMap, urlAliases) {
+  const doc = buildLocatorDoc(locatorMap, urlAliases);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(doc, null, 2), 'utf8');
+}
+
+// Dispatch to yaml or json based on the locatorformat config setting.
+function writeLocatorFile(filePath, locatorMap, urlAliases, locatorFormat) {
+  if ((locatorFormat || 'yaml') === 'json') {
+    return writeLocatorJson(filePath.replace(/\.yaml$/, '.json'), locatorMap, urlAliases);
+  }
+  return writeLocatorYaml(filePath, locatorMap, urlAliases);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1675,7 +1734,7 @@ function convertAndSave(config, firstUrl, uiActions, capturedApis, urlAliases, p
 
     if (hasAliases) {
       const locPath = resolvePath(overrides.yamlPath, locatorFilePath(cat, fileName));
-      writeLocatorYaml(locPath, null, aliases);
+      writeLocatorFile(locPath, null, aliases, config.locatorFormat);
       savedPaths.push({ label: 'Locators', value: path.relative(ROOT, locPath) });
     }
 
@@ -1705,22 +1764,51 @@ function convertAndSave(config, firstUrl, uiActions, capturedApis, urlAliases, p
   fs.writeFileSync(featPath, featureContent, 'utf8');
   savedPaths.push({ label: 'Feature', value: path.relative(ROOT, featPath) });
 
+  const locFmt    = config.locatorFormat || 'yaml';
+  const locLayout = config.locatorLayout || 'perpage';
   let wroteLocators = false;
-  (artifact.pages || []).forEach((pg, idx) => {
-    if (!pg.locatorMap || pg.locatorMap.size === 0) return;
-    // First page uses the override path; subsequent pages use their default.
-    const locPath = idx === 0
-      ? resolvePath(overrides.yamlPath, locatorFilePath(cat, pg.pageKey))
-      : locatorFilePath(cat, pg.pageKey);
-    writeLocatorYaml(locPath, pg.locatorMap, idx === 0 ? aliases : {});
-    savedPaths.push({ label: 'Locators', value: path.relative(ROOT, locPath) });
-    wroteLocators = true;
-  });
 
-  if (!wroteLocators && hasAliases) {
-    const locPath = resolvePath(overrides.yamlPath, locatorFilePath(cat, fileName));
-    writeLocatorYaml(locPath, null, aliases);
-    savedPaths.push({ label: 'Locators', value: path.relative(ROOT, locPath) });
+  if (locLayout === 'combined') {
+    // Combined: merge all pages into one file under a top-level page key.
+    const ext       = locFmt;
+    const locPath   = resolvePath(overrides.yamlPath, locatorFilePath(cat, fileName, ext));
+    const combinedDoc = {};
+    if (hasAliases) combinedDoc.urls = { ...aliases };
+    (artifact.pages || []).forEach(pg => {
+      if (!pg.locatorMap || pg.locatorMap.size === 0) return;
+      const pageSection = {};
+      const sorted = [...pg.locatorMap.keys()].sort((a, b) => a.localeCompare(b));
+      for (const k of sorted) pageSection[k] = pg.locatorMap.get(k);
+      if (Object.keys(pageSection).length) combinedDoc[pg.pageKey] = pageSection;
+      wroteLocators = true;
+    });
+    if (wroteLocators || hasAliases) {
+      fs.mkdirSync(path.dirname(locPath), { recursive: true });
+      if (locFmt === 'json') {
+        fs.writeFileSync(locPath.replace(/\.yaml$/, '.json'), JSON.stringify(combinedDoc, null, 2), 'utf8');
+        savedPaths.push({ label: 'Locators (combined)', value: path.relative(ROOT, locPath.replace(/\.yaml$/, '.json')) });
+      } else {
+        fs.writeFileSync(locPath, require('js-yaml').dump(combinedDoc, { noRefs: true, lineWidth: 160 }), 'utf8');
+        savedPaths.push({ label: 'Locators (combined)', value: path.relative(ROOT, locPath) });
+      }
+    }
+  } else {
+    // Per-page: one file per page (original behaviour).
+    (artifact.pages || []).forEach((pg, idx) => {
+      if (!pg.locatorMap || pg.locatorMap.size === 0) return;
+      const locPath = idx === 0
+        ? resolvePath(overrides.yamlPath, locatorFilePath(cat, pg.pageKey))
+        : locatorFilePath(cat, pg.pageKey);
+      writeLocatorFile(locPath, pg.locatorMap, idx === 0 ? aliases : {}, locFmt);
+      savedPaths.push({ label: 'Locators', value: path.relative(ROOT, locPath) });
+      wroteLocators = true;
+    });
+
+    if (!wroteLocators && hasAliases) {
+      const locPath = resolvePath(overrides.yamlPath, locatorFilePath(cat, fileName));
+      writeLocatorFile(locPath, null, aliases, locFmt);
+      savedPaths.push({ label: 'Locators', value: path.relative(ROOT, locPath) });
+    }
   }
 
   return { savedPaths, category: cat };
@@ -1821,9 +1909,9 @@ function generatePreview(config, firstUrl, uiActions, capturedApis, urlAliases) 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Generate YAML locator content string (no file I/O) — used for live preview
+// Generate locator content string (YAML or JSON) — used for live preview
 // ─────────────────────────────────────────────────────────────────────────────
-function generateYamlPreview(config, firstUrl, uiActions, capturedApis, urlAliases) {
+function generateLocatorPreview(config, firstUrl, uiActions, capturedApis, urlAliases) {
   const yaml = require('js-yaml');
   const { convertToArtifacts, convertToInterleavedArtifacts } = require('../converter');
   const { apiEventsFromCaptured } = require('../formatter');
@@ -1832,6 +1920,7 @@ function generateYamlPreview(config, firstUrl, uiActions, capturedApis, urlAlias
   const aliases     = urlAliases || {};
   const pageKey     = generatePageKey({ stepName: config.fileName }, 0);
   const scenarioUrl = firstUrl || 'about:blank';
+  const fmt         = config.locatorFormat || 'yaml';
 
   try {
     const doc = {};
@@ -1851,17 +1940,31 @@ function generateYamlPreview(config, firstUrl, uiActions, capturedApis, urlAlias
           featureName: humanizeFileName(config.fileName),
         });
       }
+      const layout = config.locatorLayout || 'perpage';
       (artifact.pages || []).forEach(pg => {
         if (!pg.locatorMap || pg.locatorMap.size === 0) return;
         const sorted = [...pg.locatorMap.keys()].sort((a, b) => a.localeCompare(b));
-        for (const k of sorted) doc[k] = pg.locatorMap.get(k);
+        if (layout === 'combined') {
+          // Nest under the page key.
+          const section = {};
+          for (const k of sorted) section[k] = pg.locatorMap.get(k);
+          doc[pg.pageKey] = section;
+        } else {
+          for (const k of sorted) doc[k] = pg.locatorMap.get(k);
+        }
       });
     }
 
+    if (fmt === 'json') return JSON.stringify(doc, null, 2);
     return yaml.dump(doc, { noRefs: true, lineWidth: 160 });
   } catch (e) {
-    return '# YAML error: ' + (e && e.message ? e.message : String(e));
+    return (fmt === 'json' ? '// Error: ' : '# Error: ') + (e && e.message ? e.message : String(e));
   }
+}
+
+// Keep old name as alias for any callers not yet updated.
+function generateYamlPreview(config, firstUrl, uiActions, capturedApis, urlAliases) {
+  return generateLocatorPreview(config, firstUrl, uiActions, capturedApis, urlAliases);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1874,9 +1977,13 @@ async function showReviewPanel(chromium, config, firstUrl, uiActions, capturedAp
 
   const cat             = classifyFeature(initialPreview);
   const pageKey         = generatePageKey({ stepName: config.fileName }, 0);
+  const locFmt          = config.locatorFormat || 'yaml';
+  const locLayout       = config.locatorLayout || 'perpage';
   const defaultFeatPath = path.relative(ROOT, featureFilePath(cat, config.fileName));
-  const defaultYamlPath = path.relative(ROOT, locatorFilePath(cat, pageKey));
-  const initialYaml     = generateYamlPreview(config, firstUrl, uiActions, capturedApis, urlAliases);
+  // Combined → one file named after the recording; per-page → file named after the first page.
+  const defaultLocPath  = path.relative(ROOT, locatorFilePath(cat,
+    locLayout === 'combined' ? config.fileName : pageKey, locFmt));
+  const initialYaml     = generateLocatorPreview(config, firstUrl, uiActions, capturedApis, urlAliases);
 
   const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext();
@@ -1929,7 +2036,9 @@ async function showReviewPanel(chromium, config, firstUrl, uiActions, capturedAp
       yamlPreview    : initialYaml,
       fileName       : config.fileName,
       defaultFeatPath,
-      defaultYamlPath,
+      defaultYamlPath: defaultLocPath,
+      locatorFormat  : locFmt,
+      locatorLayout  : locLayout,
     });
   });
 }
@@ -1942,7 +2051,7 @@ function buildReviewPanel(initData) {
   const {
     uiActions, capturedApis, mode,
     featurePreview, yamlPreview,
-    fileName, defaultFeatPath, defaultYamlPath,
+    fileName, defaultFeatPath, defaultYamlPath, locatorFormat, locatorLayout,
   } = initData;
 
   // ── helpers (hoisted) ──────────────────────────────────────────────────────
@@ -2040,6 +2149,7 @@ function buildReviewPanel(initData) {
       white-space:pre; overflow:auto; min-height:200px;
     }
     .rv-code.yaml-code { color:#86efac; }
+    .rv-code.json-code { color:#fdba74; }
     .rv-refreshing { opacity:.45; transition:opacity .15s; }
     /* list items */
     .rv-item {
@@ -2173,8 +2283,9 @@ function buildReviewPanel(initData) {
     b.onclick = () => switchTab(id);
     return b;
   }
+  const locTabLabel = locatorFormat === 'json' ? '📋 JSON' : '📋 YAML';
   tabBar.appendChild(makeTab('preview', '📄 Feature'));
-  tabBar.appendChild(makeTab('yaml',    '📋 YAML'));
+  tabBar.appendChild(makeTab('yaml',    locTabLabel));
   if (showUi)  tabBar.appendChild(makeTab('ui',  '🖱 UI Actions',  curUi.length));
   if (showApi) tabBar.appendChild(makeTab('api', '🌐 API Calls',   curApi.length));
   document.body.appendChild(tabBar);
@@ -2191,7 +2302,8 @@ function buildReviewPanel(initData) {
   const yamlPane = document.createElement('div');
   yamlPane.className = 'rv-pane';
   yamlPane.id = 'pane-yaml';
-  yamlPane.innerHTML = `<pre class="rv-code yaml-code" id="rv-yaml-text">${escHtml(yamlPreview)}</pre>`;
+  const locCodeClass = locatorFormat === 'json' ? 'rv-code json-code' : 'rv-code yaml-code';
+  yamlPane.innerHTML = `<pre class="${locCodeClass}" id="rv-yaml-text">${escHtml(yamlPreview)}</pre>`;
 
   const uiPane = document.createElement('div');
   uiPane.className = 'rv-pane';
@@ -2217,9 +2329,9 @@ function buildReviewPanel(initData) {
       <span class="rv-path-hint">relative to project root</span>
     </div>
     <div class="rv-path-row">
-      <span class="rv-path-label">YAML</span>
+      <span class="rv-path-label">${locatorFormat === 'json' ? 'JSON' : 'YAML'}</span>
       <input class="rv-path-input" id="rv-yaml-path" value="${escHtml(defaultYamlPath || '')}" spellcheck="false" />
-      <span class="rv-path-hint">locator file</span>
+      <span class="rv-path-hint">locator file (.${locatorFormat === 'json' ? 'json' : 'yaml'}) — ${locatorLayout === 'combined' ? 'combined (all pages)' : 'per-page'}</span>
     </div>
   `;
   document.body.appendChild(footer);

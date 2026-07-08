@@ -1,8 +1,8 @@
 {
-  "name": "playwright-cucumber-framework",
+  "name": "wdio-playwright-recording-ai",
   "version": "1.0.0",
   "private": true,
-  "description": "Playwright + Cucumber with custom recorder (no codegen inspector UI)",
+  "description": "Playwright + Cucumber with custom recorder plus LLM-powered AI Scenario CLI (Copilot CLI backend)",
   "scripts": {
     "record": "node e2e/support/scripts/record.js",
     "pw": "ts-node e2e/support/recorder.ts",

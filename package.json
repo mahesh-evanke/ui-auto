@@ -7,6 +7,7 @@
     "record": "node e2e/support/scripts/record.js",
     "pw": "ts-node e2e/support/recorder.ts",
     "ai": "node e2e/support/scripts/ai-cli.js",
+    "ai:ui": "node e2e/support/scripts/ai-ui.js",
     "ai:mcp": "node e2e/support/scripts/ai-mcp.js",
     "generate": "node e2e/support/scripts/generate.js",
     "cucumber": "cucumber-js",

@@ -835,9 +835,9 @@ async function generate(cfg, prompt) {
   fs.mkdirSync(FEATURE_DIR, { recursive: true });
 
   if (visited.length === 1) {
-    await generateMultiScenario(cfg, prompt, visited[0], prefix);  // single page
+    return await generateMultiScenario(cfg, prompt, visited[0], prefix);  // single page
   } else {
-    await generateMultiPath(cfg, prompt, visited, prefix);          // multi-page quiz/flow
+    return await generateMultiPath(cfg, prompt, visited, prefix);          // multi-page quiz/flow
   }
 }
 
@@ -1036,7 +1036,7 @@ async function generateMultiScenario(cfg, prompt, pageInfo, prefix) {
     try { specFile = await generateSpecTs(cfg, featureName, cfg.url, scenarios, elementsByPage, specName); }
     catch (e) { err(`  Spec generation failed: ${e.message}`); }
   }
-  reportGenerated(mode, scenarios, featureFiles, yamlFiles, specFile);
+  return reportGenerated(mode, scenarios, featureFiles, yamlFiles, specFile);
 }
 
 // Multi-page flow / quiz → MULTIPLE end-to-end scenarios across the crawled pages,
@@ -1098,7 +1098,7 @@ async function generateMultiPath(cfg, prompt, visited, prefix) {
     try { specFile = await generateSpecTs(cfg, featureName, cfg.url, scenarios, elementsByPage, specName); }
     catch (e) { err(`  Spec generation failed: ${e.message}`); }
   }
-  reportGenerated(mode, scenarios, featureFiles, yamlFiles, specFile);
+  return reportGenerated(mode, scenarios, featureFiles, yamlFiles, specFile);
 }
 
 function reportGenerated(mode, scenarios, featureFiles, yamlFiles, specFile) {
@@ -1112,6 +1112,14 @@ function reportGenerated(mode, scenarios, featureFiles, yamlFiles, specFile) {
   if (specFile) ok(`  📄 Spec:     ${path.relative(ROOT, specFile)}`);
   if (mode === 'gherkin' || mode === 'both') log(`  ${c.gray}Run Gherkin tests with:  npm run test:ai${c.reset}`);
   if (mode === 'spec' || mode === 'both') log(`  ${c.gray}Run Playwright spec with: npx playwright test ${path.relative(ROOT, specFile || '').replace(/\\/g, '/')}${c.reset}`);
+
+  // Return structured result for programmatic callers (e.g. ai-ui.js).
+  const files = [
+    ...featureFiles.map(p => ({ path: path.relative(ROOT, p), type: 'feature' })),
+    ...yamlFiles.map(p => ({ path: path.relative(ROOT, p), type: 'locator' })),
+    ...(specFile ? [{ path: path.relative(ROOT, specFile), type: 'spec' }] : []),
+  ];
+  return { files, summary: `${scenarios.length} scenario(s) generated.` };
 }
 
 // ── /fix mode ─────────────────────────────────────────────────────────────────
@@ -1583,7 +1591,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  loadConfig, extractFileText, notes,
-  generate, runFix, scrapePage,
+  loadConfig, saveConfig, extractFileText, notes,
+  generate, runFix, scrapePage, runCopilot,
   FEATURE_DIR, LOCATOR_DIR, ROOT,
 };

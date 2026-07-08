@@ -20,13 +20,15 @@
     "test:api": "node e2e/support/scripts/run.js api",
     "test:e2e": "node e2e/support/scripts/run.js endtoend"
   },
-  "devDependencies": {
+  "dependencies": {
     "@cucumber/cucumber": "^11.3.0",
     "@playwright/test": "^1.53.0",
+    "js-yaml": "^4.1.0",
+    "playwright": "^1.53.0"
+  },
+  "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
-    "js-yaml": "^4.1.0",
-    "playwright": "^1.53.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
   }

@@ -1,30 +1,30 @@
 {
-  "name": "playwright-cucumber-framework",
+  "name": "wdio-playwright-library",
   "version": "1.0.0",
-  "private": true,
-  "description": "Playwright + Cucumber with custom recorder (no codegen inspector UI)",
+  "private": false,
+  "description": "Playwright + Cucumber runtime library (step definitions + execution engine only, no recorder/AI authoring tooling)",
+  "files": [
+    "e2e/stepdefinitions",
+    "e2e/support",
+    "e2e/config/config.yaml",
+    "e2e/locators/common.yaml",
+    "e2e/locators/pages.yaml",
+    "cucumber.js",
+    "tsconfig.json"
+  ],
   "scripts": {
-    "record": "node e2e/support/scripts/record.js",
-    "pw": "ts-node e2e/support/recorder.ts",
-    "ai": "node e2e/support/scripts/ai-cli.js",
-    "ai:ui": "node e2e/support/scripts/ai-ui.js",
-    "ai:mcp": "node e2e/support/scripts/ai-mcp.js",
-    "generate": "node e2e/support/scripts/generate.js",
     "cucumber": "cucumber-js",
     "run": "node e2e/support/scripts/run.js",
     "test:all": "node e2e/support/scripts/run.js",
     "test:web": "node e2e/support/scripts/run.js web",
     "test:api": "node e2e/support/scripts/run.js api",
-    "test:ai": "node e2e/support/scripts/test-ai.js",
-    "test:e2e": "node e2e/support/scripts/run.js endtoend",
-    "inspect": "node e2e/support/scripts/inspect.js"
+    "test:e2e": "node e2e/support/scripts/run.js endtoend"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11.3.0",
     "@playwright/test": "^1.53.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
-    "docx": "^9.7.1",
     "js-yaml": "^4.1.0",
     "playwright": "^1.53.0",
     "ts-node": "^10.9.2",

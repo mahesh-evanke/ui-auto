@@ -12,6 +12,6 @@
     "rootDir": ".",
     "moduleResolution": "node"
   },
-  "include": ["utils/**/*.ts", "steps-def/**/*.ts"],
+  "include": ["e2e/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

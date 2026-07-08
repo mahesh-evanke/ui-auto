@@ -1,17 +1,11 @@
-const formats = ['progress'];
-// HTML report shows attachments (e.g. "Fix with AI" markdown). Disable with CUCUMBER_HTML_REPORT=0
-if (process.env.CUCUMBER_HTML_REPORT !== '0') {
-  formats.push('html:test-results/cucumber-report.html');
-}
-
+// Consumer config: features live in this repo, step definitions come from the
+// installed wdio-playwright-library package (see tsconfig.json's ts-node.ignore
+// override, which lets ts-node transpile that one package's .ts files).
 module.exports = {
   default: {
-    // No default paths: scripts/run.js always passes explicit feature paths,
-    // so those are authoritative (passing a single file runs ONLY that file).
-    // (Features now live under feature/generated/<category>/.)
-    paths: [],
-    require: ['e2e/stepdefinitions/**/*.ts'],
+    paths: ['e2e/features/**/*.feature'],
+    require: ['node_modules/wdio-playwright-library/e2e/stepdefinitions/**/*.ts'],
     requireModule: ['ts-node/register'],
-    format: formats,
+    format: ['progress', 'html:test-results/cucumber-report.html'],
   },
 };

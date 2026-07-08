@@ -1,8 +1,11 @@
 node_modules/
 dist/
+# Built from the wdio-playwright-library branch via `npm pack`; see README.
+*.tgz
 feature/generated/recorded-session.json
 test-results/
 playwright-report/
+reports/
 .env
 .env.local
 # config.yaml contains the Ollama API key — keep it out of version control.

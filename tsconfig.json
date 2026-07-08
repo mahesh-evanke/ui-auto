@@ -8,10 +8,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "outDir": "dist",
-    "rootDir": ".",
     "moduleResolution": "node"
   },
-  "include": ["utils/**/*.ts", "steps-def/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "ts-node": {
+    "transpileOnly": true,
+    "ignore": ["node_modules/(?!wdio-playwright-library)"]
+  }
 }

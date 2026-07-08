@@ -49,7 +49,7 @@ function channelFor(name?: string): string | undefined {
 }
 
 export function loadConfig(): ConfigShape {
-  const cfgPath = path.resolve(__dirname, '..', 'config', 'config.yaml');
+  const cfgPath = path.resolve(process.cwd(), 'e2e', 'config', 'config.yaml');
   let cfg: ConfigShape = {};
   if (fs.existsSync(cfgPath)) {
     try {

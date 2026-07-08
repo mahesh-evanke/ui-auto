@@ -50,7 +50,7 @@ Before(async function (this: AutomationWorld) {
   // reports/ is at project root — two levels up from e2e/stepdefinitions/
   const recordVideoDir =
     process.env.RECORD_VIDEO === '1'
-      ? path.join(__dirname, '..', '..', 'reports', 'recorded')
+      ? path.join(process.cwd(), 'reports', 'recorded')
       : undefined;
 
   this.context = await this.browser.newContext(
@@ -94,7 +94,7 @@ After(async function (this: AutomationWorld, scenario: ITestCaseHookParameter) {
     try {
       const status = scenario.result?.status === Status.PASSED ? 'PASS' : 'FAIL';
       const safe = scenario.pickle.name.replace(/[^a-z0-9_-]+/gi, '_').slice(0, 60);
-      const dir = path.join(__dirname, '..', '..', 'reports', 'recorded');
+      const dir = path.join(process.cwd(), 'reports', 'recorded');
       ensureDir(dir);
       await video.saveAs(path.join(dir, `${safe}-${status}-${nowFileStamp()}.webm`));
       await video.delete().catch(() => undefined);
@@ -119,7 +119,7 @@ After(async function (this: AutomationWorld, scenario: ITestCaseHookParameter) {
     });
 
     // Generated capture output goes into e2e/features/generated/
-    const outDir = path.join(__dirname, '..', 'features', 'generated');
+    const outDir = path.join(process.cwd(), 'e2e', 'features', 'generated');
     ensureDir(outDir);
     const outPath = path.join(outDir, `api-capture-${nowFileStamp()}.feature`);
     fs.writeFileSync(outPath, featureText, 'utf8');

@@ -89,8 +89,8 @@ export class AutomationWorld extends World {
 
   loadPagesRegistry(): void {
     this.pagesRegistry = {};
-    // pages.yaml is under e2e/locators/ — one level up from stepdefinitions/
-    const p = path.join(__dirname, '..', 'locators', 'pages.yaml');
+    // pages.yaml is under e2e/locators/ in the caller's project, not this package.
+    const p = path.join(process.cwd(), 'e2e', 'locators', 'pages.yaml');
     if (!fs.existsSync(p)) return;
     try {
       const raw = fs.readFileSync(p, 'utf8');
@@ -106,7 +106,7 @@ export class AutomationWorld extends World {
     let fp = findLocatorFile(pageKey);
     if (!fp) {
       // Create a placeholder yaml so the run can continue.
-      fp = path.join(__dirname, '..', 'locators', 'pages', `${pageKey}.yaml`);
+      fp = path.join(process.cwd(), 'e2e', 'locators', 'pages', `${pageKey}.yaml`);
       fs.mkdirSync(path.dirname(fp), { recursive: true });
       fs.writeFileSync(fp, yaml.dump({}, { noRefs: true, lineWidth: 160 }), 'utf8');
     }
@@ -133,7 +133,7 @@ export class AutomationWorld extends World {
     }
     const tuple = this.tryResolveTuple(name);
     if (tuple) return tuple;
-    const fp = findLocatorFile(this.currentPageKey) || path.join(__dirname, '..', 'locators', 'pages', `${this.currentPageKey}.yaml`);
+    const fp = findLocatorFile(this.currentPageKey) || path.join(process.cwd(), 'e2e', 'locators', 'pages', `${this.currentPageKey}.yaml`);
     throw new Error(`Element "${name}" not found in page "${this.currentPageKey}"\nFile: ${fp}`);
   }
 

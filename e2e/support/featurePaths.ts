@@ -19,7 +19,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = path.resolve(process.cwd(), 'e2e');
 export const FEATURE_ROOT = path.join(ROOT, 'features', 'generated');
 export const LOCATOR_ROOT = path.join(ROOT, 'locators', 'generated');
 

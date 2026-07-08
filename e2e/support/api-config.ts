@@ -10,7 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 
-const GENERATED_DIR = path.join(__dirname, '..', 'locators', 'generated');
+const GENERATED_DIR = path.join(process.cwd(), 'e2e', 'locators', 'generated');
 
 let cachedAliases: Record<string, string> | null = null;
 

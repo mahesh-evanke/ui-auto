@@ -14,8 +14,9 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 
-// e2e/support/scripts/ → project root (3 levels up)
-const ROOT = path.resolve(__dirname, '..', '..', '..');
+// Resolve against the caller's project root (cwd), not this package's own
+// location — this script may run in-place or installed under node_modules.
+const ROOT = process.cwd();
 
 const SEARCH_DIRS = [
   path.join(ROOT, 'e2e', 'features'), // covers generated/ and hand-written features recursively

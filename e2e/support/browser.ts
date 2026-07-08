@@ -18,7 +18,7 @@ export async function launchRecorderBrowser(): Promise<LaunchedBrowser> {
   );
   const recordVideoDir =
     process.env.RECORD_VIDEO === '1'
-      ? path.resolve(__dirname, '..', 'reports', 'recorded', 'recording-session')
+      ? path.resolve(process.cwd(), 'e2e', 'reports', 'recorded', 'recording-session')
       : undefined;
   const context = await browser.newContext(
     contextOptions({ deviceName: process.env.VIEWPORT_DEVICE, recordVideoDir }),

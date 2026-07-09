@@ -89,4 +89,7 @@ writeIfMissing(
 `,
 );
 
-console.log(`[${PKG_NAME}] Scaffold complete. Add "ts-node" and "typescript" as devDependencies, then run: npx cucumber-js`);
+console.log(
+  `[${PKG_NAME}] Scaffold complete. Next: npm install --save-dev ts-node@^10.9.2 typescript@^5.7.2` +
+    ` (pin these — ts-node 10 does not support typescript 7's native compiler), then run: npx cucumber-js`,
+);

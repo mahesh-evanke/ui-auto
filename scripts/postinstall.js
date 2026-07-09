@@ -29,6 +29,29 @@ function writeIfMissing(relPath, content) {
   console.log(`[${PKG_NAME}] created: ${relPath}`);
 }
 
+/** Merge keys into the consumer's package.json under `field`, never overwriting an existing key. */
+function mergePackageJsonField(field, entries) {
+  const pkgPath = path.join(consumerRoot, 'package.json');
+  if (!fs.existsSync(pkgPath)) return;
+  let pkg;
+  try {
+    pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  } catch {
+    console.log(`[${PKG_NAME}] skip package.json merge (invalid JSON)`);
+    return;
+  }
+  pkg[field] = pkg[field] || {};
+  let changed = false;
+  for (const [key, value] of Object.entries(entries)) {
+    if (Object.prototype.hasOwnProperty.call(pkg[field], key)) continue;
+    pkg[field][key] = value;
+    changed = true;
+  }
+  if (!changed) return;
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+  console.log(`[${PKG_NAME}] merged package.json "${field}"`);
+}
+
 writeIfMissing(
   'cucumber.js',
   `// Points require at this package's step definitions inside node_modules.
@@ -89,7 +112,29 @@ writeIfMissing(
 `,
 );
 
+const nm = `node_modules/${PKG_NAME}`;
+mergePackageJsonField('scripts', {
+  record: `node ${nm}/e2e/support/scripts/record.js`,
+  pw: `ts-node ${nm}/e2e/support/recorder.ts`,
+  ai: `node ${nm}/e2e/support/scripts/ai-cli.js`,
+  'ai:ui': `node ${nm}/e2e/support/scripts/ai-ui.js`,
+  'ai:mcp': `node ${nm}/e2e/support/scripts/ai-mcp.js`,
+  generate: `node ${nm}/e2e/support/scripts/generate.js`,
+  inspect: `node ${nm}/e2e/support/scripts/inspect.js`,
+  test: 'cucumber-js',
+  run: `node ${nm}/e2e/support/scripts/run.js`,
+  'test:all': `node ${nm}/e2e/support/scripts/run.js`,
+  'test:web': `node ${nm}/e2e/support/scripts/run.js web`,
+  'test:api': `node ${nm}/e2e/support/scripts/run.js api`,
+  'test:ai': `node ${nm}/e2e/support/scripts/test-ai.js`,
+  'test:e2e': `node ${nm}/e2e/support/scripts/run.js endtoend`,
+});
+
+// NOTE: deliberately NOT writing ts-node/typescript into devDependencies here.
+// npm rewrites package.json's dependency fields from its own install state
+// right after this script runs, silently discarding edits made mid-install —
+// so the consumer must add these themselves.
 console.log(
   `[${PKG_NAME}] Scaffold complete. Next: npm install --save-dev ts-node@^10.9.2 typescript@^5.7.2` +
-    ` (pin these — ts-node 10 does not support typescript 7's native compiler), then run: npx cucumber-js`,
+    ` (pin these — ts-node 10 does not support typescript 7's native compiler), then: npm run record | npm run ai | npx cucumber-js`,
 );

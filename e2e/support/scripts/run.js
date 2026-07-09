@@ -150,11 +150,15 @@ const htmlReportRel = path
 
 const cucumberEntry = path.join(ROOT, 'node_modules', '@cucumber', 'cucumber', 'bin', 'cucumber.js');
 const terminalFmt   = pathToFileURL(path.join(__dirname, 'terminal-formatter.js')).href;
+// This package's own stepdefinitions, wherever it's actually running from
+// (dev repo root or installed under node_modules) — not cwd-relative, since
+// the caller's project has no e2e/stepdefinitions of its own.
+const stepDefsGlob = path.join(__dirname, '..', '..', 'stepdefinitions', '**', '*.ts');
 const args = [
   cucumberEntry,
   ...featurePaths,
   '--require-module', 'ts-node/register',
-  '--require', 'e2e/stepdefinitions/**/*.ts',
+  '--require', stepDefsGlob,
   '--format', `html:${htmlReportRel}`,
   '--format', terminalFmt,
 ];

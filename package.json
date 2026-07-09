@@ -10,9 +10,11 @@
     "e2e/locators/common.yaml",
     "e2e/locators/pages.yaml",
     "cucumber.js",
-    "tsconfig.json"
+    "tsconfig.json",
+    "scripts/postinstall.js"
   ],
   "scripts": {
+    "postinstall": "node scripts/postinstall.js",
     "cucumber": "cucumber-js",
     "run": "node e2e/support/scripts/run.js",
     "test:all": "node e2e/support/scripts/run.js",

@@ -13,9 +13,11 @@
  *   • URL input
  *   • Name prefix
  *   • Notes: drag-and-drop files OR paste plain text
- *   • DOM Mode (DOM + LLM): prompt textarea + Generate button — scrapes the live
- *     page first, then the LLM designs the full scenario breadth from real elements
- *     (same pipeline as ai-cli.js's /dom command; distinct from the recorder's
+ *   • Prompt tab: free-form chat straight to the LLM backend — no DOM scrape,
+ *     no scenario schema, no files written
+ *   • DOM Mode (DOM + LLM) tab: scrapes the live page first, then the LLM designs
+ *     the full scenario breadth from real elements and writes feature/locator/spec
+ *     files (same pipeline as ai-cli.js's /dom command; distinct from the recorder's
  *     zero-LLM DOM Mode, which only emits exactly what you describe)
  *   • Scrape button
  *   • Fix feature: drag-and-drop .feature file + optional error text
@@ -100,6 +102,18 @@ async function main() {
       // generate() returns undefined when the LLM returns no scenarios — handle gracefully
       if (!result) return { ok: false, output: 'LLM returned no scenarios. Check the Output log and try a more specific prompt.' };
       return { ok: true, files: result.files || [], output: result.summary || 'Done.' };
+    } catch (e) {
+      return { ok: false, output: String(e.message || e) };
+    }
+  });
+
+  // Free-form chat: sends the raw message straight to the backend, no DOM scrape,
+  // no scenario schema, no file writing. Just talk to the LLM.
+  await page.exposeFunction('aiChat', async (message) => {
+    if (!message) return { ok: false, output: 'No message.' };
+    try {
+      const out = await cli.runCopilot(cfg, message);
+      return { ok: true, output: String(out).trim() };
     } catch (e) {
       return { ok: false, output: String(e.message || e) };
     }
@@ -427,8 +441,8 @@ function buildUI({ initCfg }) {
 
   const sideHeader = div('sidebar-header');
   sideHeader.innerHTML = `
-    <div class="sidebar-title">🤖 AI Scenario UI — DOM Mode (DOM + LLM)</div>
-    <div class="sidebar-sub">Scrapes the live page's real elements first, then the LLM designs the full scenario breadth using ONLY those elements · GitHub Copilot CLI backend · all settings saved automatically</div>
+    <div class="sidebar-title">🤖 AI Scenario UI</div>
+    <div class="sidebar-sub">✏️ Prompt = free-form chat  ·  🔍 DOM Mode = scrape + LLM scenario generation · GitHub Copilot CLI backend · all settings saved automatically</div>
   `;
   sidebar.appendChild(sideHeader);
 
@@ -653,17 +667,62 @@ function buildUI({ initCfg }) {
     tabBar.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
     main.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + id));
   }
-  tabBar.appendChild(makeTab('prompt', '🔍 DOM Mode (DOM + LLM)'));
+  tabBar.appendChild(makeTab('prompt',  '✏️ Prompt'));
+  tabBar.appendChild(makeTab('domMode', '🔍 DOM Mode (DOM + LLM)'));
   tabBar.appendChild(makeTab('log',    '📟 Output log'));
   tabBar.appendChild(makeTab('files',  '📁 Generated files'));
   tabBar.appendChild(makeTab('fix',    '🔧 Fix feature'));
   main.appendChild(tabBar);
 
-  // ── Prompt pane ─────────────────────────────────────────────────────────────
-  const promptPane = div('pane active');
-  promptPane.id = 'pane-prompt';
+  // ── Prompt pane (free-form chat — no DOM scrape, no file writing) ─────────────
+  const chatPane = div('pane active');
+  chatPane.id = 'pane-prompt';
+  const chatArea = div('prompt-area');
+  const chatBanner = div('field');
+  chatBanner.innerHTML = `
+    <div style="background:rgba(148,163,184,0.06);border:1px solid rgba(148,163,184,0.15);border-radius:10px;padding:10px 12px;font-size:11.5px;color:#94a3b8;line-height:1.6;">
+      <strong>✏️ Prompt — free-form chat.</strong> Talks directly to the LLM backend —
+      no DOM scraping, no scenario schema, no files written. Use this to ask questions,
+      brainstorm, or draft requirements before switching to DOM Mode to generate tests.
+    </div>
+  `;
+  chatArea.appendChild(chatBanner);
+  const chatLog = div('log-area');
+  chatLog.style.cssText = 'flex:0 0 auto;max-height:320px;overflow-y:auto;border:1px solid rgba(148,163,184,0.1);border-radius:10px;padding:10px 12px;background:#0a0f1e;';
+  chatArea.appendChild(chatLog);
+  const chatInput = el('textarea', { id:'chat-input', class:'input', placeholder:'Ask the LLM anything…', rows:'4' });
+  chatArea.appendChild(chatInput);
+  const chatSpinner = div('spinner');
+  chatSpinner.style.display = 'none';
+  const chatBtn = el('button', { class:'btn btn-primary' }, '✏️ Send');
+  chatBtn.addEventListener('click', async () => {
+    const message = chatInput.value.trim();
+    if (!message) return;
+    const userLine = document.createElement('div');
+    userLine.className = 'log-line head';
+    userLine.textContent = '› ' + message;
+    chatLog.appendChild(userLine);
+    chatInput.value = '';
+    chatBtn.disabled = true; chatSpinner.style.display = 'block';
+    const r = await window.aiChat(message);
+    const replyLine = document.createElement('div');
+    replyLine.className = 'log-line ' + (r.ok ? 'info' : 'err');
+    replyLine.textContent = r.ok ? r.output : '✗ ' + r.output;
+    chatLog.appendChild(replyLine);
+    chatLog.scrollTop = chatLog.scrollHeight;
+    chatBtn.disabled = false; chatSpinner.style.display = 'none';
+  });
+  const chatBar = div('prompt-bar');
+  chatBar.appendChild(chatSpinner);
+  chatBar.appendChild(chatBtn);
+  chatArea.appendChild(chatBar);
+  chatPane.appendChild(chatArea);
 
-  // Prompt pane: textarea grows, Generate bar is always pinned at bottom
+  // ── DOM Mode pane (scrape + LLM scenario generation, writes files) ────────────
+  const promptPane = div('pane');
+  promptPane.id = 'pane-domMode';
+
+  // DOM Mode pane: textarea grows, Generate bar is always pinned at bottom
   const promptArea = div('prompt-area');
   const domModeBanner = div('field');
   domModeBanner.innerHTML = `
@@ -810,6 +869,7 @@ function buildUI({ initCfg }) {
   fixPane.appendChild(fixArea);
 
   // ── Assemble ─────────────────────────────────────────────────────────────────
+  main.appendChild(chatPane);
   main.appendChild(promptPane);
   main.appendChild(logPane);
   main.appendChild(filesPane);

@@ -13,7 +13,10 @@
  *   • URL input
  *   • Name prefix
  *   • Notes: drag-and-drop files OR paste plain text
- *   • Prompt textarea + Generate button
+ *   • DOM Mode (DOM + LLM): prompt textarea + Generate button — scrapes the live
+ *     page first, then the LLM designs the full scenario breadth from real elements
+ *     (same pipeline as ai-cli.js's /dom command; distinct from the recorder's
+ *     zero-LLM DOM Mode, which only emits exactly what you describe)
  *   • Scrape button
  *   • Fix feature: drag-and-drop .feature file + optional error text
  *   • Live output log + generated file list
@@ -424,8 +427,8 @@ function buildUI({ initCfg }) {
 
   const sideHeader = div('sidebar-header');
   sideHeader.innerHTML = `
-    <div class="sidebar-title">🤖 AI Scenario UI</div>
-    <div class="sidebar-sub">GitHub Copilot CLI backend · all settings saved automatically</div>
+    <div class="sidebar-title">🤖 AI Scenario UI — DOM Mode (DOM + LLM)</div>
+    <div class="sidebar-sub">Scrapes the live page's real elements first, then the LLM designs the full scenario breadth using ONLY those elements · GitHub Copilot CLI backend · all settings saved automatically</div>
   `;
   sidebar.appendChild(sideHeader);
 
@@ -650,7 +653,7 @@ function buildUI({ initCfg }) {
     tabBar.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
     main.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + id));
   }
-  tabBar.appendChild(makeTab('prompt', '✏️ Prompt'));
+  tabBar.appendChild(makeTab('prompt', '🔍 DOM Mode (DOM + LLM)'));
   tabBar.appendChild(makeTab('log',    '📟 Output log'));
   tabBar.appendChild(makeTab('files',  '📁 Generated files'));
   tabBar.appendChild(makeTab('fix',    '🔧 Fix feature'));
@@ -662,12 +665,23 @@ function buildUI({ initCfg }) {
 
   // Prompt pane: textarea grows, Generate bar is always pinned at bottom
   const promptArea = div('prompt-area');
+  const domModeBanner = div('field');
+  domModeBanner.innerHTML = `
+    <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:10px;padding:10px 12px;font-size:11.5px;color:#a5b4fc;line-height:1.6;">
+      <strong>🔍 DOM Mode — DOM + LLM.</strong> Scrapes the live page's real interactive
+      elements and xpaths first, then asks the LLM to design the full scenario breadth
+      (happy path, negative, boundary, validation, security, etc.) using ONLY those
+      real elements — no invented selectors. This is different from the recorder's
+      zero-LLM DOM Mode, which only generates exactly what you literally describe.
+    </div>
+  `;
+  promptArea.appendChild(domModeBanner);
   const promptInput = el('textarea', { id:'prompt-input', placeholder:'Describe what you want to test…\n\ne.g.  test the login flow including wrong password and locked account\n      cover all eligibility quiz scenarios and edge cases' });
   promptArea.appendChild(promptInput);
 
   const genSpinner = div('spinner');
   genSpinner.style.display = 'none';
-  const genBtn = el('button', { class:'btn btn-primary' }, '⚡ Generate');
+  const genBtn = el('button', { class:'btn btn-primary' }, '🔍 Generate (DOM + LLM)');
 
   genBtn.addEventListener('click', async () => {
     const prompt = promptInput.value.trim();

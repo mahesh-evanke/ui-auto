@@ -22,6 +22,7 @@
  *    /fix <feature>       replay a feature live + auto-correct steps and yaml
  *    /show                show current config
  *    /scrape              re-scrape the current URL and list found elements
+ *    /dom <goal>          DOM-grounded generation (named alias for the default flow)
  *    /config /clear /help /exit
  *
  *  Anything else you type is treated as a generation prompt.
@@ -115,7 +116,15 @@ function notesBlock() {
 //                      - //*[@id='B-month']
 //   'perpage'  — one <pageKey>.yaml file per page (legacy format)
 const DEFAULT_CONFIG = {
-  copilot: 'copilot -p {prompt} --allow-all-tools',  // adjust to match your CLI; verify with /testllm
+  // NOTE: --allow-all-tools only AUTO-APPROVES tool calls, it does not stop the CLI
+  // from attempting them — with piped stdio there's no one to approve/deny anyway,
+  // so a tool-enabled backend can end up writing files to paths it invents itself,
+  // or (without --allow-all-tools) failing every attempt and returning its own
+  // tool-call transcript as "output". The real fix is the "do not use tools"
+  // instruction baked into every prompt this script sends, backed by
+  // looksLikeAgentTranscript() rejecting transcript-shaped output outright.
+  // Adjust this to match your CLI; verify with /testllm.
+  copilot: 'copilot -p {prompt}',
   url: '',
   fileName: '',
   mode: 'gherkin',
@@ -443,6 +452,9 @@ function systemPrompt() {
     '- Each scenario is independent; list only the action/verify steps (do NOT include',
     '  the navigate or "User is on" lines — those are added automatically).',
     '- Respond with STRICT JSON only (no markdown, no prose).',
+    '- Do NOT create, write, or edit any files yourself, and do NOT run shell commands',
+    '  or use any tools. This is a plain text-completion request — reply with the JSON',
+    '  directly in your message.',
     '',
     'Think like an experienced manual + automation tester. Do NOT just write the happy',
     'path. For the given page/requirements, systematically enumerate test conditions:',
@@ -530,6 +542,25 @@ function autoCloseJson(t) {
   return out;
 }
 
+// Detects when the Copilot CLI backend went agentic and tried to create/edit
+// files itself (its own tool-call transcript) instead of returning plain
+// text/code for this script to write. Requires BOTH multiple transcript
+// markers AND the absence of a real Playwright test body, so legitimate code
+// that happens to mention e.g. "Permission denied" in a string isn't rejected.
+function looksLikeAgentTranscript(text) {
+  const t = String(text || '');
+  const markers = [
+    /^\s*[✗✓●]\s/m,
+    /Permission denied/i,
+    /Parent directory does not exist/i,
+    /could not request permission/i,
+    /^\s*Let me /m,
+  ];
+  const markerHits = markers.filter((re) => re.test(t)).length;
+  const hasRealSpecCode = /import\s*\{[^}]*\}\s*from\s*['"]@playwright\/test['"]/.test(t) && /\btest\(/.test(t);
+  return markerHits >= 2 && !hasRealSpecCode;
+}
+
 function parseLlmJson(raw) {
   let t = stripFences(raw);
   const first = t.indexOf('{');
@@ -552,6 +583,13 @@ function parseLlmJson(raw) {
 // Call the model and parse JSON, with one repair retry on malformed output.
 async function chatJson(cfg, messages) {
   const raw = await chatLLM(cfg, messages);
+  if (looksLikeAgentTranscript(raw)) {
+    throw new Error(
+      'Copilot CLI went agentic and returned its own tool-call transcript instead of ' +
+      'JSON. Check your /copilot command for a flag that fully disables tool use. ' +
+      'Raw output (truncated):\n' + String(raw).slice(0, 500),
+    );
+  }
   try { return parseLlmJson(raw); }
   catch (e) {
     const retry = messages.concat([
@@ -987,12 +1025,25 @@ async function generateSpecTs(cfg, featureName, url, scenarios, elementsByPage, 
     '    "verify X text is present"      → await expect(page.getByText("X")).toBeVisible()',
     '- Add `{ timeout: 10000 }` to each locator action.',
     '- No comments, no extra imports, no markdown fences.',
+    'IMPORTANT: Do NOT create, write, or edit any files yourself. Do NOT run any',
+    'shell commands or use any tools. This is a plain text-completion request —',
+    'reply with the file content directly in your message, nothing else.',
     'Return ONLY the TypeScript file content, nothing else.',
   ].join('\n');
 
   const raw = await chatLLM(cfg, [{ role: 'user', content: prompt }]);
   // Strip markdown fences if the LLM wrapped the output.
   const content = String(raw).replace(/^```(?:typescript|ts)?\n?/i, '').replace(/\n?```\s*$/, '').trim() + '\n';
+
+  if (looksLikeAgentTranscript(content)) {
+    throw new Error(
+      'Copilot CLI went agentic and tried to create/edit files itself instead of ' +
+      'returning code (its tool-call transcript was captured instead of text). ' +
+      'Check your /copilot command for a flag that fully disables tool use ' +
+      '(not just auto-approves it) — auto-approve flags like --allow-all-tools do ' +
+      'not prevent this. Raw output (truncated):\n' + content.slice(0, 500),
+    );
+  }
 
   fs.mkdirSync(SPEC_DIR, { recursive: true });
   const name = (specName || 'generated').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -1321,7 +1372,9 @@ function showHelp() {
   log(`
 ${c.bold}AI Scenario CLI — commands  (backend: GitHub Copilot CLI)${c.reset}
   ${c.cyan}/copilot <command>${c.reset}  set the Copilot CLI command template (use {prompt}); e.g.
-                     /copilot copilot -p {prompt} --allow-all-tools
+                     /copilot copilot -p {prompt}
+                     (avoid tool-approval flags like --allow-all-tools — this script
+                      needs plain text/JSON back, not a CLI that edits files itself)
   ${c.cyan}/testllm${c.reset}           run a tiny prompt to verify the Copilot backend works
   ${c.cyan}/mode gherkin|spec|both${c.reset}
                      gherkin — generate .feature + locators yaml (default)
@@ -1342,6 +1395,9 @@ ${c.bold}AI Scenario CLI — commands  (backend: GitHub Copilot CLI)${c.reset}
   ${c.cyan}/fix <feature> [error]${c.reset}  replay a feature live, then auto-correct its steps + yaml
   ${c.cyan}/show${c.reset}              show current config
   ${c.cyan}/scrape${c.reset}           re-scrape the URL and list found elements
+  ${c.cyan}/dom <goal>${c.reset}        DOM-grounded generation (same as typing a prompt directly —
+                     scrapes real elements first, then designs the full scenario
+                     breadth using ONLY those elements; named for discoverability)
   ${c.cyan}/config${c.reset}            how to set the Copilot command
   ${c.cyan}/clear${c.reset}            clear the screen   ·   ${c.cyan}/help${c.reset}  this help   ·   ${c.cyan}/exit${c.reset}  leave
 
@@ -1350,7 +1406,8 @@ ${c.dim}Typical flow:
   /mode gherkin                              (or: spec / both)
   /url https://app.com/quiz
   /notes ./requirements/quiz-rules.docx
-  test every answer combination and the validation messages${c.reset}
+  test every answer combination and the validation messages
+  (or the same thing explicitly: /dom test every answer combination and the validation messages)${c.reset}
 `);
 }
 
@@ -1370,8 +1427,11 @@ ${c.bold}Current config${c.reset}
 function printConfigGuide(cfg) {
   showConfig(cfg);
   log(`${c.dim}  The LLM backend is the GitHub Copilot CLI. Set the command template with:
-    /copilot copilot -p {prompt} --allow-all-tools
+    /copilot copilot -p {prompt}
   Use {prompt} where the prompt text goes (omit it to pipe via stdin).
+  Avoid tool-approval flags (e.g. --allow-all-tools) — every prompt this script
+  sends already instructs the backend not to use tools; a tool-enabled backend
+  can still try to create/edit files itself and its transcript will be rejected.
   Verify it works with:  /testllm${c.reset}
 `);
 }
@@ -1506,6 +1566,17 @@ async function main() {
             ok(`  ✓ ${s.elements.length} element(s) on "${s.title}":`);
             s.elements.forEach((e) => log(`     ${c.dim}[${e.kind}]${c.reset} ${e.name}`));
           } catch (e) { err(`  Scrape failed: ${e.message}`); }
+          return true;
+        }
+        case '/dom': {
+          // Explicit, named entry point for DOM-grounded generation — the exact
+          // same pipeline as typing a plain prompt (scrape real elements first,
+          // then have the LLM design the full scenario breadth using ONLY those
+          // elements), kept as an alias so it's discoverable and matches the
+          // terminology used by the recorder's DOM Mode.
+          if (!arg) { warn('  Usage: /dom <describe what to test, in plain English>'); return true; }
+          try { await generate(cfg, arg); }
+          catch (e) { err(`  Generation error: ${e.message}`); }
           return true;
         }
         case '/notes': {

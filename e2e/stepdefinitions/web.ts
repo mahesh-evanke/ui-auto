@@ -657,6 +657,32 @@ When('verify {string} is disabled', async function (this: AutomationWorld, eleme
   await expect(this.getLocator(element)).toBeDisabled({ timeout: 15000 });
 });
 
+// Same underlying named-locator lookup as "verify <name> is present" — these exist
+// so Gherkin reads naturally alongside "clicks on <name> button/Radio button".
+When('verify {string} button is present on the screen', async function (this: AutomationWorld, name: string) {
+  await expect(this.getLocator(name).first()).toBeVisible({ timeout: 15000 });
+});
+
+When('verify {string} button is not present on the screen', async function (this: AutomationWorld, name: string) {
+  await expect(this.getLocator(name).first()).not.toBeVisible({ timeout: 5000 });
+});
+
+When('verify {string} Radio button is present on the screen', async function (this: AutomationWorld, name: string) {
+  await expect(this.getLocator(name).first()).toBeVisible({ timeout: 15000 });
+});
+
+When('verify {string} Radio button is not present on the screen', async function (this: AutomationWorld, name: string) {
+  await expect(this.getLocator(name).first()).not.toBeVisible({ timeout: 5000 });
+});
+
+When('verify {string} Radio button is selected', async function (this: AutomationWorld, name: string) {
+  await expect(this.getLocator(name)).toBeChecked({ timeout: 15000 });
+});
+
+When('verify {string} Radio button is not selected', async function (this: AutomationWorld, name: string) {
+  await expect(this.getLocator(name)).not.toBeChecked({ timeout: 15000 });
+});
+
 When('verify {string} text is present on the screen', async function (this: AutomationWorld, text: string) {
   await verifyTextOnScreen(this.page!, text, { strict: false });
 });

@@ -375,7 +375,11 @@ function scrapeBrowserSide() {
     const key = kind + '::' + name;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ name, kind, xpath: uniqueXPath(el) });
+    const row = { name, kind, xpath: uniqueXPath(el) };
+    // Capture the destination for links so scenarios can verify "points to" /
+    // "redirects to" without guessing the URL.
+    if (kind === 'link') row.href = el.getAttribute('href') || '';
+    out.push(row);
   };
 
   // Custom controls FIRST so quiz options (data-test radios, ARIA radios, option
@@ -445,10 +449,25 @@ function systemPrompt() {
     '  When selects "<value>" text from "<name>" Drop-down list',
     '  When verify "<text>" text is present on the screen',
     '  When verify "<name>" web table contains',
+    '  When verify "<name>" is present on the screen',
+    '  When verify "<name>" is not present on the screen',
+    '  When verify "<name>" link is present on the screen',
+    '  When verify "<name>" link is not present on the screen',
+    '  When verify "<name>" link points to "<url>"',
+    '  When verify "<name>" link redirects to "<url>"',
+    '  When verify "<value>" is present in "<name>" Drop-down list',
+    '  When verify "<value>" is not present in "<name>" Drop-down list',
+    '  When verify "<name>" Checkbox is checked',
+    '  When verify "<name>" Checkbox is not checked',
+    '  When verify "<name>" is enabled',
+    '  When verify "<name>" is disabled',
     '',
     'Hard rules:',
     '- "<name>" must be an element name taken EXACTLY from the provided element list.',
     '- Do NOT invent element names that are not in the list.',
+    '- For "link points to"/"link redirects to" steps, "<url>" must be the exact href',
+    '  shown after "->" for that link in the element list. Only use these steps for',
+    '  links that have a visible href. Do NOT guess a URL.',
     '- Each scenario is independent; list only the action/verify steps (do NOT include',
     '  the navigate or "User is on" lines — those are added automatically).',
     '- Respond with STRICT JSON only (no markdown, no prose).',
@@ -495,7 +514,7 @@ function systemPrompt() {
 
 function userPrompt(url, prompt, scraped) {
   const els = scraped.elements
-    .map((e, i) => `${i + 1}. [${e.kind}] "${e.name}"`)
+    .map((e, i) => `${i + 1}. [${e.kind}] "${e.name}"${e.kind === 'link' && e.href ? ` -> ${e.href}` : ''}`)
     .join('\n');
   return [
     `Target URL: ${url}`,

@@ -157,6 +157,49 @@ async function selectFromDropdown(scope: Page | Frame, loc: Locator, element: st
   throw new Error(`Could not select "${value}" from dropdown "${element}" (no matching option found).`);
 }
 
+// Checks whether a dropdown (native <select> or custom widget) contains an option
+// with the given text, WITHOUT selecting it. Custom dropdowns get opened to check,
+// then closed back via Escape so nothing is left selected.
+async function dropdownHasOption(scope: Page | Frame, loc: Locator, value: string): Promise<boolean> {
+  const tag = await loc.evaluate((el) => el.tagName.toLowerCase()).catch(() => '');
+
+  // ── Native <select> ────────────────────────────────────────────────────────
+  if (tag === 'select') {
+    const labels = await loc.locator('option').allInnerTexts().catch(() => [] as string[]);
+    return labels.some((l) => normalizeWs(l).toLowerCase() === value.toLowerCase());
+  }
+
+  // ── Custom dropdown ────────────────────────────────────────────────────────
+  const page = scope;
+  await robustClick(loc);
+  const panelSelectors = '[role="listbox"], [role="menu"], .p-dropdown-panel, .p-multiselect-panel, .ant-select-dropdown, [class*="dropdown-panel"], [class*="select__menu"], [class*="MuiMenu"]';
+  await page.locator(panelSelectors).first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+
+  const exact = escapeRegExp(value);
+  const optionLocators: Locator[] = [
+    page.getByRole('option', { name: value, exact: true }),
+    page.getByRole('menuitem', { name: value, exact: true }),
+    page.locator('[role="option"], [role="menuitem"]').filter({ hasText: new RegExp(`^\\s*${exact}\\s*$`) }),
+    page.locator('.p-dropdown-item, .p-multiselect-item, li.p-dropdown-item').filter({ hasText: new RegExp(`^\\s*${exact}\\s*$`) }),
+    page.locator('.ant-select-item-option, .MuiMenuItem-root').filter({ hasText: new RegExp(`^\\s*${exact}\\s*$`) }),
+    page.locator('li, [class*="option"], [class*="item"]').filter({ hasText: new RegExp(`^\\s*${exact}\\s*$`) }),
+  ];
+
+  let found = false;
+  const deadline = Date.now() + 4000;
+  while (Date.now() < deadline && !found) {
+    for (const opt of optionLocators) {
+      if (await opt.first().count().catch(() => 0)) { found = true; break; }
+    }
+    if (!found) await page.waitForTimeout(200);
+  }
+
+  // Close the panel back up without selecting anything. Frame has no .keyboard,
+  // but every Locator can resolve its owning Page, which always does.
+  await loc.page().keyboard.press('Escape').catch(() => {});
+  return found;
+}
+
 async function setFieldFromValue(world: AutomationWorld, fieldName: string, raw: string): Promise<void> {
   const v0 = String(raw ?? '').trim();
   if (!v0 || v0.toLowerCase() === 'blank') return;
@@ -534,6 +577,84 @@ When('selects {string} from {string} Drop-down list', async function (this: Auto
   for (const v of values) {
     await selectFromDropdown(scope, loc, element, v);
   }
+});
+
+When('verify {string} is present in {string} Drop-down list', async function (this: AutomationWorld, value: string, element: string) {
+  const { loc, scope } = await this.resolveAcrossFrames(element);
+  await expect(loc).toBeVisible({ timeout: 15000 });
+  const has = await dropdownHasOption(scope, loc, value);
+  expect(has, `Expected "${value}" to be present in "${element}" Drop-down list`).toBe(true);
+});
+
+When('verify {string} is not present in {string} Drop-down list', async function (this: AutomationWorld, value: string, element: string) {
+  const { loc, scope } = await this.resolveAcrossFrames(element);
+  await expect(loc).toBeVisible({ timeout: 15000 });
+  const has = await dropdownHasOption(scope, loc, value);
+  expect(has, `Expected "${value}" to NOT be present in "${element}" Drop-down list`).toBe(false);
+});
+
+When('verify {string} is present on the screen', async function (this: AutomationWorld, name: string) {
+  await expect(this.getLocator(name).first()).toBeVisible({ timeout: 15000 });
+});
+
+When('verify {string} is not present on the screen', async function (this: AutomationWorld, name: string) {
+  await expect(this.getLocator(name).first()).not.toBeVisible({ timeout: 5000 });
+});
+
+When('verify {string} link is present on the screen', async function (this: AutomationWorld, name: string) {
+  const loc = this.page!.getByRole('link', { name: new RegExp(escapeRegExp(name.trim()), 'i') }).first();
+  await expect(loc).toBeVisible({ timeout: 15000 });
+});
+
+When('verify {string} link is not present on the screen', async function (this: AutomationWorld, name: string) {
+  const loc = this.page!.getByRole('link', { name: new RegExp(escapeRegExp(name.trim()), 'i') }).first();
+  await expect(loc).not.toBeVisible({ timeout: 5000 });
+});
+
+// Fast, side-effect-free check: does the link's href attribute point at the
+// expected URL? Does NOT navigate — use "redirects to" below to actually click
+// through and verify the browser lands on the expected page.
+When('verify {string} link points to {string}', async function (this: AutomationWorld, name: string, expectedUrl: string) {
+  const loc = this.page!.getByRole('link', { name: new RegExp(escapeRegExp(name.trim()), 'i') }).first();
+  await expect(loc).toBeVisible({ timeout: 15000 });
+  const href = await loc.getAttribute('href');
+  expect(href || '', `Expected "${name}" link's href to contain "${expectedUrl}"`).toContain(expectedUrl);
+});
+
+// Behavioral check: clicks the link and verifies where the browser actually ends
+// up — handles both same-tab navigation and target="_blank" popups.
+When('verify {string} link redirects to {string}', async function (this: AutomationWorld, name: string, expectedUrl: string) {
+  const loc = this.page!.getByRole('link', { name: new RegExp(escapeRegExp(name.trim()), 'i') }).first();
+  await expect(loc).toBeVisible({ timeout: 15000 });
+
+  const popupPromise = this.page!.waitForEvent('popup', { timeout: 3000 }).catch(() => null);
+  await loc.click();
+
+  const popup = await popupPromise;
+  if (popup) {
+    await popup.waitForLoadState('domcontentloaded').catch(() => {});
+    expect(popup.url(), `Expected "${name}" link to open a popup at "${expectedUrl}"`).toContain(expectedUrl);
+    await popup.close();
+  } else {
+    await this.page!.waitForURL((url) => url.toString().includes(expectedUrl), { timeout: 15000 });
+    expect(this.page!.url(), `Expected "${name}" link to redirect to "${expectedUrl}"`).toContain(expectedUrl);
+  }
+});
+
+When('verify {string} Checkbox is checked', async function (this: AutomationWorld, element: string) {
+  await expect(this.getLocator(element)).toBeChecked({ timeout: 15000 });
+});
+
+When('verify {string} Checkbox is not checked', async function (this: AutomationWorld, element: string) {
+  await expect(this.getLocator(element)).not.toBeChecked({ timeout: 15000 });
+});
+
+When('verify {string} is enabled', async function (this: AutomationWorld, element: string) {
+  await expect(this.getLocator(element)).toBeEnabled({ timeout: 15000 });
+});
+
+When('verify {string} is disabled', async function (this: AutomationWorld, element: string) {
+  await expect(this.getLocator(element)).toBeDisabled({ timeout: 15000 });
 });
 
 When('verify {string} text is present on the screen', async function (this: AutomationWorld, text: string) {

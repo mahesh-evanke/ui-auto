@@ -714,6 +714,7 @@ When('verify information from {string} webtable', async function (this: Automati
 });
 
 When('Verify field {string} text is {string}', async function (this: AutomationWorld, field: string, value: string) {
+  if (value.includes('<CURRENT_DATE')) value = resolveDynamicTokens(value);
   const loc = this.getLocator(field);
   await expect(loc).toBeVisible({ timeout: 15000 });
   const tagName = await loc.evaluate((el: Element) => el.tagName.toLowerCase());

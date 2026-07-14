@@ -398,24 +398,11 @@ function normalizeLoose(s: string): string {
 }
 
 function resolveExpectedCellRaw(raw: string, now: Date): string {
-  let out = String(raw ?? '');
-  out = out.replace(/<CURRENT_DATE\s*\+\s*([0-9]+)\s*>/gi, (_m, nRaw) => {
-    const n = Number(nRaw);
-    const d = new Date(now);
-    d.setDate(d.getDate() + (Number.isFinite(n) ? n : 0));
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const yyyy = d.getFullYear();
-    return `${mm}/${dd}/${yyyy}`;
-  });
-  if (/<CURRENT_DATE>/i.test(out)) {
-    const d = new Date(now);
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const yyyy = d.getFullYear();
-    out = out.replace(/<CURRENT_DATE>/gi, `${mm}/${dd}/${yyyy}`);
-  }
-  return out;
+  // Delegates to the shared resolver (supports <CURRENT_DATE,1Y,-1M,7D>:dd/mm/yyyy
+  // etc.) but keeps this call site's own historical default format (mm/dd/yyyy)
+  // for bare <CURRENT_DATE>/<CURRENT_DATE+N> tokens, so existing table
+  // expectations that rely on that default keep matching unchanged.
+  return resolveDynamicTokens(String(raw ?? ''), now, 'mm/dd/yyyy');
 }
 
 function cellTextMatches(actualRaw: string, expectedRaw: string, now: Date): boolean {

@@ -624,9 +624,16 @@ export const config: any = {
     cucumberOpts: {
         retry: 0,
         // <string[]> (file/dir) require files before executing features
-        require: [
-            './e2e/stepdefinitions/**/*.ts'
-        ],
+        //
+        // NOT a glob pattern - @wdio/cucumber-framework's loadFilesWithType() converts
+        // each `require` entry to a file:// URL via url.pathToFileURL() on Windows
+        // BEFORE checking isGlob()/calling glob.sync() on it. A file:// URL never
+        // matches as a glob, so glob.sync() silently returns zero files and NOT ONE
+        // step definition ever loads - cucumber then reports every single step as
+        // "not defined" (not just missing ones), with no error anywhere. Expanding
+        // the glob ourselves into concrete file paths sidesteps that broken path
+        // entirely, since non-glob entries are used as-is.
+        require: glob.sync('./e2e/stepdefinitions/**/*.ts'),
         // <boolean> show full backtrace for errors
         backtrace: false,
         // <string[]> ("extension:module") require files with the given EXTENSION after requiring MODULE (repeatable)
@@ -670,9 +677,15 @@ export const config: any = {
      * @param {Object} config wdio configuration object
      * @param {Array.<Object>} capabilities list of capabilities details
      */
-    onPrepare: function (config, capabilities) {
+    onPrepare: async function (config, capabilities) {
         removeSync(reportFolder);
         startTime = new Date();
+        // Was defined but never called - features referencing
+        // http://127.0.0.1:5500/e2e/support/sample-form.html (e.g.
+        // Sample_Form_Verify_Field.feature, Web_Actions_Step_Verification.feature)
+        // would get ERR_CONNECTION_REFUSED since nothing was ever listening on
+        // that port. Runs once in the launcher process, before workers spawn.
+        await startSampleFormStaticServer();
     },
     /**
      * Gets executed before a worker process is spawned and can be used to initialise specific service

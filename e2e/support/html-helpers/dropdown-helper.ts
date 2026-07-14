@@ -69,6 +69,41 @@ async function selectFromCustomDropdownTrigger(element: WebdriverIO.Element, opt
     await option.click();
 }
 
+/**
+ * Checks whether a native <select> contains an option with the given visible text,
+ * without selecting it.
+ */
+async function nativeSelectHasOption(element: WebdriverIO.Element, optionVal: string): Promise<boolean> {
+    const opts = await element.$$('option');
+    for (const opt of opts) {
+        const text = (await opt.getText() || '').trim();
+        if (text === optionVal || text.includes(optionVal)) return true;
+    }
+    return false;
+}
+
+/** Checks a list container (ul/ol/[role=listbox]) for a matching option, without clicking it. */
+async function listContainerHasOption(element: WebdriverIO.Element, optionVal: string, timeoutMs: number): Promise<boolean> {
+    const escaped = escapeXPathString(optionVal);
+    const xpath = `.//*[self::li or self::option or @role="option"][normalize-space(.)='${escaped}' or contains(normalize-space(.), '${escaped}')]`;
+    const option = element.$(xpath);
+    return await option.waitForDisplayed({ timeout: timeoutMs, reverse: false }).then(() => true).catch(() => false);
+}
+
+/** Opens a custom dropdown trigger, checks for a matching option, then closes it back up. */
+async function customDropdownTriggerHasOption(element: WebdriverIO.Element, optionVal: string, timeoutMs: number): Promise<boolean> {
+    await element.waitForDisplayed({ timeout: timeoutMs });
+    await element.click();
+    await browser.pause(500);
+    const escaped = escapeXPathString(optionVal);
+    const xpath = `//*[self::li or self::option or @role="option"][normalize-space(.)='${escaped}' or contains(normalize-space(.), '${escaped}')]`;
+    const option = browser.$(xpath);
+    const found = await option.waitForDisplayed({ timeout: timeoutMs, reverse: false }).then(() => true).catch(() => false);
+    // Close the panel back up without selecting anything.
+    await browser.keys('Escape').catch(() => {});
+    return found;
+}
+
 export class DropDownHelper {
     static selectOptionByVal(locator: WebdriverIO.Element, optionVal: string): void {
         locator.$(this.getCssForOptionValue(optionVal)).click();
@@ -108,6 +143,31 @@ export class DropDownHelper {
         }
 
         await selectFromCustomDropdownTrigger(locator, optionVal, optionWaitTimeoutMs);
+    }
+
+    /**
+     * Checks whether the dropdown contains an option with the given visible text,
+     * WITHOUT selecting it. Mirrors selectOptionByText's native/list/custom-trigger
+     * branching; custom dropdowns get opened to check, then closed back via Escape.
+     */
+    static async hasOption(
+        locator: WebdriverIO.Element,
+        optionVal: string,
+        optionWaitTimeoutMs: number = DEFAULT_OPTION_WAIT_MS
+    ): Promise<boolean> {
+        await locator.waitForDisplayed({ timeout: optionWaitTimeoutMs, reverse: false });
+        const tagName = (await locator.getTagName() || '').toLowerCase();
+        const role = (await locator.getAttribute('role') || '').toLowerCase();
+
+        if (tagName === 'select') {
+            return await nativeSelectHasOption(locator, optionVal);
+        }
+
+        if (tagName === 'ul' || tagName === 'ol' || role === 'listbox') {
+            return await listContainerHasOption(locator, optionVal, optionWaitTimeoutMs);
+        }
+
+        return await customDropdownTriggerHasOption(locator, optionVal, optionWaitTimeoutMs);
     }
 
     static async selectDropdownByNumber(element: WebdriverIO.Element, index: number): Promise<void> {

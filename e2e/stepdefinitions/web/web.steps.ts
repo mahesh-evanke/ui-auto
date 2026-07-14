@@ -395,6 +395,153 @@ When('clicks on {string} Radio button', async (objName: string) => {
     await PageConfigHelper.safeSwitchToParentFrame();
 });
 
+// ── Presence/state verification steps ──────────────────────────────────────────
+// findElement() throws if the name has no registered locator at all (not just "0
+// matches on the page") - the "not present" steps below treat that as confirmed
+// absence too, since there's nothing that could be on screen.
+
+When('verify {string} is present on the screen', async (name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    assert.equal(await ElementHelper.isElementDisplayed(element), true, `Expected "${name}" to be present on the screen`);
+});
+
+When('verify {string} is not present on the screen', async (name: string) => {
+    try {
+        const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+        const displayed = await element.isDisplayed().catch(() => false);
+        assert.equal(displayed, false, `Expected "${name}" to NOT be present, but it is displayed`);
+    } catch {
+        // Name not registered in the locator JSON -> confirmed absent.
+    }
+});
+
+When('verify {string} link is present on the screen', async (name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    assert.equal(await ElementHelper.isElementDisplayed(element), true, `Expected "${name}" link to be present on the screen`);
+});
+
+When('verify {string} link is not present on the screen', async (name: string) => {
+    try {
+        const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+        const displayed = await element.isDisplayed().catch(() => false);
+        assert.equal(displayed, false, `Expected "${name}" link to NOT be present, but it is displayed`);
+    } catch {
+        // Name not registered in the locator JSON -> confirmed absent.
+    }
+});
+
+// Fast, side-effect-free check: does the link's href attribute point at the
+// expected URL? Does NOT navigate - use "redirects to" below to actually click
+// through and verify the browser lands on the expected page.
+When('verify {string} link points to {string}', async (name: string, expectedUrl: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    await element.waitForDisplayed({ timeout: 15000 });
+    const href = await ElementHelper.getAttribute(element, 'href');
+    assert.include(href || '', expectedUrl, `Expected "${name}" link's href to contain "${expectedUrl}"`);
+});
+
+// Behavioral check: clicks the link and verifies where the browser actually ends
+// up - handles both same-tab navigation and target="_blank" popups/new windows.
+When('verify {string} link redirects to {string}', async (name: string, expectedUrl: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    await element.waitForDisplayed({ timeout: 15000 });
+
+    const originalHandles = await browser.getWindowHandles();
+    await ElementHelper.click(element);
+    await browser.pause(500);
+    const newHandles = await browser.getWindowHandles();
+    const openedHandle = newHandles.find((h) => !originalHandles.includes(h));
+
+    if (openedHandle) {
+        await browser.switchToWindow(openedHandle);
+        await browser.waitUntil(async () => (await browser.getUrl()).includes(expectedUrl), {
+            timeout: 15000,
+            timeoutMsg: `Expected new window opened by "${name}" link to navigate to "${expectedUrl}"`,
+        });
+        assert.include(await browser.getUrl(), expectedUrl);
+        await browser.closeWindow();
+        await browser.switchToWindow(originalHandles[0]);
+    } else {
+        await browser.waitUntil(async () => (await browser.getUrl()).includes(expectedUrl), {
+            timeout: 15000,
+            timeoutMsg: `Expected "${name}" link to redirect to "${expectedUrl}"`,
+        });
+        assert.include(await browser.getUrl(), expectedUrl);
+    }
+});
+
+When('verify {string} is present in {string} Drop-down list', async (value: string, name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    const has = await DropDownHelper.hasOption(element, value);
+    assert.equal(has, true, `Expected "${value}" to be present in "${name}" Drop-down list`);
+});
+
+When('verify {string} is not present in {string} Drop-down list', async (value: string, name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    const has = await DropDownHelper.hasOption(element, value);
+    assert.equal(has, false, `Expected "${value}" to NOT be present in "${name}" Drop-down list`);
+});
+
+When('verify {string} Checkbox is checked', async (name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    assert.equal(await ElementHelper.isElementSelected(element), true, `Expected "${name}" Checkbox to be checked`);
+});
+
+When('verify {string} Checkbox is not checked', async (name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    assert.equal(await ElementHelper.isElementSelected(element), false, `Expected "${name}" Checkbox to NOT be checked`);
+});
+
+When('verify {string} is enabled', async (name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    assert.equal(await ElementHelper.isElementEnabled(element), true, `Expected "${name}" to be enabled`);
+});
+
+When('verify {string} is disabled', async (name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    assert.equal(await ElementHelper.isElementEnabled(element), false, `Expected "${name}" to be disabled`);
+});
+
+When('verify {string} button is present on the screen', async (name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    assert.equal(await ElementHelper.isElementDisplayed(element), true, `Expected "${name}" button to be present on the screen`);
+});
+
+When('verify {string} button is not present on the screen', async (name: string) => {
+    try {
+        const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+        const displayed = await element.isDisplayed().catch(() => false);
+        assert.equal(displayed, false, `Expected "${name}" button to NOT be present, but it is displayed`);
+    } catch {
+        // Name not registered in the locator JSON -> confirmed absent.
+    }
+});
+
+When('verify {string} Radio button is present on the screen', async (name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    assert.equal(await ElementHelper.isElementDisplayed(element), true, `Expected "${name}" Radio button to be present on the screen`);
+});
+
+When('verify {string} Radio button is not present on the screen', async (name: string) => {
+    try {
+        const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+        const displayed = await element.isDisplayed().catch(() => false);
+        assert.equal(displayed, false, `Expected "${name}" Radio button to NOT be present, but it is displayed`);
+    } catch {
+        // Name not registered in the locator JSON -> confirmed absent.
+    }
+});
+
+When('verify {string} Radio button is selected', async (name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    assert.equal(await ElementHelper.isElementSelected(element), true, `Expected "${name}" Radio button to be selected`);
+});
+
+When('verify {string} Radio button is not selected', async (name: string) => {
+    const element = await PageConfigHelper.findElement(name, false) as unknown as WebdriverIO.Element;
+    assert.equal(await ElementHelper.isElementSelected(element), false, `Expected "${name}" Radio button to NOT be selected`);
+});
+
 When('verify data from {string} web table', async (objName: string, table: DataTable) => {
     await browser.pause(250);
 

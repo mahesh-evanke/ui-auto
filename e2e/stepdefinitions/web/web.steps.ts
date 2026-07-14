@@ -14,7 +14,7 @@ import { EnrollResultsCalc } from '../appSpecific/EnrollResultsCalc';
 import { PDFManager } from '../../support/misc-utils/PDFManager';
 import { PSCHelper } from '../../support/misc-utils/PSCHelper';
 import { loadFrameworkConfig } from '../../../src/config/loadConfig';
-import { startNetworkCapture } from '../../support/networkCapture.js';
+import { startNetworkCapture } from '../../support/networkCapture';
 import * as fs from 'fs';
 import moment = require("moment");
 import { enrollCalc, pageVariables, enrollCalcOutput, setEnrollCalcOutput, syncDobToScenarioContext, resetEnrollCalc } from '../appSpecific/CCE_context';

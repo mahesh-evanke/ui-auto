@@ -4,5 +4,11 @@
       "title": "Misha House Billing",
       "label": "Misha House Billing"
     }
+  ],
+  "Sample Form": [
+    {
+      "title": "Sample Form - E2E Elements",
+      "label": "Sample Form - E2E Elements"
+    }
   ]
 }

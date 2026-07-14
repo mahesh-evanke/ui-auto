@@ -1,0 +1,13 @@
+{
+  "Page Heading": ["css", "#page-heading"],
+  "Office Code Label": ["css", "#office-code-label"],
+  "Order Amount": ["css", "#order-amount"],
+  "Order Total Label": ["css", "#order-total-label"],
+  "Locked Field": ["css", "#locked-field"],
+  "Region": ["css", "#region"],
+  "Agree": ["css", "#agree"],
+  "active": ["css", "#status-active"],
+  "Inactive": ["css", "#status-inactive"],
+  "Submit": ["css", "#submit-btn"],
+  "Help": ["css", "#help-link"]
+}

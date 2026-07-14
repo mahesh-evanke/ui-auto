@@ -630,7 +630,11 @@ export const config: any = {
         // <boolean> show full backtrace for errors
         backtrace: false,
         // <string[]> ("extension:module") require files with the given EXTENSION after requiring MODULE (repeatable)
-        requireModule: [],
+        // Without this, the .ts files in `require` above can never actually load -
+        // Node has no built-in TypeScript support, so every step silently fails to
+        // register (cucumber reports "step not defined" for everything, not just
+        // missing steps).
+        requireModule: ['ts-node/register'],
         // <boolean> invoke formatters without executing steps
         dryRun: false,
         // <boolean> abort the run on first failure

@@ -13,5 +13,12 @@
         "esModuleInterop": true,
         "skipLibCheck": true,
         "strict": false
+    },
+    // ts-node type-checks by default, which surfaces pre-existing type errors in
+    // files like PageHelper.ts that `tsc --noEmit -p tsconfig.json` doesn't catch
+    // the same way. transpileOnly matches the plain-tsc behavior used elsewhere in
+    // this project and unblocks step-definition loading at runtime.
+    "ts-node": {
+        "transpileOnly": true
     }
 }

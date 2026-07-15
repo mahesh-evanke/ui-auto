@@ -4,16 +4,61 @@
  * after "User is on" screen.
  */
 import {
-  Given,
-  When,
-  Then,
+  Given as CucumberGiven,
+  When as CucumberWhen,
+  Then as CucumberThen,
   setDefaultTimeout,
-  type DataTable,
+  DataTable,
 } from '@cucumber/cucumber';
 import { expect, type Locator, type Page, type Frame } from '@playwright/test';
 import { verifyTextOnScreen, resolveDynamicTokens } from '../support/textHelper';
 import { verifyWebTable, verifyWebTableDataFrom } from '../support/tableHelper';
 import type { AutomationWorld } from './world';
+
+/**
+ * Resolves <CURRENT_DATE,...>:format tokens in a single step argument. Strings
+ * are resolved directly; DataTable arguments are rebuilt cell-by-cell (raw() ->
+ * resolve -> new DataTable(...)) so table-driven steps get the same treatment
+ * without each step needing its own DataTable-walking code.
+ */
+function resolveStepArg(arg: unknown): unknown {
+  if (typeof arg === 'string') return resolveDynamicTokens(arg);
+  if (arg instanceof DataTable) {
+    return new DataTable(arg.raw().map((row) => row.map((cell) => resolveDynamicTokens(cell))));
+  }
+  return arg;
+}
+
+/**
+ * Wraps a step function so every string/DataTable argument is checked for
+ * <CURRENT_DATE,...>:format tokens and resolved BEFORE the step body runs -
+ * centralizing what used to be a per-step `if (x.includes('<CURRENT_DATE'))
+ * x = resolveDynamicTokens(x)` call that was easy to forget (and was in fact
+ * missing from one step until this was added). resolveDynamicTokens() is a
+ * no-op for strings that don't contain the token, so this is safe to run
+ * unconditionally on every argument of every step.
+ */
+function withDateTokenResolution<F extends (...args: any[]) => any>(fn: F): F {
+  const wrapped = function (this: unknown, ...args: unknown[]) {
+    return fn.apply(this, args.map(resolveStepArg));
+  } as F;
+  // Cucumber validates registered step functions against `fn.length` (the
+  // pattern's expected capture-group count). Rest-param wrappers report
+  // length 0 regardless of what they forward, which fails that check for
+  // every step - so the wrapper's arity is overridden to match the original.
+  Object.defineProperty(wrapped, 'length', { value: fn.length, configurable: true });
+  return wrapped;
+}
+
+function Given(pattern: string, fn: (...args: any[]) => any): void {
+  CucumberGiven(pattern, withDateTokenResolution(fn));
+}
+function When(pattern: string, fn: (...args: any[]) => any): void {
+  CucumberWhen(pattern, withDateTokenResolution(fn));
+}
+function Then(pattern: string, fn: (...args: any[]) => any): void {
+  CucumberThen(pattern, withDateTokenResolution(fn));
+}
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

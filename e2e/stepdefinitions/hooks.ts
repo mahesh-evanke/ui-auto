@@ -2,8 +2,8 @@
  * Cucumber hooks for Playwright UI + API capture/execution.
  */
 import '../support/config'; // load e2e/config/config.yaml into process.env before anything reads it
-import { After, Before, Status } from '@cucumber/cucumber';
-import type { ITestCaseHookParameter } from '@cucumber/cucumber';
+import { After, Before, BeforeStep, Status } from '@cucumber/cucumber';
+import type { ITestCaseHookParameter, ITestStepHookParameter } from '@cucumber/cucumber';
 import { chromium, request } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -67,6 +67,16 @@ Before(async function (this: AutomationWorld) {
     const cap = attachApiCapture(this.page, this.apiState.capturedApis);
     this.apiCaptureStop = cap.stop;
   }
+});
+
+// Checks each step's raw text for <CURRENT_DATE...> tokens before the step runs.
+// Actual token resolution happens in the Given/When/Then wrapper in stepdefinitions/web.ts —
+// BeforeStep only sees unparsed pickle text and cannot rewrite the arguments Cucumber
+// has already matched to the step function.
+BeforeStep(function (this: AutomationWorld, { pickleStep }: ITestStepHookParameter) {
+  if (/<CURRENT_DATE/i.test(pickleStep.text)) {
+    console.log(`[BeforeStep] date token detected in step: "${pickleStep.text}"`);
+  } 
 });
 
 After(async function (this: AutomationWorld, scenario: ITestCaseHookParameter) {

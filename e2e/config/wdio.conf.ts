@@ -772,12 +772,20 @@ export const config: any = {
     /**
      *
      * Runs before a Cucumber Step.
+     * Checks each step's raw text for <CURRENT_DATE...> tokens before the step
+     * runs. Detection only - WDIO's beforeStep only sees unparsed pickle text
+     * (step.text) and cannot rewrite the arguments Cucumber has already matched
+     * to the step function. Actual token resolution happens in the
+     * Given/When/Then wrapper in stepdefinitions/web/web.steps.ts.
      * @param {Pickle.IPickleStep} step     step data
      * @param {IPickle}            scenario scenario pickle
      * @param {Object}             context  Cucumber World object
      */
-    // beforeStep: function (step, scenario, context) {
-    // },
+    beforeStep: function (step: any, scenario: any, context: any) {
+        if (/<CURRENT_DATE/i.test(step.text || '')) {
+            console.log(`[beforeStep] date token detected in step: "${step.text}"`);
+        }
+    },
     /**
      *
      * Runs after a Cucumber Step.

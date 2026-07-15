@@ -1,6 +1,7 @@
 {
   "Page Heading": ["css", "#page-heading"],
   "Office Code Label": ["css", "#office-code-label"],
+  "Office Code": ["css", "#office-code"],
   "Order Amount": ["css", "#order-amount"],
   "Order Total Label": ["css", "#order-total-label"],
   "Locked Field": ["css", "#locked-field"],

@@ -4,8 +4,14 @@ import { ElementHelper } from "../../support/html-helpers/element-helper";
 import { TextboxHelper } from '../../support/html-helpers/textbox-helper';
 import { CheckboxHelper } from '../../support/html-helpers/checkbox-helper';
 import { WaitHelper } from '../../support/html-helpers/wait-helper';
-import { Given, Then, When, DataTable } from '@wdio/cucumber-framework';
+import {
+    Given as WdioGiven,
+    Then as WdioThen,
+    When as WdioWhen,
+    DataTable,
+} from '@wdio/cucumber-framework';
 import { TimeChanger } from '../../support/misc-utils/TimeChanger';
+import { resolveDynamicTokens } from '../../support/misc-utils/dateTokenResolver';
 import { StringManipulationHelper } from "../../support/misc-utils/string-manipulation-helper";
 import { ScenarioContext } from "../../support/misc-utils/ScenarioContext";
 import { invokeScreenLoadHandlers } from "../../support/misc-utils/ScreenLoadHandlers";
@@ -24,6 +30,46 @@ const chai = require('chai').use(require('chai-as-promised'));
 const expect = chai.expect;
 const assert = chai.assert;
 
+/**
+ * Resolves <CURRENT_DATE,...>:format tokens in a single step argument. Only
+ * touches CURRENT_DATE - existing DOB/FRA handling scattered through this file
+ * stays untouched since it needs scenario-specific dob values this can't see.
+ * Strings without the token pass through unchanged, so this is safe to run
+ * unconditionally on every argument of every step.
+ */
+function resolveStepArg(arg: unknown): unknown {
+    if (typeof arg === 'string') return resolveDynamicTokens(arg);
+    if (arg instanceof DataTable) {
+        return new DataTable(arg.raw().map((row) => row.map((cell) => resolveDynamicTokens(cell))));
+    }
+    return arg;
+}
+
+/**
+ * Wraps a step function so every string/DataTable argument is checked for
+ * <CURRENT_DATE,...>:format tokens and resolved BEFORE the step body runs.
+ */
+function withDateTokenResolution<F extends (...args: any[]) => any>(fn: F): F {
+    const wrapped = function (this: unknown, ...args: unknown[]) {
+        return fn.apply(this, args.map(resolveStepArg));
+    } as F;
+    // Cucumber validates registered step functions against `fn.length` (the
+    // pattern's expected capture-group count). Rest-param wrappers report
+    // length 0 regardless of what they forward, which fails that check for
+    // every step - so the wrapper's arity is overridden to match the original.
+    Object.defineProperty(wrapped, 'length', { value: fn.length, configurable: true });
+    return wrapped;
+}
+
+function Given(pattern: string, fn: (...args: any[]) => any): void {
+    WdioGiven(pattern, withDateTokenResolution(fn));
+}
+function When(pattern: string, fn: (...args: any[]) => any): void {
+    WdioWhen(pattern, withDateTokenResolution(fn));
+}
+function Then(pattern: string, fn: (...args: any[]) => any): void {
+    WdioThen(pattern, withDateTokenResolution(fn));
+}
 
 When('User are on scenare title {string}', async (title: string) => {
     console.log(title)
@@ -32,7 +78,13 @@ When('User are on scenare title {string}', async (title: string) => {
 When('Verify field {string} text is {string}', async (fieldName: string, expectedText: string) => {
     await PageConfigHelper.changeFrame();
     const element = await PageConfigHelper.findElement(fieldName, false) as unknown as WebdriverIO.Element;
-    let actualText: string = await element.getText();
+    // input/textarea content lives in .value, not .getText()'s rendered text
+    // content (which is empty for inputs) - matches the tagName-based branch
+    // already used in stepdefinitions/web.ts on the Playwright branch.
+    const tagName = await element.getTagName();
+    let actualText: string = (tagName === 'input' || tagName === 'textarea')
+        ? await element.getValue()
+        : await element.getText();
     actualText = StringManipulationHelper.removeSepecial(actualText);
     expectedText = StringManipulationHelper.removeSepecial(expectedText);
     assert.equal(actualText, expectedText, "Field " + fieldName + " is not expected.");

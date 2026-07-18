@@ -46,6 +46,47 @@ function xpathByText(text: string): string {
   return `//*[normalize-space(.)=${xlit(text)}]`;
 }
 
+function xpathByTestId(testId: string): string {
+  return `//*[@data-testid=${xlit(testId)}]`;
+}
+
+function xpathByAltText(alt: string): string {
+  return `//*[@alt=${xlit(alt)}]`;
+}
+
+function xpathByTitle(title: string): string {
+  return `//*[@title=${xlit(title)}]`;
+}
+
+// ── Semantic tuple helpers ──────────────────────────────────────────────────
+// Playwright's own codegen already tells us the exact strategy (getByRole/
+// getByLabel/getByPlaceholder/getByText) - no uniqueness-guessing needed like
+// the live recorders have to do. These preserve that strategy in the
+// [kind, value, xpathFallback] format world.ts reads, instead of converting
+// everything down to an xpath approximation and discarding the semantic
+// locator codegen already gave us for free.
+function roleTuple(role: string, name: string): [string, string, string] {
+  return [`role:${role}`, name, xpathByRole(role, name)];
+}
+function labelTuple(label: string): [string, string, string] {
+  return ['label', label, xpathByLabel(label)];
+}
+function placeholderTuple(ph: string): [string, string, string] {
+  return ['placeholder', ph, xpathByPlaceholder(ph)];
+}
+function textTuple(text: string): [string, string, string] {
+  return ['text', text, xpathByText(text)];
+}
+function testIdTuple(testId: string): [string, string, string] {
+  return ['testid', testId, xpathByTestId(testId)];
+}
+function altTextTuple(alt: string): [string, string, string] {
+  return ['alttext', alt, xpathByAltText(alt)];
+}
+function titleTuple(title: string): [string, string, string] {
+  return ['title', title, xpathByTitle(title)];
+}
+
 function xpathBySelector(sel: string): string {
   // #id
   const idHash = sel.match(/^#([a-zA-Z0-9_-]+)$/);
@@ -232,47 +273,71 @@ function parseLine(raw: string, currentHref: string): LineResult {
       // role=option/menuitem). Marked fromOption so the main loop can pair it with
       // the preceding trigger click into a single "select X from Y" step.
       if (role === 'option' || role === 'menuitem' || role === 'menuitemradio' || role === 'menuitemcheckbox') {
-        return { navigate: null, action: { type: 'select', element: name, value: name, controlKind: 'select', href: currentHref, locator: ['xpath', xpathByRole('option', name)], fromOption: true } };
+        return { navigate: null, action: { type: 'select', element: name, value: name, controlKind: 'select', href: currentHref, locator: roleTuple(role, name), fromOption: true } };
       }
-      if (role === 'link')                            return { navigate: null, action: { type: 'click',    element: name, controlKind: 'link',     href: currentHref, locator: ['xpath', xpathByRole('link', name)] } };
-      if (role === 'radio')                           return { navigate: null, action: { type: 'radio',    element: name, controlKind: 'radio',    href: currentHref, locator: ['xpath', xpathByRole('radio', name)] } };
-      if (role === 'checkbox')                        return { navigate: null, action: { type: 'checkbox', element: name, controlKind: 'checkbox', href: currentHref, locator: ['xpath', xpathByRole('checkbox', name)] } };
-      if (role === 'textbox' || role === 'searchbox') return { navigate: null, action: { type: 'click',    element: name, controlKind: 'textbox',  href: currentHref, locator: ['xpath', xpathByRole(role, name)] } };
-      if (role === 'combobox')                        return { navigate: null, action: { type: 'click',    element: name, controlKind: 'select',   href: currentHref, locator: ['xpath', xpathByRole(role, name)] } };
-      return { navigate: null, action: { type: 'click', element: name, controlKind: 'button', href: currentHref, locator: ['xpath', xpathByRole(role, name)] } };
+      if (role === 'link')                            return { navigate: null, action: { type: 'click',    element: name, controlKind: 'link',     href: currentHref, locator: roleTuple('link', name) } };
+      if (role === 'radio')                           return { navigate: null, action: { type: 'radio',    element: name, controlKind: 'radio',    href: currentHref, locator: roleTuple('radio', name) } };
+      if (role === 'checkbox')                        return { navigate: null, action: { type: 'checkbox', element: name, controlKind: 'checkbox', href: currentHref, locator: roleTuple('checkbox', name) } };
+      if (role === 'textbox' || role === 'searchbox') return { navigate: null, action: { type: 'click',    element: name, controlKind: 'textbox',  href: currentHref, locator: roleTuple(role, name) } };
+      if (role === 'combobox')                        return { navigate: null, action: { type: 'click',    element: name, controlKind: 'select',   href: currentHref, locator: roleTuple(role, name) } };
+      return { navigate: null, action: { type: 'click', element: name, controlKind: 'button', href: currentHref, locator: roleTuple(role, name) } };
     }
     if (isCheck || isUncheck) {
       // .check() works on both radio and checkbox — honor the actual role
-      if (role === 'radio') return { navigate: null, action: { type: 'radio', element: name, controlKind: 'radio', href: currentHref, locator: ['xpath', xpathByRole('radio', name)] } };
-      return { navigate: null, action: { type: 'checkbox', element: name, controlKind: 'checkbox', href: currentHref, locator: ['xpath', xpathByRole('checkbox', name)] } };
+      if (role === 'radio') return { navigate: null, action: { type: 'radio', element: name, controlKind: 'radio', href: currentHref, locator: roleTuple('radio', name) } };
+      return { navigate: null, action: { type: 'checkbox', element: name, controlKind: 'checkbox', href: currentHref, locator: roleTuple('checkbox', name) } };
     }
-    if (fillM)     return { navigate: null, action: { type: 'input',  element: name, value: fillM[1],    controlKind: 'textbox', href: currentHref, locator: ['xpath', xpathByRole(role, name)] } };
-    if (selectOptM) return { navigate: null, action: { type: 'select', element: name, value: selectOptM[1], controlKind: 'select',  href: currentHref, locator: ['xpath', xpathByRole('combobox', name)] } };
+    if (fillM)     return { navigate: null, action: { type: 'input',  element: name, value: fillM[1],    controlKind: 'textbox', href: currentHref, locator: roleTuple(role, name) } };
+    if (selectOptM) return { navigate: null, action: { type: 'select', element: name, value: selectOptM[1], controlKind: 'select',  href: currentHref, locator: roleTuple('combobox', name) } };
   }
 
   // ── getByLabel ────────────────────────────────────────────────────────────
   const labelM = t.match(/await page\.getByLabel\(['"`]([^'"`]+)['"`](?:,\s*\{[^}]*\})?\)/);
   if (labelM) {
     const label = labelM[1];
-    if (isClick)    return { navigate: null, action: { type: 'click',    element: label,                 controlKind: 'textbox',  href: currentHref, locator: ['xpath', xpathByLabel(label)] } };
-    if (isCheck)    return { navigate: null, action: { type: 'checkbox', element: label,                 controlKind: 'checkbox', href: currentHref, locator: ['xpath', xpathByLabel(label)] } };
-    if (fillM)      return { navigate: null, action: { type: 'input',    element: label, value: fillM[1], controlKind: 'textbox',  href: currentHref, locator: ['xpath', xpathByLabel(label)] } };
-    if (selectOptM) return { navigate: null, action: { type: 'select',   element: label, value: selectOptM[1], controlKind: 'select', href: currentHref, locator: ['xpath', xpathByLabel(label)] } };
+    if (isClick)    return { navigate: null, action: { type: 'click',    element: label,                 controlKind: 'textbox',  href: currentHref, locator: labelTuple(label) } };
+    if (isCheck)    return { navigate: null, action: { type: 'checkbox', element: label,                 controlKind: 'checkbox', href: currentHref, locator: labelTuple(label) } };
+    if (fillM)      return { navigate: null, action: { type: 'input',    element: label, value: fillM[1], controlKind: 'textbox',  href: currentHref, locator: labelTuple(label) } };
+    if (selectOptM) return { navigate: null, action: { type: 'select',   element: label, value: selectOptM[1], controlKind: 'select', href: currentHref, locator: labelTuple(label) } };
   }
 
   // ── getByPlaceholder ──────────────────────────────────────────────────────
   const phM = t.match(/await page\.getByPlaceholder\(['"`]([^'"`]+)['"`](?:,\s*\{[^}]*\})?\)/);
   if (phM) {
     const ph = phM[1];
-    if (isClick) return { navigate: null, action: { type: 'click', element: ph, controlKind: 'textbox', href: currentHref, locator: ['xpath', xpathByPlaceholder(ph)] } };
-    if (fillM)   return { navigate: null, action: { type: 'input', element: ph, value: fillM[1], controlKind: 'textbox', href: currentHref, locator: ['xpath', xpathByPlaceholder(ph)] } };
+    if (isClick) return { navigate: null, action: { type: 'click', element: ph, controlKind: 'textbox', href: currentHref, locator: placeholderTuple(ph) } };
+    if (fillM)   return { navigate: null, action: { type: 'input', element: ph, value: fillM[1], controlKind: 'textbox', href: currentHref, locator: placeholderTuple(ph) } };
   }
 
   // ── getByText ─────────────────────────────────────────────────────────────
   const textM = t.match(/await page\.getByText\(['"`]([^'"`]+)['"`](?:,\s*\{[^}]*\})?\)/);
   if (textM) {
     const txt = textM[1];
-    if (isClick) return { navigate: null, action: { type: 'click', element: txt, controlKind: 'link', href: currentHref, locator: ['xpath', xpathByText(txt)] } };
+    if (isClick) return { navigate: null, action: { type: 'click', element: txt, controlKind: 'link', href: currentHref, locator: textTuple(txt) } };
+  }
+
+  // ── getByTestId / getByAltText / getByTitle ─────────────────────────────────
+  // Previously unhandled entirely - codegen lines using these were silently
+  // dropped (parseLine fell through to `none`), not even downgraded to xpath.
+  const testIdM = t.match(/await page\.getByTestId\(['"`]([^'"`]+)['"`]\)/);
+  if (testIdM) {
+    const tid = testIdM[1];
+    if (isClick)    return { navigate: null, action: { type: 'click',    element: tid, controlKind: 'button',  href: currentHref, locator: testIdTuple(tid) } };
+    if (isCheck)    return { navigate: null, action: { type: 'checkbox', element: tid, controlKind: 'checkbox', href: currentHref, locator: testIdTuple(tid) } };
+    if (fillM)      return { navigate: null, action: { type: 'input',    element: tid, value: fillM[1], controlKind: 'textbox', href: currentHref, locator: testIdTuple(tid) } };
+    if (selectOptM) return { navigate: null, action: { type: 'select',   element: tid, value: selectOptM[1], controlKind: 'select', href: currentHref, locator: testIdTuple(tid) } };
+  }
+
+  const altM = t.match(/await page\.getByAltText\(['"`]([^'"`]+)['"`](?:,\s*\{[^}]*\})?\)/);
+  if (altM && isClick) {
+    const alt = altM[1];
+    return { navigate: null, action: { type: 'click', element: alt, controlKind: 'button', href: currentHref, locator: altTextTuple(alt) } };
+  }
+
+  const titleM = t.match(/await page\.getByTitle\(['"`]([^'"`]+)['"`](?:,\s*\{[^}]*\})?\)/);
+  if (titleM && isClick) {
+    const title = titleM[1];
+    return { navigate: null, action: { type: 'click', element: title, controlKind: 'button', href: currentHref, locator: titleTuple(title) } };
   }
 
   // ── page.locator('selector') ───────────────────────────────────────────────

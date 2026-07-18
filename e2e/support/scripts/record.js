@@ -273,23 +273,50 @@ function computeUniqueXPathInBrowser(el) {
   return '/html/' + parts.join('/');
 }
 
+// Node-side mirror of world.ts's buildLocatorFromTuple - reconstructs the
+// actual Playwright locator a [kind, value, xpathFallback] tuple describes,
+// so replay-enrichment below can resolve semantic-kind actions (role:*,
+// label, placeholder, text, testid, alttext, title) instead of only ever
+// treating tuple[1] as an xpath string.
+const SEMANTIC_KIND_LOCATORS = {
+  label: (page, v) => page.getByLabel(v, { exact: true }),
+  placeholder: (page, v) => page.getByPlaceholder(v, { exact: true }),
+  text: (page, v) => page.getByText(v, { exact: true }),
+  testid: (page, v) => page.getByTestId(v),
+  alttext: (page, v) => page.getByAltText(v, { exact: true }),
+  title: (page, v) => page.getByTitle(v, { exact: true }),
+};
+function buildLocatorFromTuple(page, tuple) {
+  const kind = String((tuple && tuple[0]) || '').toLowerCase();
+  const value = (tuple && tuple[1]) || '';
+  if (kind === 'xpath') return value ? page.locator(`xpath=${value}`) : null;
+  if (kind === 'css') return page.locator(value);
+  if (kind.startsWith('role:')) return page.getByRole(kind.slice('role:'.length), { name: value, exact: true });
+  if (SEMANTIC_KIND_LOCATORS[kind]) return SEMANTIC_KIND_LOCATORS[kind](page, value);
+  return value ? page.locator(`xpath=${value}`) : null; // legacy WDIO-style kinds not needed here
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // enrichActionsByReplay — replays the parsed actions in a headless browser to:
 //   1. Capture the REAL URL each action ran on (page boundaries → multi screens).
-//   2. Compute an EXACT, DOM-verified unique xpath for each element and overwrite
-//      the template xpath in the locator YAML — same quality as `npm run pw`.
+//   2. For plain xpath-kind actions: compute an EXACT, DOM-verified unique xpath
+//      and overwrite the template — same quality as `npm run pw`.
+//   3. For semantic-kind actions (role:*/label/placeholder/text/testid/alttext/
+//      title): resolve via the ACTUAL getByX() call instead of misreading the
+//      value as an xpath string, so replay/URL-tracking works for them too.
 //
-//   Playwright codegen only emits page.goto() for the first navigation and its
-//   xpaths are static templates; replaying against the live DOM fixes both.
+//   Playwright codegen only emits page.goto() for the first navigation; its
+//   xpaths (where present) are static templates. Replaying against the live
+//   DOM fixes both.
 //
-//   Best-effort: any step that fails to replay keeps its template xpath / last
-//   known URL so a flaky selector never aborts generation.
+//   Best-effort: any step that fails to replay keeps its original locator /
+//   last known URL so a flaky selector never aborts generation.
 // ─────────────────────────────────────────────────────────────────────────────
 async function enrichActionsByReplay(actions, firstUrl) {
   if (!actions.length || !firstUrl) return;
   const { chromium } = require('@playwright/test');
 
-  log(`  🧭  Replaying ${actions.length} step(s) to capture exact xpaths + page navigations...\n`);
+  log(`  🧭  Replaying ${actions.length} step(s) to capture exact locators + page navigations...\n`);
 
   const browser = await chromium.launch({ headless: true });
   const distinctUrls = new Set();
@@ -301,10 +328,11 @@ async function enrichActionsByReplay(actions, firstUrl) {
     } catch { /* continue — page may still be usable */ }
 
     for (const a of actions) {
-      const xpath = a.locator && a.locator[1];
-      if (xpath) {
+      const kind = String((a.locator && a.locator[0]) || '').toLowerCase();
+      const isXpathKind = kind === 'xpath';
+      const loc = buildLocatorFromTuple(page, a.locator);
+      if (loc) {
         try {
-          const loc = page.locator(`xpath=${xpath}`);
           const cnt = await loc.count();
           // Pick the element to operate on. When the template matches exactly one,
           // use it. When it matches MANY (ambiguous text selectors on pages with
@@ -316,8 +344,12 @@ async function enrichActionsByReplay(actions, firstUrl) {
             if (await visible.count().catch(() => 0)) target = visible;
           }
 
-          // Recompute an exact, unique xpath from the resolved element.
-          if (cnt >= 1) {
+          // Only plain xpath-kind actions get their locator overwritten - semantic
+          // kinds (role:*/label/etc) are already precise from codegen and don't
+          // need an xpath substitute; only their xpath FALLBACK (tuple[2]) stays
+          // as originally computed.
+          if (isXpathKind && cnt >= 1) {
+            const xpath = a.locator[1];
             const exact = await target.evaluate(computeUniqueXPathInBrowser).catch(() => '');
             if (exact && exact !== xpath) { a.locator = ['xpath', exact]; xpathFixed++; }
           }
@@ -1584,6 +1616,125 @@ function buildRecordingScript({ fileName, mode }) {
     return lbl || aria || ph || text || nm || id || el.tagName.toLowerCase();
   }
 
+  // ── Semantic locator picking (browser-side mirror of selectorEngine.ts's
+  // resolveLocator priority chain: testid > role > label > placeholder >
+  // alttext > title > text > xpath). No Playwright API is available inside
+  // the page, so uniqueness is checked via plain DOM queries instead of
+  // page.getByRole().count(). An explicit role attribute always wins over
+  // tag-based guessing (e.g. Docusaurus's <a role="button">Guides</a> is a
+  // button, not a link) - same fix as the Node-side resolveLocator got.
+  function computeRole(el) {
+    const explicit = (el.getAttribute('role') || '').toLowerCase();
+    if (explicit) return explicit;
+    const tag = el.tagName.toLowerCase();
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (tag === 'a' && el.hasAttribute('href')) return 'link';
+    if (tag === 'button') return 'button';
+    if (tag === 'input' && (type === 'button' || type === 'submit')) return 'button';
+    if (tag === 'input' && type === 'checkbox') return 'checkbox';
+    if (tag === 'input' && type === 'radio') return 'radio';
+    if (tag === 'input' || tag === 'textarea') return 'textbox';
+    if (tag === 'select') return 'combobox';
+    if (/^h[1-6]$/.test(tag)) return 'heading';
+    if (tag === 'img') return 'img';
+    return '';
+  }
+
+  function computeAccessibleName(el) {
+    const aria = el.getAttribute('aria-label');
+    if (aria) return clean(aria);
+    const labelledby = el.getAttribute('aria-labelledby');
+    if (labelledby) {
+      const txt = labelledby.split(/\s+/).map(function (id) {
+        const e = document.getElementById(id);
+        return e ? clean(e.textContent) : '';
+      }).filter(Boolean).join(' ');
+      if (txt) return txt;
+    }
+    if (el.id) {
+      const lbl = document.querySelector('label[for="' + el.id + '"]');
+      if (lbl) return clean(lbl.textContent);
+    }
+    const closestLabel = el.closest && el.closest('label');
+    if (closestLabel) return clean(closestLabel.textContent);
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'img' || tag === 'area') {
+      const alt = el.getAttribute('alt');
+      if (alt) return clean(alt);
+    }
+    const text = clean(el.innerText || el.textContent || '');
+    if (text) return text;
+    const title = el.getAttribute('title');
+    if (title) return clean(title);
+    return '';
+  }
+
+  // Counts elements sharing the same computed role + accessible name -
+  // approximates page.getByRole(role, {name, exact:true}).count().
+  function countByRole(role, name) {
+    let count = 0;
+    document.querySelectorAll('*').forEach(function (candidate) {
+      if (computeRole(candidate) === role && computeAccessibleName(candidate) === name) count++;
+    });
+    return count;
+  }
+
+  function cssAttrCount(sel) {
+    try { return document.querySelectorAll(sel).length; } catch (e) { return 0; }
+  }
+
+  /** Returns [kind, value, xpathFallback] - same tuple format world.ts reads. */
+  function pickLocatorTuple(el, xpathFallback) {
+    const tag = el.tagName.toLowerCase();
+
+    const testId = el.getAttribute('data-testid');
+    if (testId && cssAttrCount('[data-testid="' + CSS.escape(testId) + '"]') === 1) {
+      return ['testid', testId, xpathFallback];
+    }
+
+    const role = computeRole(el);
+    const name = computeAccessibleName(el);
+    if (role && name && countByRole(role, name) === 1) {
+      return ['role:' + role, name, xpathFallback];
+    }
+
+    if (el.id) {
+      const lbl = document.querySelector('label[for="' + el.id + '"]');
+      if (lbl) {
+        const labelTxt = clean(lbl.textContent);
+        if (labelTxt) return ['label', labelTxt, xpathFallback];
+      }
+    }
+
+    const ph = el.getAttribute('placeholder');
+    if (ph && cssAttrCount('[placeholder="' + CSS.escape(ph) + '"]') === 1) {
+      return ['placeholder', ph, xpathFallback];
+    }
+
+    if ((tag === 'img' || tag === 'area')) {
+      const alt = el.getAttribute('alt');
+      if (alt && cssAttrCount(tag + '[alt="' + CSS.escape(alt) + '"]') === 1) {
+        return ['alttext', alt, xpathFallback];
+      }
+    }
+
+    const title = el.getAttribute('title');
+    if (title && cssAttrCount('[title="' + CSS.escape(title) + '"]') === 1) {
+      return ['title', title, xpathFallback];
+    }
+
+    const text = clean(el.innerText || el.textContent || '');
+    if (text && text.length <= 100) {
+      let count = 0;
+      document.querySelectorAll('*').forEach(function (c) {
+        if (clean(c.innerText || c.textContent || '') === text) count++;
+      });
+      if (count === 1) return ['text', text, xpathFallback];
+    }
+
+    return ['xpath', xpathFallback];
+  }
+
   // Click (button / link)
   document.addEventListener('click', function(e) {
     const t = e.target;
@@ -1592,12 +1743,13 @@ function buildRecordingScript({ fileName, mode }) {
     if (!el) return;
     const tag         = el.tagName.toLowerCase();
     const role        = (el.getAttribute('role') || '').toLowerCase();
-    const controlKind = (tag === 'a' || role === 'link') ? 'link' : 'button';
+    const controlKind = (role || tag) === 'link' || (!role && tag === 'a') ? 'link' : 'button';
     const element     = getName(el);
     const xpathTag    = controlKind === 'link' ? 'a' : 'button';
-    const xpath       = '//' + xpathTag + '[normalize-space(.)=' + xlit(element) + ']';
+    const xpathFallback = '//' + xpathTag + '[normalize-space(.)=' + xlit(element) + ']';
+    const locator = pickLocatorTuple(el, xpathFallback);
     if (window.pwRecorderUiAction)
-      window.pwRecorderUiAction({ type:'click', element, controlKind, href:href(), locator:['xpath',xpath] });
+      window.pwRecorderUiAction({ type:'click', element, controlKind, href:href(), locator });
   }, true);
 
   // Text input (captured on focusout — user finished typing)
@@ -1613,13 +1765,14 @@ function buildRecordingScript({ fileName, mode }) {
     const element = getName(el);
     const aria    = el.getAttribute('aria-label') || '';
     const ph      = el.getAttribute('placeholder') || '';
-    let xpath;
-    if (aria)       xpath = '//*[@aria-label=' + xlit(aria) + ']';
-    else if (ph)    xpath = '//input[@placeholder=' + xlit(ph) + ']';
-    else if (el.id) xpath = '//*[@id=' + xlit(el.id) + ']';
-    else            xpath = '//*[@name=' + xlit(el.getAttribute('name') || '') + ']';
+    let xpathFallback;
+    if (aria)       xpathFallback = '//*[@aria-label=' + xlit(aria) + ']';
+    else if (ph)    xpathFallback = '//input[@placeholder=' + xlit(ph) + ']';
+    else if (el.id) xpathFallback = '//*[@id=' + xlit(el.id) + ']';
+    else            xpathFallback = '//*[@name=' + xlit(el.getAttribute('name') || '') + ']';
+    const locator = pickLocatorTuple(el, xpathFallback);
     if (window.pwRecorderUiAction)
-      window.pwRecorderUiAction({ type:'input', element, value, controlKind:'textbox', href:href(), locator:['xpath',xpath] });
+      window.pwRecorderUiAction({ type:'input', element, value, controlKind:'textbox', href:href(), locator });
   }, true);
 
   // Select / Checkbox / Radio
@@ -1634,9 +1787,10 @@ function buildRecordingScript({ fileName, mode }) {
       const value   = opt ? clean(opt.text || el.value) : el.value;
       const element = getName(el);
       const nm      = el.getAttribute('name') || '';
-      const xpath   = '//select[@name=' + xlit(nm) + ' or @id=' + xlit(el.id||'') + ']';
+      const xpathFallback = '//select[@name=' + xlit(nm) + ' or @id=' + xlit(el.id||'') + ']';
+      const locator = pickLocatorTuple(el, xpathFallback);
       if (window.pwRecorderUiAction)
-        window.pwRecorderUiAction({ type:'select', element, value, controlKind:'select', href:href(), locator:['xpath',xpath] });
+        window.pwRecorderUiAction({ type:'select', element, value, controlKind:'select', href:href(), locator });
       return;
     }
 
@@ -1644,9 +1798,10 @@ function buildRecordingScript({ fileName, mode }) {
       const element    = getName(el);
       const nm         = el.getAttribute('name') || '';
       const actionType = type === 'radio' ? 'radio' : 'checkbox';
-      const xpath      = '//input[@type=' + xlit(type) + ' and (@name=' + xlit(nm) + ' or @id=' + xlit(el.id||'') + ')]';
+      const xpathFallback = '//input[@type=' + xlit(type) + ' and (@name=' + xlit(nm) + ' or @id=' + xlit(el.id||'') + ')]';
+      const locator = pickLocatorTuple(el, xpathFallback);
       if (window.pwRecorderUiAction)
-        window.pwRecorderUiAction({ type:actionType, element, controlKind:actionType, href:href(), locator:['xpath',xpath] });
+        window.pwRecorderUiAction({ type:actionType, element, controlKind:actionType, href:href(), locator });
     }
   }, true);
 }

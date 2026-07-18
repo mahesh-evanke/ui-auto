@@ -238,13 +238,19 @@ const OVERLAY_SCRIPT = /* js */ `
 
     const out = [];
 
-    // 1. aria-label (most reliable)
+    // Each suggestion carries yamlKind/yamlValue so the YAML box below can
+    // persist the SAME strategy being shown, instead of always hardcoding
+    // xpath regardless of which one is actually best (that mismatch was the
+    // bug - the panel suggested getByRole/getByLabel/etc but the copyable
+    // YAML entry silently downgraded everything to xpath).
+
+    // 1. aria-label (most reliable) - getByLabel() also matches aria-label.
     if (ariaLabel) {
       out.push({
         badge: 'aria-label', desc: 'Exact match on aria-label attribute',
         xpath:  \`//\${tag}[@aria-label='\${esc(ariaLabel)}']\`,
         pw:     \`getByLabel('\${esc(ariaLabel)}')\`,
-        yamlKey: ariaLabel,
+        yamlKey: ariaLabel, yamlKind: 'label', yamlValue: ariaLabel,
       });
     }
 
@@ -254,7 +260,7 @@ const OVERLAY_SCRIPT = /* js */ `
         badge: 'placeholder', desc: 'Input placeholder text',
         xpath:  \`//input[@placeholder='\${esc(ph)}']\`,
         pw:     \`getByPlaceholder('\${esc(ph)}')\`,
-        yamlKey: ph,
+        yamlKey: ph, yamlKind: 'placeholder', yamlValue: ph,
       });
     }
 
@@ -264,18 +270,19 @@ const OVERLAY_SCRIPT = /* js */ `
         badge: 'label', desc: 'Associated <label> element text',
         xpath:  \`//*[@id=//label[normalize-space(.)='\${esc(labelTxt)}']/@for]\`,
         pw:     \`getByLabel('\${esc(labelTxt)}')\`,
-        yamlKey: labelTxt,
+        yamlKey: labelTxt, yamlKind: 'label', yamlValue: labelTxt,
       });
     }
 
-    // 4. role + accessible name
+    // 4. role + accessible name - kind folds the ARIA role in (role:button,
+    // role:link, ...) so "role" isn't repeated as both the kind and a nested key.
     if (role && (ariaLabel || labelTxt || (text && text.length <= 60))) {
       const accName = ariaLabel || labelTxt || text;
       out.push({
         badge: 'role', desc: \`ARIA role "\${role}" with accessible name\`,
         xpath:  \`//*[@role='\${role}' and (@aria-label='\${esc(accName)}' or normalize-space(.)='\${esc(accName)}')]\`,
         pw:     \`getByRole('\${role}', { name: '\${esc(accName)}' })\`,
-        yamlKey: accName || role,
+        yamlKey: accName || role, yamlKind: \`role:\${role}\`, yamlValue: accName || role,
       });
     }
 
@@ -285,7 +292,7 @@ const OVERLAY_SCRIPT = /* js */ `
         badge: 'text', desc: \`\${tag} matched by visible text\`,
         xpath:  \`//\${tag}[normalize-space(.)='\${esc(text)}']\`,
         pw:     \`getByText('\${esc(text)}', { exact: true })\`,
-        yamlKey: text,
+        yamlKey: text, yamlKind: 'text', yamlValue: text,
       });
     }
 
@@ -295,7 +302,7 @@ const OVERLAY_SCRIPT = /* js */ `
         badge: 'id', desc: 'Element id attribute',
         xpath:  \`//*[@id='\${esc(id)}']\`,
         pw:     \`locator('#\${esc(id)}')\`,
-        yamlKey: id,
+        yamlKey: id, yamlKind: 'id', yamlValue: id,
       });
     }
 
@@ -305,7 +312,7 @@ const OVERLAY_SCRIPT = /* js */ `
         badge: 'name', desc: 'Form field name attribute',
         xpath:  \`//\${tag}[@name='\${esc(name)}']\`,
         pw:     \`locator('\${tag}[name="\${esc(name)}"]')\`,
-        yamlKey: name,
+        yamlKey: name, yamlKind: 'name', yamlValue: name,
       });
     }
 
@@ -316,7 +323,7 @@ const OVERLAY_SCRIPT = /* js */ `
         badge: 'testid', desc: 'data-testid attribute (most stable)',
         xpath:  \`//*[@data-testid='\${esc(dtid)}']\`,
         pw:     \`getByTestId('\${esc(dtid)}')\`,
-        yamlKey: dtid,
+        yamlKey: dtid, yamlKind: 'testid', yamlValue: dtid,
       });
     }
 
@@ -368,10 +375,16 @@ const OVERLAY_SCRIPT = /* js */ `
     }
     if (!locHtml) locHtml = '<div style="color:#585b70;font-size:12px">No reliable locators found — inspect a more specific element.</div>';
 
-    // Best YAML entry
-    const yamlKey  = bestLoc ? bestLoc.yamlKey : getLabel(el) || tag;
+    // Best YAML entry - uses the SAME strategy shown as the top suggestion
+    // above (getByRole/getByLabel/getByPlaceholder/getByTestId/...), not a
+    // hardcoded xpath, with that strategy's own xpath kept as a fallback line.
+    const yamlKey   = bestLoc ? bestLoc.yamlKey : (getLabel(el) || tag);
+    const yamlKind  = bestLoc ? bestLoc.yamlKind : 'xpath';
+    const yamlValue = bestLoc ? bestLoc.yamlValue : \`//\${tag}\`;
     const yamlXpath = bestLoc ? bestLoc.xpath : \`//\${tag}\`;
-    const yamlEntry = \`\${yamlKey}:\\n  - xpath\\n  - \${yamlXpath}\`;
+    const yamlEntry = yamlKind === 'xpath'
+      ? \`\${yamlKey}:\\n  - xpath\\n  - \${yamlValue}\`
+      : \`\${yamlKey}:\\n  - \${yamlKind}\\n  - \${yamlValue}\\n  - \${yamlXpath}\`;
 
     panel.innerHTML = \`
       <div class="__ccinsp_header">

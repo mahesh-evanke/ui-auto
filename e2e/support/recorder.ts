@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { launchRecorderBrowser, shutdownBrowser } from './browser';
-import { MARK_ATTR, resolveLocator, type ElementSnapshot } from './selectorEngine';
+import { MARK_ATTR, resolveLocator, toPersistedTuple, type ElementSnapshot, type LocatorTuple } from './selectorEngine';
 import { capitalizeWords, convertToArtifacts, convertToInterleavedArtifacts, type RecordedAction } from './converter';
 import { attachApiCapture, type CapturedApi } from './capture';
 import { apiEventsFromCaptured, generateApiStepsFromCapturedApis, generateFeatureFromCapturedApis } from './formatter';
@@ -28,9 +28,7 @@ import {
   type FeatureCategory,
 } from './featurePaths';
 
-// Resolve against the caller's project root (cwd), not this package's own
-// location — the recorder may run in-place or installed under node_modules.
-const ROOT = process.cwd();
+const ROOT = path.resolve(__dirname, '..', '..');
 
 
 
@@ -335,8 +333,8 @@ function summarizeTextChanges(oldText: string, newText: string, issue: string, l
 
 function summarizeLocatorYamlChanges(oldYamlText: string, newYamlText: string): string[] {
   const out: string[] = [];
-  let oldMap: Record<string, [string, string]> = {};
-  let newMap: Record<string, [string, string]> = {};
+  let oldMap: Record<string, LocatorTuple> = {};
+  let newMap: Record<string, LocatorTuple> = {};
   try {
     if (oldYamlText && oldYamlText.trim()) oldMap = parseLocatorYaml(oldYamlText);
   } catch {
@@ -415,20 +413,35 @@ function collectQuotedElementNames(featureText: string): string[] {
   });
 }
 
-function parseLocatorYaml(content: string): Record<string, [string, string]> {
+function parseLocatorYaml(content: string): Record<string, LocatorTuple> {
   const doc = yaml.load(String(content || '')) as unknown;
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return {};
-  const out: Record<string, [string, string]> = {};
+  const out: Record<string, LocatorTuple> = {};
   for (const [k, v] of Object.entries(doc as Record<string, unknown>)) {
-    if (Array.isArray(v) && v.length >= 2) out[String(k)] = [String(v[0]), String(v[1])];
+    if (Array.isArray(v) && v.length >= 3) out[String(k)] = [String(v[0]), String(v[1]), String(v[2])];
+    else if (Array.isArray(v) && v.length >= 2) out[String(k)] = [String(v[0]), String(v[1])];
   }
   return out;
 }
 
-function locatorFromTuple(tuple: [string, string]): { kind: string; expr: string; selectorText: string } {
+const SEMANTIC_KINDS = new Set(['label', 'placeholder', 'text', 'testid', 'alttext', 'title']);
+const SEMANTIC_METHOD_BY_KIND: Record<string, string> = {
+  label: 'getByLabel', placeholder: 'getByPlaceholder', text: 'getByText',
+  testid: 'getByTestId', alttext: 'getByAltText', title: 'getByTitle',
+};
+
+function locatorFromTuple(tuple: LocatorTuple): { kind: string; expr: string; selectorText: string } {
   const kind = String(tuple?.[0] || '').toLowerCase();
   const expr = String(tuple?.[1] || '');
   if (kind === 'xpath') return { kind, expr, selectorText: `xpath=${expr}` };
+  if (kind.startsWith('role:')) {
+    const ariaRole = kind.slice('role:'.length);
+    return { kind, expr, selectorText: `getByRole('${ariaRole}', { name: '${expr}' })` };
+  }
+  if (SEMANTIC_KINDS.has(kind)) {
+    const method = SEMANTIC_METHOD_BY_KIND[kind] || kind;
+    return { kind, expr, selectorText: `${method}('${expr}')` };
+  }
   return { kind: 'css', expr, selectorText: expr };
 }
 
@@ -1240,6 +1253,9 @@ function getInjectScript(resetOnStart: boolean): string {
         role: el.getAttribute('role') || '',
         value: el.value || '',
         selectedLabel: opt ? cleanText(opt.text || '') : '',
+        alt: el.getAttribute('alt') || '',
+        title: el.getAttribute('title') || '',
+        testId: el.getAttribute('data-testid') || '',
       };
     }
 
@@ -1271,6 +1287,9 @@ function getInjectScript(resetOnStart: boolean): string {
       value: (el.value || ''),
       isOption: isOption,
       isDropdownTrigger: isDropdownTrigger,
+      alt: el.getAttribute('alt') || '',
+      title: el.getAttribute('title') || '',
+      testId: el.getAttribute('data-testid') || '',
     };
   }
 
@@ -4107,7 +4126,7 @@ function getInjectScript(resetOnStart: boolean): string {
 `;
 }
 
-function mapPayloadToAction(payload: ReportPayload, resolvedName: string, locator: [string, string]): RecordedAction | null {
+function mapPayloadToAction(payload: ReportPayload, resolvedName: string, locator: LocatorTuple): RecordedAction | null {
   const href = payload.href || '';
   const snap = payload.snapshot || ({} as ElementSnapshot);
   const tag = (snap.tagName || '').toLowerCase();
@@ -4272,7 +4291,7 @@ async function main(): Promise<void> {
   type PendingInputState = {
     element: string;
     latestValue: string;
-    locator: [string, string];
+    locator: LocatorTuple;
     href: string;
     inputKey: string;
   };
@@ -4423,7 +4442,7 @@ async function main(): Promise<void> {
       pendingInput = {
         element,
         latestValue,
-        locator: resolved.fallback,
+        locator: toPersistedTuple(resolved),
         href,
         inputKey,
       };
@@ -4446,7 +4465,7 @@ async function main(): Promise<void> {
       pendingInput = {
         element,
         latestValue,
-        locator: resolved.fallback,
+        locator: toPersistedTuple(resolved),
         href,
         inputKey,
       };
@@ -4459,7 +4478,7 @@ async function main(): Promise<void> {
     if (pendingInput) flushPendingInput();
 
     const resolved = await resolveLocator(page, payload.markId, payload.snapshot);
-    const action = mapPayloadToAction(payload, capitalizeWords(resolved.name), resolved.fallback);
+    const action = mapPayloadToAction(payload, capitalizeWords(resolved.name), toPersistedTuple(resolved));
     if (!action) return;
 
     const prev = actions[actions.length - 1];

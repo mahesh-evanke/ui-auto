@@ -7,7 +7,7 @@ import {
   World,
 } from '@cucumber/cucumber';
 import type { APIRequestContext } from 'playwright';
-import type { Browser, BrowserContext, Frame, Locator, Page } from 'playwright';
+import type { Browser, BrowserContext, Frame, FrameLocator, Locator, Page } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -15,8 +15,91 @@ import { createEmptyApiState, type ApiState } from './apiState';
 import type { RunConfig } from '../support/mode';
 import { findCommonFiles, findLocatorFile } from '../support/featurePaths';
 
-type LocatorTuple = [string, string];
+type LocatorTuple = [string, string] | [string, string, string];
 type PageRegistryRow = { title: string; label: string };
+
+const SEMANTIC_KINDS = new Set(['label', 'placeholder', 'text', 'testid', 'alttext', 'title']);
+
+/**
+ * Reconstructs the actual Playwright locator a tuple describes. Plain
+ * strings only, no embedded JSON - kind carries the strategy (with the ARIA
+ * role folded into it for role:<ariaRole>, so "role" never appears twice),
+ * value is the plain accessible name/label/text/etc. An XPath fallback
+ * (tuple[2]) is OR'd in for resilience if the semantic match ever breaks -
+ * mirroring how the recorder itself always keeps an XPath fallback around.
+ * 'xpath'/'css' and the WDIO-style kinds (id/name/tagName/className/
+ * linkText/buttonText) behave exactly as before.
+ */
+function buildLocatorFromTuple(scope: Page | Frame | FrameLocator, tuple: LocatorTuple): Locator {
+  const [kindRaw, expr, xpathFallback] = tuple;
+  const kind = kindRaw.toLowerCase();
+
+  if (kind === 'xpath') return scope.locator(`xpath=${expr}`);
+  if (kind === 'css') return scope.locator(expr);
+
+  // role:<ariaRole> e.g. "role:button", "role:link" - the ARIA role lives in
+  // the kind itself, value is just the plain accessible name.
+  if (kind.startsWith('role:')) {
+    const ariaRole = kind.slice('role:'.length);
+    const semantic = scope.getByRole(ariaRole as never, { name: expr, exact: true });
+    return xpathFallback ? semantic.or(scope.locator(`xpath=${xpathFallback}`)) : semantic;
+  }
+
+  // WDIO-style attribute/tag/text kinds, translated to their Playwright
+  // equivalent instead of a WDIO-flavoured selector string. id/name/tagName/
+  // className are all just CSS under the hood (Playwright's own locator()
+  // takes CSS natively); linkText/buttonText use getByRole with an exact
+  // accessible-name match, which is the idiomatic Playwright replacement for
+  // WDIO's generic "=exact text" strategy.
+  switch (kind) {
+    case 'id':
+      return scope.locator(`#${expr}`);
+    case 'name':
+      return scope.locator(`[name="${expr}"]`);
+    case 'tagname':
+      return scope.locator(expr);
+    case 'classname':
+      return scope.locator(`.${expr}`);
+    case 'linktext':
+      return scope.getByRole('link', { name: expr, exact: true });
+    case 'buttontext':
+      return scope.getByRole('button', { name: expr, exact: true });
+    default:
+      break;
+  }
+
+  if (SEMANTIC_KINDS.has(kind)) {
+    let semantic: Locator;
+    switch (kind) {
+      case 'label':
+        semantic = scope.getByLabel(expr, { exact: true });
+        break;
+      case 'placeholder':
+        semantic = scope.getByPlaceholder(expr, { exact: true });
+        break;
+      case 'text':
+        semantic = scope.getByText(expr, { exact: true });
+        break;
+      case 'testid':
+        semantic = scope.getByTestId(expr);
+        break;
+      case 'alttext':
+        semantic = scope.getByAltText(expr, { exact: true });
+        break;
+      case 'title':
+        semantic = scope.getByTitle(expr, { exact: true });
+        break;
+      default:
+        semantic = scope.locator(`xpath=${xpathFallback || ''}`);
+    }
+    return xpathFallback ? semantic.or(scope.locator(`xpath=${xpathFallback}`)) : semantic;
+  }
+
+  // Any other kind: generic attribute selector using the kind string itself
+  // as the attribute name (e.g. kind="data-testid" -> [data-testid="value"]),
+  // matching WDIO's PageConfigHelper.locationPath() fallback exactly.
+  return scope.locator(`[${kind}="${expr}"]`);
+}
 
 export class AutomationWorld extends World {
   // Playwright UI browser primitives (optional; may be absent in API-only mode).
@@ -60,13 +143,19 @@ export class AutomationWorld extends World {
     }
   }
 
+  private static tupleFromYamlValue(v: unknown[]): LocatorTuple {
+    return v.length >= 3
+      ? [String(v[0]), String(v[1]), String(v[2])]
+      : [String(v[0]), String(v[1])];
+  }
+
   loadCommonLocators(): void {
     this.commonLocatorByName.clear();
     for (const fp of findCommonFiles()) {
       const doc = this.parseLocatorFile(fp);
       if (!doc) continue;
       for (const [k, v] of Object.entries(doc)) {
-        if (Array.isArray(v) && v.length >= 2) this.commonLocatorByName.set(k, [String(v[0]), String(v[1])]);
+        if (Array.isArray(v) && v.length >= 2) this.commonLocatorByName.set(k, AutomationWorld.tupleFromYamlValue(v));
       }
     }
   }
@@ -80,17 +169,15 @@ export class AutomationWorld extends World {
       const direct = m.get(name);
       const tuple = direct ?? [...m.entries()].find(([k]) => k.toLowerCase() === name.toLowerCase())?.[1];
       if (!tuple) return null;
-      const [kind, expr] = tuple;
-      if (kind.toLowerCase() === 'xpath') return p.locator(`xpath=${expr}`);
-      return p.locator(expr);
+      return buildLocatorFromTuple(p, tuple);
     };
     return fromMap(this.pageLocatorByName) ?? fromMap(this.commonLocatorByName) ?? p.locator(`xpath=//*[@id=${JSON.stringify(name)}]`);
   }
 
   loadPagesRegistry(): void {
     this.pagesRegistry = {};
-    // pages.yaml is under e2e/locators/ in the caller's project, not this package.
-    const p = path.join(process.cwd(), 'e2e', 'locators', 'pages.yaml');
+    // pages.yaml is under e2e/locators/ — one level up from stepdefinitions/
+    const p = path.join(__dirname, '..', 'locators', 'pages.yaml');
     if (!fs.existsSync(p)) return;
     try {
       const raw = fs.readFileSync(p, 'utf8');
@@ -106,14 +193,14 @@ export class AutomationWorld extends World {
     let fp = findLocatorFile(pageKey);
     if (!fp) {
       // Create a placeholder yaml so the run can continue.
-      fp = path.join(process.cwd(), 'e2e', 'locators', 'pages', `${pageKey}.yaml`);
+      fp = path.join(__dirname, '..', 'locators', 'pages', `${pageKey}.yaml`);
       fs.mkdirSync(path.dirname(fp), { recursive: true });
       fs.writeFileSync(fp, yaml.dump({}, { noRefs: true, lineWidth: 160 }), 'utf8');
     }
     const doc = this.parseLocatorFile(fp);
     if (!doc) return;
     for (const [k, v] of Object.entries(doc)) {
-      if (Array.isArray(v) && v.length >= 2) this.pageLocatorByName.set(k, [String(v[0]), String(v[1])]);
+      if (Array.isArray(v) && v.length >= 2) this.pageLocatorByName.set(k, AutomationWorld.tupleFromYamlValue(v));
     }
   }
 
@@ -133,7 +220,7 @@ export class AutomationWorld extends World {
     }
     const tuple = this.tryResolveTuple(name);
     if (tuple) return tuple;
-    const fp = findLocatorFile(this.currentPageKey) || path.join(process.cwd(), 'e2e', 'locators', 'pages', `${this.currentPageKey}.yaml`);
+    const fp = findLocatorFile(this.currentPageKey) || path.join(__dirname, '..', 'locators', 'pages', `${this.currentPageKey}.yaml`);
     throw new Error(`Element "${name}" not found in page "${this.currentPageKey}"\nFile: ${fp}`);
   }
 
@@ -154,26 +241,18 @@ export class AutomationWorld extends World {
 
   getLocator(name: string): Locator {
     if (!this.page) throw new Error('Browser page not initialized. Ensure OPEN_BROWSER=true or MODE=API_UI.');
-    const p = this.page;
     const tuple = this.tryResolveTuple(name);
     if (!tuple) {
       return this.smartLocator(name);
     }
-    const [kind, expr] = tuple;
-    if (kind.toLowerCase() === 'xpath') {
-      return p.locator(`xpath=${expr}`).first();
-    }
-    return p.locator(expr).first();
+    return buildLocatorFromTuple(this.page, tuple).first();
   }
 
   getLocatorInFirstFrame(name: string): Locator {
     if (!this.page) throw new Error('Browser page not initialized. Ensure OPEN_BROWSER=true or MODE=API_UI.');
-    const [kind, expr] = this.resolveTarget(name);
+    const tuple = this.resolveTarget(name);
     const fl = this.page.frameLocator('iframe').first();
-    if (kind.toLowerCase() === 'xpath') {
-      return fl.locator(`xpath=${expr}`).first();
-    }
-    return fl.locator(expr).first();
+    return buildLocatorFromTuple(fl, tuple).first();
   }
 
   /**
@@ -185,21 +264,18 @@ export class AutomationWorld extends World {
   async resolveAcrossFrames(name: string): Promise<{ loc: Locator; scope: Page | Frame }> {
     if (!this.page) throw new Error('Browser page not initialized. Ensure OPEN_BROWSER=true or MODE=API_UI.');
     const tuple = this.tryResolveTuple(name);
-    const kind = tuple ? tuple[0].toLowerCase() : 'xpath';
-    const expr = tuple ? tuple[1] : null;
-    if (expr) {
+    if (tuple) {
       // page.frames() includes the main frame; check the Page object first anyway.
       const scopes: Array<Page | Frame> = [this.page, ...this.page.frames()];
       for (const scope of scopes) {
         try {
-          const loc = kind === 'xpath' ? scope.locator(`xpath=${expr}`).first() : scope.locator(expr).first();
+          const loc = buildLocatorFromTuple(scope, tuple).first();
           if ((await loc.count().catch(() => 0)) > 0) return { loc, scope };
         } catch { /* try next scope */ }
       }
       // Nothing matched yet — the frame may still be loading. Return the main-page
       // locator so the caller's expect(visible) retries against the live DOM.
-      const main = kind === 'xpath' ? this.page.locator(`xpath=${expr}`).first() : this.page.locator(expr).first();
-      return { loc: main, scope: this.page };
+      return { loc: buildLocatorFromTuple(this.page, tuple).first(), scope: this.page };
     }
     // No YAML tuple — fall back to the smart heuristic locator (page-scoped).
     return { loc: this.getLocator(name), scope: this.page };

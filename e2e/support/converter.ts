@@ -2,7 +2,7 @@
  * Converts recorded actions into Gherkin steps and per-page JSON locator entries.
  * Maps only to the approved step vocabulary.
  */
-import type { ResolvedLocator } from './selectorEngine';
+import { toPersistedTuple, type ResolvedLocator, type LocatorTuple } from './selectorEngine';
 import type { PageStepInput } from './pageRegistry';
 import { generateLabel, generateTitle } from './pageRegistry';
 
@@ -27,7 +27,7 @@ export type RecordedAction = {
   /** For input/select */
   value?: string;
   /** xpath or css + expression */
-  locator: [string, string];
+  locator: LocatorTuple;
   /** button | link | textbox | select | checkbox | radio | table */
   controlKind: 'button' | 'link' | 'textbox' | 'select' | 'checkbox' | 'radio' | 'table';
   /** Internal: marks a click on a dropdown option (role=option/menuitem) so the
@@ -39,7 +39,7 @@ export type GeneratedPage = {
   pageKey: string;
   title: string;
   label: string;
-  locatorMap: Map<string, [string, string]>;
+  locatorMap: Map<string, LocatorTuple>;
 };
 
 export type GenerationResult = {
@@ -48,7 +48,7 @@ export type GenerationResult = {
   /** First page (backward compatible) — feature includes "User is on <pageKey> screen". */
   pageKey?: string;
   pageMeta?: { title: string; label: string };
-  locatorMap: Map<string, [string, string]>;
+  locatorMap: Map<string, LocatorTuple>;
   /** All pages (one per redirected screen). Each gets its own locators/<pageKey>.yaml. */
   pages?: GeneratedPage[];
 };
@@ -87,8 +87,8 @@ function indentStepLines(step: string, indent: string): string {
 /**
  * Merge locators by normalized YAML key; first non-empty wins unless later is more specific (longer xpath).
  */
-export function dedupeLocators(entries: Array<{ key: string; locator: [string, string] }>): Map<string, [string, string]> {
-  const map = new Map<string, [string, string]>();
+export function dedupeLocators(entries: Array<{ key: string; locator: LocatorTuple }>): Map<string, LocatorTuple> {
+  const map = new Map<string, LocatorTuple>();
   for (const e of entries) {
     const key = capitalizeWords(e.key);
     if (!key) continue;
@@ -330,7 +330,7 @@ export function convertToArtifacts(
   // Per-page locators: group each action's locator under the page it ran on.
   const segments = segmentActionsByPage(actions, pageKey);
   const pages: GeneratedPage[] = segments.map((seg) => {
-    const entries: Array<{ key: string; locator: [string, string] }> = [];
+    const entries: Array<{ key: string; locator: LocatorTuple }> = [];
     for (const a of seg.actions) {
       if (a.type === 'assert_text') continue; // text checks need no locator
       if (a.type === 'assert_web_table') {
@@ -469,7 +469,7 @@ export function convertToInterleavedArtifacts(
   // Per-page locators (UI only).
   const segments = segmentActionsByPage(actions, firstPageKey);
   const pages: GeneratedPage[] = segments.map((seg) => {
-    const entries: Array<{ key: string; locator: [string, string] }> = [];
+    const entries: Array<{ key: string; locator: LocatorTuple }> = [];
     for (const a of seg.actions) {
       if (a.type === 'assert_text') continue;
       if (a.type === 'assert_web_table') {
@@ -505,6 +505,6 @@ export function mergeResolvedIntoAction(
   return {
     ...base,
     element: capitalizeWords(resolved.name),
-    locator: resolved.fallback,
+    locator: toPersistedTuple(resolved),
   };
 }

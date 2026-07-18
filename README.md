@@ -1,6 +1,8 @@
-# Playwright + Cucumber Automation Framework
+# wdio-playwright-library
 
-A **record-and-replay BDD test automation framework** built on [Playwright](https://playwright.dev/) and [Cucumber.js](https://cucumber.io/). Record browser sessions visually, auto-generate feature files and YAML locators, then replay as fully executable E2E tests — with zero manual XPath writing.
+An installable **BDD test automation toolkit** built on [Playwright](https://playwright.dev/) and [Cucumber.js](https://cucumber.io/). Install it into your own project and it scaffolds everything you need to start recording and running Gherkin-driven E2E tests — record-and-replay, no manual XPath writing, and locators that use Playwright's own semantic strategies (`getByRole`, `getByLabel`, `getByPlaceholder`, `getByTestId`, ...) instead of collapsing to brittle XPath.
+
+This repository is the **library itself** — it ships runtime code, the recorder, and step definitions as an npm package. It intentionally contains **no feature files or generated locators**: those belong in the consumer project that installs this package, not in the library.
 
 ---
 
@@ -11,15 +13,13 @@ A **record-and-replay BDD test automation framework** built on [Playwright](http
 3. [Installation](#installation)
 4. [Folder Structure](#folder-structure)
 5. [Recorder Usage](#recorder-usage)
-6. [Generated Files](#generated-files)
+6. [Locators](#locators)
 7. [Running Tests](#running-tests)
-8. [Execution Examples](#execution-examples)
-9. [Reports](#reports)
-10. [Configuration](#configuration)
-11. [Troubleshooting](#troubleshooting)
-12. [Best Practices](#best-practices)
-13. [Example Workflow](#example-workflow)
-14. [Command Reference](#command-reference)
+8. [Reports](#reports)
+9. [Configuration](#configuration)
+10. [Troubleshooting](#troubleshooting)
+11. [Best Practices](#best-practices)
+12. [Command Reference](#command-reference)
 
 ---
 
@@ -31,7 +31,7 @@ A **record-and-replay BDD test automation framework** built on [Playwright](http
 | 🌐 **API Recording** | Capture API calls made during UI interactions automatically |
 | 🔗 **E2E Recording** | Combine UI steps and API assertions in a single recorded flow |
 | 📝 **BDD Feature Generation** | Auto-generate `.feature` files in Gherkin from recorded sessions |
-| 📄 **YAML Locator Generation** | Auto-generate per-page YAML locator files — no manual XPath needed |
+| 🎯 **Semantic Locators** | Persists Playwright's own strategies (role/label/placeholder/testId/altText/title) instead of always falling back to XPath |
 | ▶️ **Playwright Execution** | Replay recorded features using Playwright across multiple browsers |
 | 🏷️ **Tag-Based Execution** | Filter and run tests by Cucumber tags (`@smoke`, `@regression`, etc.) |
 | 📊 **HTML Reports** | Generates rich HTML test reports with pass/fail detail |
@@ -47,77 +47,63 @@ A **record-and-replay BDD test automation framework** built on [Playwright](http
 
 ## Prerequisites
 
-Before setting up the framework, ensure the following are installed on your machine.
-
 | Software | Minimum Version | Check Command |
 |---|---|---|
 | **Node.js** | v18.x or higher | `node --version` |
 | **npm** | v9.x or higher | `npm --version` |
-| **Git** | Any recent version | `git --version` |
 
-> **Browser binaries** are installed automatically by Playwright during `npm install`.  
+> **Browser binaries** are installed automatically by Playwright during `npm install`.
 > No separate browser installation is needed.
 
 ---
 
 ## Installation
 
-### 1. Clone Repository
+Install this package into your own project (it is not meant to be cloned and run standalone):
 
 ```bash
-git clone <repository-url>
-cd playwright-cucumber-framework
+npm install wdio-playwright-library
 ```
 
-### 2. Install Dependencies
+`postinstall` then scaffolds your project automatically — it never overwrites a file that already exists:
 
-**Standard install** (use this normally):
+- `cucumber.js` — points Cucumber at this package's step definitions inside `node_modules`
+- `tsconfig.json` — `ts-node` config needed to transpile this package's `.ts` files
+- `e2e/config/config.yaml` — browser, environment, and run settings
+- `e2e/locators/common.yaml` and `e2e/locators/pages.yaml` — empty starter locator files
+- `e2e/features/example.feature` — a starter smoke test scenario
+- npm scripts merged into your `package.json` (`record`, `pw`, `ai`, `generate`, `inspect`, `test:*`, ...)
+
+Pin these two dev dependencies yourself after install (npm rewrites `package.json`'s dependency fields right after `postinstall` runs, so the script can't add them for you):
+
 ```bash
-npm install
+npm install --save-dev ts-node@^10.9.2 typescript@^5.7.2
 ```
 
-**Clean install** (use in CI or when `package-lock.json` must be respected exactly):
-```bash
-npm ci
-```
+> `ts-node@10` does not support TypeScript 7's native compiler — pinning both versions avoids that mismatch.
 
-> **When to use which?**
-> - `npm install` — local development; updates `package-lock.json` if needed
-> - `npm ci` — CI pipelines and fresh environments; strictly follows lock file, faster and more reliable
-
-### 3. Install Playwright Browsers
+Install Playwright's browser binaries:
 
 ```bash
 npx playwright install
 ```
 
-> Installs Chromium, Firefox, and WebKit browser binaries required by Playwright.
-
 ---
 
 ## Folder Structure
 
+This is the **library's own** structure — what actually ships in the npm package (see `package.json`'s `files` field):
+
 ```
-playwright-cucumber-framework/
+wdio-playwright-library/
 │
-├── e2e/                              # All test automation lives here
-│   │
+├── e2e/
 │   ├── config/
-│   │   └── config.yaml               # Central config: browser, env URLs, run settings
-│   │
-│   ├── features/
-│   │   └── generated/                # Auto-generated .feature files (do not edit manually)
-│   │       ├── api/                  # API-only feature files
-│   │       ├── endtoend/             # UI + API combined feature files
-│   │       └── web/                  # UI-only feature files
+│   │   └── config.yaml               # Template config: browser, env URLs, run settings
 │   │
 │   ├── locators/
-│   │   ├── common.yaml               # Shared locators used across all pages
-│   │   ├── pages.yaml                # Page registry: page keys, titles, labels
-│   │   └── generated/                # Auto-generated per-page locator YAML files
-│   │       ├── api/
-│   │       ├── endtoend/
-│   │       └── web/
+│   │   ├── common.yaml               # Empty — shared locators used across all your pages
+│   │   └── pages.yaml                # Empty — page registry: page keys, titles, labels
 │   │
 │   ├── stepdefinitions/
 │   │   ├── api.ts                    # API step definitions (send request, validate response)
@@ -129,46 +115,48 @@ playwright-cucumber-framework/
 │   └── support/
 │       ├── config.ts                 # Loads config.yaml → process.env at startup
 │       ├── featurePaths.ts           # Resolves feature/locator file paths by category
+│       ├── selectorEngine.ts         # Semantic locator resolution (getByRole/getByLabel/...)
 │       ├── recorder.ts               # Custom Playwright recorder (no codegen UI)
 │       ├── browser.ts                # Browser launch helpers
 │       ├── capture.ts                # API network capture logic
 │       ├── converter.ts              # Converts recorded actions → feature + locator artifacts
+│       ├── specParser.ts             # Parses `npx playwright codegen` output into recorded actions
 │       ├── formatter.ts              # Generates Gherkin text from captured API data
 │       ├── tableHelper.ts            # Web table verification utilities
 │       ├── textHelper.ts             # Screen text verification utilities
 │       ├── pageRegistry.ts           # YAML read/write helpers for pages.yaml
 │       ├── mode.ts                   # Run mode resolution (UI / API / E2E)
 │       └── scripts/
+│           ├── record.js             # Standalone recorder entry point (npm run record)
 │           ├── run.js                # Test runner: resolves features, passes args to Cucumber
-│           └── generate.js           # Generator: converts recorded-session.json → artifacts
+│           ├── generate.js           # Generator: converts a recorded session → artifacts
+│           └── inspect.js            # Element inspector (npm run inspect)
 │
-├── reports/
-│   ├── integrationTests/             # HTML test execution reports
-│   └── recorded/                     # Video recordings per scenario (.webm)
+├── scripts/
+│   └── postinstall.js                # Scaffolds the consumer project on npm install
 │
-├── test-results/                     # Raw Cucumber result output
-├── cucumber.js                       # Cucumber configuration file
-├── package.json                      # Project dependencies and npm scripts
-├── tsconfig.json                     # TypeScript compiler configuration
-└── config.example.yaml               # Example config (reference for new environments)
+├── cucumber.js                       # Cucumber configuration file (library's own dev use)
+├── package.json                      # Package metadata, dependencies, npm scripts
+└── tsconfig.json                     # TypeScript compiler configuration
 ```
+
+**Feature files and generated locators live in the *consumer* project**, not here — this package deliberately ships without them. When you record a session or write a scenario, the artifacts land under `e2e/features/` and `e2e/locators/generated/` in *your* project.
 
 ### Folder Purpose Summary
 
 | Folder | Purpose |
 |---|---|
-| `e2e/config/` | Single config file controls all browser, environment and run settings |
-| `e2e/features/generated/` | Auto-generated Gherkin scenarios — source of truth for what runs |
-| `e2e/locators/` | YAML-based element selectors replacing traditional Page Object classes |
+| `e2e/config/` | Template config controlling browser, environment and run settings |
+| `e2e/locators/` | Empty starter YAML locator files, scaffolded into your project on install |
 | `e2e/stepdefinitions/` | TypeScript step bindings that execute Playwright actions |
-| `e2e/support/` | Shared utilities, recorder engine, path helpers, and run scripts |
-| `reports/` | HTML reports and scenario video recordings |
+| `e2e/support/` | Shared utilities, recorder engine, locator resolution, path helpers, run scripts |
+| `scripts/postinstall.js` | Scaffolds your project's files on `npm install` |
 
 ---
 
 ## Recorder Usage
 
-The recorder captures your browser interactions and API calls in real time, then converts them into runnable Cucumber feature files and YAML locators automatically.
+The recorder captures your browser interactions and API calls in real time, then converts them into runnable Cucumber feature files and YAML locators automatically — written into **your project**, not this package.
 
 ### Start the Recorder
 
@@ -184,15 +172,15 @@ This launches a **real Chromium browser window** with the recorder engine inject
 The recorder launches a full browser session. Navigate to any page and interact normally.
 
 **Step 2 — UI actions are captured**
-Every click, text input, dropdown selection, checkbox interaction, and navigation is recorded with smart locator resolution (prefers `aria-label`, `id`, `name`, `placeholder` over fragile XPaths).
+Every click, text input, dropdown selection, checkbox interaction, and navigation is recorded using Playwright's own semantic locator strategies — in priority order: `data-testid` → ARIA role + accessible name → associated `<label>` → `placeholder` → `alt` text → `title` → visible text → XPath (last resort only, kept as a fallback even when a semantic strategy wins).
 
 **Step 3 — API calls are captured**
 All network API calls made during your UI interactions are automatically intercepted and stored alongside the UI steps.
 
 **Step 4 — Stop and generate**
 When done, click **Generate** in the recorder overlay. The framework **automatically** converts the session into:
-- A `.feature` file under `e2e/features/generated/<category>/`
-- A per-page locator `.yaml` file under `e2e/locators/generated/<category>/`
+- A `.feature` file under `e2e/features/generated/<category>/` (in your project)
+- A per-page locator `.yaml` file under `e2e/locators/generated/<category>/` (in your project)
 - An updated `e2e/locators/pages.yaml` registry entry
 
 No separate command is needed — generation happens as part of the recording process.
@@ -207,46 +195,57 @@ The framework **automatically classifies** your recording into one of three cate
 | `api` | Only API requests were recorded (no browser interaction) |
 | `endtoend` | Both UI steps AND API calls were captured together |
 
+### Alternative: Real Playwright Codegen
+
+`npm run record` also supports a "UI mode" that launches real `npx playwright codegen` and parses the generated `.spec.ts` file back into a feature + locators. Codegen already emits semantic locators (`getByRole`/`getByLabel`/...), and the parser preserves them rather than downgrading everything to XPath.
+
 ---
 
-## Generated Files
+## Locators
 
-### Feature Files (`.feature`)
-Located at `e2e/features/generated/<category>/<name>.feature`
+### YAML Locator Format
 
-```gherkin
-@smoke
-Feature: Login Flow
-
-  Scenario: User login with valid credentials
-    Given User navigates to "https://app.example.com/"
-    Given User is on "loginPage" screen
-    Given enters "user@example.com" text in "Email Address" textbox
-    Given enters "Test@123" text in "Password" textbox
-    When User clicks on "Login" button
-    When verify "Welcome" text is present on the screen
-```
-
-> These files are **auto-generated**. Avoid editing them manually unless adding tags.
-
-### YAML Locator Files (`.yaml`)
-Located at `e2e/locators/generated/<category>/<pageKey>.yaml`
+Generated per-page locator files use a `[kind, value, xpathFallback?]` tuple — plain strings, no embedded JSON:
 
 ```yaml
-Email Address:  [css, input[type="email"]]
-Password:       [css, input[type="password"]]
-Login:          [xpath, //button[normalize-space()='Login']]
+Sign In:
+  - role:button
+  - Sign In
+  - //button[normalize-space(.)='Sign In']
+
+Email Address:
+  - placeholder
+  - Email Address
+  - //input[@placeholder='Email Address']
+
+Login Link:
+  - xpath
+  - //a[normalize-space(.)='Login']
 ```
 
-Each entry maps a **human-readable element name** to a `[strategy, selector]` pair.
+Supported `kind` values:
+
+| Kind | Resolves via |
+|---|---|
+| `role:<ariaRole>` | `page.getByRole(ariaRole, { name, exact: true })` |
+| `label` | `page.getByLabel(value, { exact: true })` |
+| `placeholder` | `page.getByPlaceholder(value, { exact: true })` |
+| `text` | `page.getByText(value, { exact: true })` |
+| `testid` | `page.getByTestId(value)` |
+| `alttext` | `page.getByAltText(value, { exact: true })` |
+| `title` | `page.getByTitle(value, { exact: true })` |
+| `xpath` | `page.locator('xpath=' + value)` |
+| `css` | `page.locator(value)` |
+| `id` / `name` / `tagName` / `className` / `linkText` / `buttonText` | WDIO-style kinds, translated to their Playwright equivalent — locator YAML written for the WDIO branch of this toolkit works here unmodified |
+| anything else | `page.locator('[<kind>="<value>"]')` — generic attribute selector fallback |
+
+When a semantic kind is present, its XPath (third element) is kept only as a `.or()` fallback for resilience — the semantic strategy is what actually resolves the element at runtime.
 
 ### Common Locators (`common.yaml`)
-Located at `e2e/locators/common.yaml`
 
-Defines shared elements available on **every page** — navigation bar, logout button, modals, toast messages, etc. The framework checks `common.yaml` automatically if an element is not found in the page-specific YAML.
+Defines shared elements available on **every page** — navigation bar, logout button, modals, toast messages, etc. Checked automatically if an element is not found in the page-specific YAML.
 
 ### Page Registry (`pages.yaml`)
-Located at `e2e/locators/pages.yaml`
 
 Tracks the page title and a representative label for each registered page key. Used by the `User is on "..." screen` step to optionally verify the page loaded correctly.
 
@@ -256,159 +255,52 @@ Tracks the page title and a representative label for each registered page key. U
 
 ### Run All Feature Files
 
-Runs every `.feature` file found under `e2e/features/generated/`:
-
 ```bash
 npm run test:all
-```
-
-or:
-
-```bash
-node e2e/support/scripts/run.js
 ```
 
 ### Run by Category
 
 ```bash
-# UI-only tests
-npm run test:web
-
-# API-only tests
-npm run test:api
-
-# End-to-end (UI + API) tests
-npm run test:e2e
+npm run test:web    # UI-only tests
+npm run test:api    # API-only tests
+npm run test:e2e    # End-to-end (UI + API) tests
 ```
 
-### Run a Single Feature File
+### Run a Single or Multiple Feature Files
 
 ```bash
-node e2e/support/scripts/run.js login
-```
-
-or with the full path:
-
-```bash
-node e2e/support/scripts/run.js e2e/features/generated/web/login.feature
-```
-
-### Run Multiple Feature Files
-
-```bash
-node e2e/support/scripts/run.js login dashboard checkout
+node node_modules/wdio-playwright-library/e2e/support/scripts/run.js login
+node node_modules/wdio-playwright-library/e2e/support/scripts/run.js login dashboard checkout
 ```
 
 ### Run Using Tags
-
-Add tags in your `.feature` file above `Feature:` or `Scenario:`:
 
 ```gherkin
 @smoke
 Scenario: User login with valid credentials
 ```
 
-Then run:
-
 ```bash
-# Run @smoke tagged scenarios
-node e2e/support/scripts/run.js --tags @smoke
-
-# Short flag
-node e2e/support/scripts/run.js -t @smoke
-
-# Bare tag shorthand
-node e2e/support/scripts/run.js @smoke
-
-# Using npm script
 npm run run -- --tags @smoke
-```
-
-### Tag Expressions
-
-```bash
-# Smoke only
-node e2e/support/scripts/run.js --tags "@smoke"
-
-# Regression only
-node e2e/support/scripts/run.js --tags "@regression"
-
-# Smoke but not work-in-progress
-node e2e/support/scripts/run.js --tags "@smoke and not @wip"
-
-# Smoke or regression
-node e2e/support/scripts/run.js --tags "@smoke or @regression"
-
-# Multiple bare tags (auto-joined with AND)
-node e2e/support/scripts/run.js @smoke @regression
-
-# Run specific category + tag
-node e2e/support/scripts/run.js web --tags @smoke
-node e2e/support/scripts/run.js endtoend --tags @regression
+npm run run -- --tags "@smoke and not @wip"
+npm run run -- --tags "@smoke or @regression"
 ```
 
 ### Preview Without Running
 
-List which feature files would run without executing them:
-
 ```bash
-node e2e/support/scripts/run.js --tags @smoke --list
-```
-
----
-
-## Execution Examples
-
-```bash
-# Run all tests
-npm run test:all
-
-# Run all web tests
-npm run test:web
-
-# Run all API tests
-npm run test:api
-
-# Run all E2E tests
-npm run test:e2e
-
-# Run single file by name
-node e2e/support/scripts/run.js recordedflow
-
-# Run single file by path
-node e2e/support/scripts/run.js e2e/features/generated/endtoend/recordedflow.feature
-
-# Run multiple named files
-node e2e/support/scripts/run.js login dashboard profile
-
-# Run all web @smoke tests
-node e2e/support/scripts/run.js web --tags @smoke
-
-# Run @regression but exclude @wip
-node e2e/support/scripts/run.js --tags "@regression and not @wip"
-
-# Preview what @smoke would run (no execution)
-node e2e/support/scripts/run.js @smoke --list
-
-# Parallel execution (configured via maxInstances in config.yaml)
-# Set maxInstances: 4 in e2e/config/config.yaml, then:
-npm run test:all
+npm run run -- --tags @smoke --list
 ```
 
 ---
 
 ## Reports
 
-### HTML Report
-
-Generated automatically after every test run.
-
 | Report | Location |
 |---|---|
 | HTML Report | `reports/integrationTests/cucumber-report.html` |
-| Video Recordings | `reports/recorded/<scenario-name>-<PASS|FAIL>-<timestamp>.webm` |
-
-### Open the HTML Report
+| Video Recordings | `reports/recorded/<scenario-name>-<PASS\|FAIL>-<timestamp>.webm` |
 
 ```bash
 # Windows
@@ -421,56 +313,38 @@ open reports/integrationTests/cucumber-report.html
 xdg-open reports/integrationTests/cucumber-report.html
 ```
 
-### What the Report Shows
-
-- ✅ Pass / ❌ Fail status per scenario
-- Step-by-step execution detail
-- Error messages and stack traces for failures
-- Scenario tags and feature names
-- Execution duration per step and scenario
-
-### Video Recordings
-
-When `recordVideo: true` is set in `e2e/config/config.yaml`, a `.webm` video is saved for every scenario:
-
-```
-reports/recorded/User_login_with_valid_credentials-PASS-2026-06-06_10-30-00.webm
-reports/recorded/User_login_with_invalid_password-FAIL-2026-06-06_10-30-45.webm
-```
+Set `recordVideo: true` in `e2e/config/config.yaml` to save a `.webm` per scenario.
 
 ---
 
 ## Configuration
 
-All framework settings live in **`e2e/config/config.yaml`**.
+All settings live in your project's **`e2e/config/config.yaml`** (scaffolded on install).
 
 ```yaml
-# ── Browser ────────────────────────────────────────────────────────────────
 browser:
   name: chrome            # chromium | chrome | edge | firefox
   headless: false         # true = no visible browser window (CI mode)
-  slowMo: 1000            # ms delay between actions (0 for fastest)
-  clickTimeoutMs: 30000   # max wait for elements to appear
-  viewportDevice: " "     # "" = desktop; set to "iPhone 14 Pro Max" for mobile
-  recordVideo: true       # save .webm video per scenario
+  slowMo: 1000
+  clickTimeoutMs: 30000
+  viewportDevice: " "     # "" = desktop; set to a device name for mobile emulation
+  recordVideo: true
 
-# ── Test Run ───────────────────────────────────────────────────────────────
 run:
   environment: val        # val | dev | standalone
-  tags: ""                # default tag filter (empty = run all)
-  retryOnFail: 0          # retry failed scenarios N times
+  tags: ""
+  retryOnFail: 0
   reportFolder: ./reports/integrationTests
-  maxInstances: 1         # parallel workers (1 = sequential)
+  maxInstances: 1
   features: ./e2e/features/generated/**/*.feature
   getPageTimeoutMs: 40000
   redirectWaitMs: 15000
   verifyTimeoutMs: 20000
 
-# ── Environment URLs ────────────────────────────────────────────────────────
 urls:
   standalone: http://localhost:4042/
-  val: https://customer-billing-deve.vercel.app/
-  dev: https://customer-billing-deve.vercel.app/
+  val: https://your-app.example.com/
+  dev: https://your-app.example.com/
 ```
 
 ### Key Configuration Options
@@ -479,7 +353,6 @@ urls:
 |---|---|---|
 | `browser.name` | `chrome`, `chromium`, `edge`, `firefox` | Browser to run tests in |
 | `browser.headless` | `true` / `false` | Hide or show browser window |
-| `browser.slowMo` | number (ms) | Slow down actions for visibility |
 | `browser.recordVideo` | `true` / `false` | Enable scenario video recording |
 | `browser.viewportDevice` | device name or `" "` | Mobile emulation device |
 | `run.environment` | `val`, `dev`, `standalone` | Active environment URL |
@@ -487,267 +360,86 @@ urls:
 | `run.maxInstances` | number | Parallel workers count |
 | `run.retryOnFail` | number | Auto-retry count on failure |
 
-### Cucumber Configuration (`cucumber.js`)
-
-```js
-module.exports = {
-  default: {
-    paths: [],                              // set by run.js at runtime
-    require: ['e2e/stepdefinitions/**/*.ts'],
-    requireModule: ['ts-node/register'],
-    format: ['progress', 'html:...'],
-  }
-};
-```
-
-### TypeScript Configuration (`tsconfig.json`)
-
-Standard TypeScript settings for `ts-node` execution. No changes needed unless adding custom path aliases.
-
 ---
 
 ## Troubleshooting
 
 ### Dependency Installation Issues
 
-**Problem:** `npm install` fails with peer dependency errors.
-
 ```bash
-# Force install ignoring peer conflicts
 npm install --legacy-peer-deps
 ```
 
-**Problem:** `node_modules` is corrupted or stale.
-
-```bash
-# Clean and reinstall
-rm -rf node_modules package-lock.json
-npm install
-```
-
----
-
 ### Browser Installation Issues
 
-**Problem:** `Error: browserType.launch: Executable doesn't exist`
-
 ```bash
-# Reinstall Playwright browsers
 npx playwright install
-
-# Install specific browser only
-npx playwright install chromium
+npx playwright install chromium   # specific browser only
+npx playwright install-deps       # Linux/CI system dependencies
 ```
-
-**Problem:** Browser crashes immediately on Linux/CI.
-
-```bash
-# Install system dependencies
-npx playwright install-deps
-```
-
----
 
 ### Recorder Not Starting
 
-**Problem:** `npm run pw` shows an error about missing files.
-
-- Ensure you are in the project root directory.
-- Ensure `npm install` was run successfully.
-- Check that `e2e/support/recorder.ts` exists.
-
-**Problem:** Browser opens but recording does not capture actions.
-
-- Ensure the inject script loaded (check browser console for errors).
-- Try navigating to the target URL after the browser opens.
-
----
+- Confirm `npm install` completed successfully and `postinstall` ran (check for `cucumber.js`/`e2e/config/config.yaml` in your project).
+- Ensure `ts-node`/`typescript` are pinned per [Installation](#installation).
 
 ### Feature Execution Failures
 
-**Problem:** `Element "X" not found in page "Y"` error.
+**`Element "X" not found in page "Y"`** — the locator YAML for that page is missing the element. Add it manually:
 
-- The locator YAML for that page may be missing the element.
-- Open `e2e/locators/generated/<category>/<pageKey>.yaml` and add the missing element manually:
-  ```yaml
-  My Button: [xpath, //button[normalize-space()='My Button']]
-  ```
-- Or add it to `e2e/locators/common.yaml` if it appears on multiple pages.
-
-**Problem:** `No active page set` error.
-
-- A step is trying to interact with an element before `Given User is on "..." screen` was called.
-- Ensure every scenario starts with the correct screen step.
-
-**Problem:** Feature file not found when running by name.
-
-```bash
-# Use --list to debug what gets resolved
-node e2e/support/scripts/run.js myFeature --list
+```yaml
+My Button:
+  - role:button
+  - My Button
 ```
 
----
+Or add it to `e2e/locators/common.yaml` if it appears on multiple pages.
 
-### Report Generation Issues
-
-**Problem:** No HTML report is generated after the run.
-
-- Check that `reportFolder` in `e2e/config/config.yaml` points to a writable path.
-- Ensure the `reports/integrationTests/` folder has write permissions.
-
-**Problem:** Video files not saved.
-
-- Set `recordVideo: true` in `e2e/config/config.yaml`.
-- Ensure the `reports/recorded/` folder exists or can be created.
+**`No active page set`** — a step ran before `Given User is on "..." screen`. Ensure every scenario starts with the correct screen step.
 
 ---
 
 ## Best Practices
 
-### Naming Feature Files
+### Locator Maintenance
 
-- Use `camelCase` matching the page key: `loginPage.feature`, `customerBilling.feature`
-- Keep the file name descriptive and short
-- Let the generator name the file — only rename when the default is unclear
+- **Never** put raw XPaths in step definitions — always use YAML locators
+- Prefer semantic kinds (`role:*`, `label`, `placeholder`, `testid`) over `xpath`/`css` when available
+- Keep `common.yaml` for elements that appear on 3+ pages
+- Use descriptive element names: `Submit Payment Button` not `btn1`
 
 ### Tag Usage
 
 ```gherkin
 @smoke              # Fast, critical path tests
 @regression         # Full regression suite
-@login              # Feature-area tag
 @wip                # Work in progress — excluded from pipelines
-@flaky              # Known unstable tests to monitor
 ```
 
-- Tag at **Scenario level** for fine-grained control
-- Tag at **Feature level** only when ALL scenarios share the same classification
-- Always exclude `@wip` in CI: `--tags "not @wip"`
-
-### Locator Maintenance
-
-- **Never** put raw XPaths in step definitions — always use YAML locators
-- Keep `common.yaml` for elements that appear on 3+ pages
-- Prefer `css` strategy over `xpath` when both work
-- Use descriptive element names: `Submit Payment Button` not `btn1`
+Always exclude `@wip` in CI: `--tags "not @wip"`.
 
 ### Step Definitions
 
 - Prefer the **built-in generic steps** before writing custom ones
-- If a new step is needed, add it to `web.ts` (UI) or `api.ts` (API)
 - Never hardcode URLs, usernames or passwords inside step definitions — use config or test data
-
-### Test Data Management
-
-- Do not hardcode test data inside `.feature` files directly for sensitive data
-- Use `Scenario Outline` with `Examples:` tables for data-driven testing
-- Environment-specific data belongs in `e2e/config/config.yaml` under `urls:`
-
----
-
-## Example Workflow
-
-Here is a complete end-to-end workflow for a new team member:
-
-### Step 1 — Install
-
-```bash
-git clone <repository-url>
-cd playwright-cucumber-framework
-npm install
-npx playwright install
-```
-
-### Step 2 — Start the Recorder
-
-```bash
-npm run pw
-```
-
-A Chrome browser window opens automatically.
-
-### Step 3 — Record Your Flow
-
-1. Navigate to the application URL
-2. Perform the user journey (login, fill forms, click buttons)
-3. All actions and API calls are captured in real time
-
-### Step 4 — Generate Artifacts
-
-Click the **Generate** button in the recorder overlay. The framework automatically creates:
-- `e2e/features/generated/<category>/<pageKey>.feature`
-- `e2e/locators/generated/<category>/<pageKey>.yaml`
-- Updated `e2e/locators/pages.yaml`
-
-No separate command needed — generation is part of the recording step.
-
-### Step 5 — Add Tags (Optional)
-
-Open the generated `.feature` file and add tags above the `Scenario:`:
-
-```gherkin
-@smoke @login
-Scenario: User login with valid credentials
-```
-
-### Step 6 — Execute the Feature
-
-```bash
-# Run by name
-node e2e/support/scripts/run.js recordedflow
-
-# Run by tag
-node e2e/support/scripts/run.js --tags @smoke
-```
-
-### Step 7 — View the Report
-
-```bash
-start reports/integrationTests/cucumber-report.html
-```
 
 ---
 
 ## Command Reference
 
-### NPM Scripts
+### NPM Scripts (merged into your project by `postinstall`)
 
 | Command | Description |
 |---|---|
 | `npm run pw` | Start the Playwright recorder (artifacts auto-generated on stop) |
+| `npm run record` | Start the standalone recorder (`record.js`) |
+| `npm run generate` | Convert a recorded session into feature + locator artifacts |
+| `npm run inspect` | Launch the element inspector |
 | `npm run test:all` | Run all feature files |
 | `npm run test:web` | Run all UI-only features |
 | `npm run test:api` | Run all API-only features |
 | `npm run test:e2e` | Run all end-to-end (UI + API) features |
-| `npm run cucumber` | Launch Cucumber CLI directly |
-
-### Runner Commands
-
-| Command | Description |
-|---|---|
-| `node e2e/support/scripts/run.js` | Run all features |
-| `node e2e/support/scripts/run.js web` | Run all `web` category features |
-| `node e2e/support/scripts/run.js api` | Run all `api` category features |
-| `node e2e/support/scripts/run.js endtoend` | Run all `endtoend` category features |
-| `node e2e/support/scripts/run.js <name>` | Run a feature file by name |
-| `node e2e/support/scripts/run.js <path>` | Run a feature file by path |
-| `node e2e/support/scripts/run.js <a> <b>` | Run multiple named features |
-| `node e2e/support/scripts/run.js --tags @smoke` | Run by tag expression |
-| `node e2e/support/scripts/run.js -t @smoke` | Run by tag (short flag) |
-| `node e2e/support/scripts/run.js @smoke` | Run by bare tag |
-| `node e2e/support/scripts/run.js --list` | List matched files only (no run) |
-| `npm run run -- --tags @smoke` | Run with tag via npm |
-
-### Tag Expression Examples
-
-| Expression | Meaning |
-|---|---|
-| `@smoke` | Run all `@smoke` scenarios |
-| `@smoke and @login` | Must have BOTH tags |
-| `@smoke or @regression` | Has EITHER tag |
-| `not @wip` | Exclude `@wip` scenarios |
-| `@smoke and not @wip` | Smoke tests, excluding WIP |
-| `@regression or @smoke` | Either regression or smoke |
+| `npm run cucumber` \| `npm test` | Launch Cucumber CLI directly |
 
 ### Supported Browsers
 
@@ -760,27 +452,7 @@ start reports/integrationTests/cucumber-report.html
 
 ### Supported Viewport Devices
 
-Set `browser.viewportDevice` in `e2e/config/config.yaml`:
-
-| Device Name |
-|---|
-| `iPhone SE` |
-| `iPhone 14 Pro Max` |
-| `Pixel 7` |
-| `Samsung Galaxy S20 Ultra` |
-| `iPad Pro` |
-| `Surface Pro 7` |
-
-Leave as `" "` (space) for full desktop viewport.
-
----
-
-## Contributing
-
-1. Branch from `main`: `git checkout -b feature/my-improvement`
-2. Make changes following the best practices above
-3. Ensure all existing tests still pass: `npm run test:all`
-4. Submit a pull request with a clear description
+Set `browser.viewportDevice` in `e2e/config/config.yaml` to a device name (e.g. `iPhone 14 Pro Max`, `Pixel 7`, `iPad Pro`) or leave as `" "` for full desktop viewport.
 
 ---
 

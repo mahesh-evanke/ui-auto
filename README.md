@@ -1,8 +1,10 @@
 # wdio-playwright-library
 
-An installable **BDD test automation toolkit** built on [Playwright](https://playwright.dev/) and [Cucumber.js](https://cucumber.io/). Install it into your own project and it scaffolds everything you need to start recording and running Gherkin-driven E2E tests — record-and-replay, no manual XPath writing, and locators that use Playwright's own semantic strategies (`getByRole`, `getByLabel`, `getByPlaceholder`, `getByTestId`, ...) instead of collapsing to brittle XPath.
+An installable **BDD test execution engine** built on [Playwright](https://playwright.dev/) and [Cucumber.js](https://cucumber.io/). Install it into your own project to run Gherkin feature files against Playwright, with locators that use Playwright's own semantic strategies (`getByRole`, `getByLabel`, `getByPlaceholder`, `getByTestId`, ...) instead of collapsing to brittle XPath.
 
-This repository is the **library itself** — it ships runtime code, the recorder, and step definitions as an npm package. It intentionally contains **no feature files or generated locators**: those belong in the consumer project that installs this package, not in the library.
+**This package only executes feature files — it has no recorder and no AI authoring tooling.** Author your scenarios and locator YAML with [`wdio-playwright-recording`](../wdio-playwright-recording) or [`wdio-playwright-recording-ai`](../wdio-playwright-recording-ai), or write `.feature` files and locator YAML by hand; install this package to run them.
+
+This repository ships runtime code and step definitions as an npm package. It intentionally contains **no feature files, no generated locators, and no authoring tools**: those belong in the consumer project or in the sibling recording branches.
 
 ---
 
@@ -12,14 +14,13 @@ This repository is the **library itself** — it ships runtime code, the recorde
 2. [Prerequisites](#prerequisites)
 3. [Installation](#installation)
 4. [Folder Structure](#folder-structure)
-5. [Recorder Usage](#recorder-usage)
-6. [Locators](#locators)
-7. [Running Tests](#running-tests)
-8. [Reports](#reports)
-9. [Configuration](#configuration)
-10. [Troubleshooting](#troubleshooting)
-11. [Best Practices](#best-practices)
-12. [Command Reference](#command-reference)
+5. [Locators](#locators)
+6. [Running Tests](#running-tests)
+7. [Reports](#reports)
+8. [Configuration](#configuration)
+9. [Troubleshooting](#troubleshooting)
+10. [Best Practices](#best-practices)
+11. [Command Reference](#command-reference)
 
 ---
 
@@ -27,12 +28,8 @@ This repository is the **library itself** — it ships runtime code, the recorde
 
 | Feature | Description |
 |---|---|
-| 🎥 **UI Recording** | Record browser clicks, inputs, dropdowns and navigation visually |
-| 🌐 **API Recording** | Capture API calls made during UI interactions automatically |
-| 🔗 **E2E Recording** | Combine UI steps and API assertions in a single recorded flow |
-| 📝 **BDD Feature Generation** | Auto-generate `.feature` files in Gherkin from recorded sessions |
-| 🎯 **Semantic Locators** | Persists Playwright's own strategies (role/label/placeholder/testId/altText/title) instead of always falling back to XPath |
-| ▶️ **Playwright Execution** | Replay recorded features using Playwright across multiple browsers |
+| ▶️ **Playwright Execution** | Runs Gherkin feature files using Playwright across multiple browsers |
+| 🎯 **Semantic Locators** | Replays Playwright's own strategies (role/label/placeholder/testId/altText/title) instead of always falling back to XPath |
 | 🏷️ **Tag-Based Execution** | Filter and run tests by Cucumber tags (`@smoke`, `@regression`, etc.) |
 | 📊 **HTML Reports** | Generates rich HTML test reports with pass/fail detail |
 | 🎬 **Video Recording** | Records video of every test run, saved per scenario with status |
@@ -72,7 +69,7 @@ npm install wdio-playwright-library
 - `e2e/config/config.yaml` — browser, environment, and run settings
 - `e2e/locators/common.yaml` and `e2e/locators/pages.yaml` — empty starter locator files
 - `e2e/features/example.feature` — a starter smoke test scenario
-- npm scripts merged into your `package.json` (`record`, `pw`, `ai`, `generate`, `inspect`, `test:*`, ...)
+- npm scripts merged into your `package.json` (`run`, `test:*`)
 
 Pin these two dev dependencies yourself after install (npm rewrites `package.json`'s dependency fields right after `postinstall` runs, so the script can't add them for you):
 
@@ -115,22 +112,18 @@ wdio-playwright-library/
 │   └── support/
 │       ├── config.ts                 # Loads config.yaml → process.env at startup
 │       ├── featurePaths.ts           # Resolves feature/locator file paths by category
-│       ├── selectorEngine.ts         # Semantic locator resolution (getByRole/getByLabel/...)
-│       ├── recorder.ts               # Custom Playwright recorder (no codegen UI)
-│       ├── browser.ts                # Browser launch helpers
-│       ├── capture.ts                # API network capture logic
-│       ├── converter.ts              # Converts recorded actions → feature + locator artifacts
-│       ├── specParser.ts             # Parses `npx playwright codegen` output into recorded actions
-│       ├── formatter.ts              # Generates Gherkin text from captured API data
+│       ├── capture.ts                # API network capture logic (used during UI+API runs)
+│       ├── contextOptions.ts         # Browser context/launch option builders
 │       ├── tableHelper.ts            # Web table verification utilities
 │       ├── textHelper.ts             # Screen text verification utilities
-│       ├── pageRegistry.ts           # YAML read/write helpers for pages.yaml
+│       ├── matcher.ts                # Matches API steps against captured responses
+│       ├── datatable.ts              # DataTable → JSON helper for API steps
+│       ├── token.ts                  # Auth token extraction helper for API steps
+│       ├── api-config.ts             # Resolves API base URLs from config
 │       ├── mode.ts                   # Run mode resolution (UI / API / E2E)
 │       └── scripts/
-│           ├── record.js             # Standalone recorder entry point (npm run record)
 │           ├── run.js                # Test runner: resolves features, passes args to Cucumber
-│           ├── generate.js           # Generator: converts a recorded session → artifacts
-│           └── inspect.js            # Element inspector (npm run inspect)
+│           └── terminal-formatter.js # CLI output formatting for the runner
 │
 ├── scripts/
 │   └── postinstall.js                # Scaffolds the consumer project on npm install
@@ -140,7 +133,7 @@ wdio-playwright-library/
 └── tsconfig.json                     # TypeScript compiler configuration
 ```
 
-**Feature files and generated locators live in the *consumer* project**, not here — this package deliberately ships without them. When you record a session or write a scenario, the artifacts land under `e2e/features/` and `e2e/locators/generated/` in *your* project.
+**Feature files and locators live in the *consumer* project**, not here — this package ships without any. Author them by hand, or with the recorder/AI tooling in `wdio-playwright-recording` / `wdio-playwright-recording-ai`, then install this package to execute them.
 
 ### Folder Purpose Summary
 
@@ -149,63 +142,18 @@ wdio-playwright-library/
 | `e2e/config/` | Template config controlling browser, environment and run settings |
 | `e2e/locators/` | Empty starter YAML locator files, scaffolded into your project on install |
 | `e2e/stepdefinitions/` | TypeScript step bindings that execute Playwright actions |
-| `e2e/support/` | Shared utilities, recorder engine, locator resolution, path helpers, run scripts |
+| `e2e/support/` | Shared utilities: locator resolution, API capture/replay, path helpers, run scripts |
 | `scripts/postinstall.js` | Scaffolds your project's files on `npm install` |
-
----
-
-## Recorder Usage
-
-The recorder captures your browser interactions and API calls in real time, then converts them into runnable Cucumber feature files and YAML locators automatically — written into **your project**, not this package.
-
-### Start the Recorder
-
-```bash
-npm run pw
-```
-
-This launches a **real Chromium browser window** with the recorder engine injected. No Playwright Inspector UI is shown.
-
-### How Recording Works
-
-**Step 1 — Browser opens**
-The recorder launches a full browser session. Navigate to any page and interact normally.
-
-**Step 2 — UI actions are captured**
-Every click, text input, dropdown selection, checkbox interaction, and navigation is recorded using Playwright's own semantic locator strategies — in priority order: `data-testid` → ARIA role + accessible name → associated `<label>` → `placeholder` → `alt` text → `title` → visible text → XPath (last resort only, kept as a fallback even when a semantic strategy wins).
-
-**Step 3 — API calls are captured**
-All network API calls made during your UI interactions are automatically intercepted and stored alongside the UI steps.
-
-**Step 4 — Stop and generate**
-When done, click **Generate** in the recorder overlay. The framework **automatically** converts the session into:
-- A `.feature` file under `e2e/features/generated/<category>/` (in your project)
-- A per-page locator `.yaml` file under `e2e/locators/generated/<category>/` (in your project)
-- An updated `e2e/locators/pages.yaml` registry entry
-
-No separate command is needed — generation happens as part of the recording process.
-
-### Recording Categories
-
-The framework **automatically classifies** your recording into one of three categories:
-
-| Category | When Used |
-|---|---|
-| `web` | Only UI steps were recorded (clicks, inputs, navigation) |
-| `api` | Only API requests were recorded (no browser interaction) |
-| `endtoend` | Both UI steps AND API calls were captured together |
-
-### Alternative: Real Playwright Codegen
-
-`npm run record` also supports a "UI mode" that launches real `npx playwright codegen` and parses the generated `.spec.ts` file back into a feature + locators. Codegen already emits semantic locators (`getByRole`/`getByLabel`/...), and the parser preserves them rather than downgrading everything to XPath.
 
 ---
 
 ## Locators
 
+This package only **replays** locator YAML — it doesn't generate it. Write it by hand, or author it with `wdio-playwright-recording`/`wdio-playwright-recording-ai`.
+
 ### YAML Locator Format
 
-Generated per-page locator files use a `[kind, value, xpathFallback?]` tuple — plain strings, no embedded JSON:
+Per-page locator files use a `[kind, value, xpathFallback?]` tuple — plain strings, no embedded JSON:
 
 ```yaml
 Sign In:
@@ -336,7 +284,7 @@ run:
   retryOnFail: 0
   reportFolder: ./reports/integrationTests
   maxInstances: 1
-  features: ./e2e/features/generated/**/*.feature
+  features: ./e2e/features/**/*.feature
   getPageTimeoutMs: 40000
   redirectWaitMs: 15000
   verifyTimeoutMs: 20000
@@ -378,11 +326,6 @@ npx playwright install chromium   # specific browser only
 npx playwright install-deps       # Linux/CI system dependencies
 ```
 
-### Recorder Not Starting
-
-- Confirm `npm install` completed successfully and `postinstall` ran (check for `cucumber.js`/`e2e/config/config.yaml` in your project).
-- Ensure `ts-node`/`typescript` are pinned per [Installation](#installation).
-
 ### Feature Execution Failures
 
 **`Element "X" not found in page "Y"`** — the locator YAML for that page is missing the element. Add it manually:
@@ -396,6 +339,12 @@ My Button:
 Or add it to `e2e/locators/common.yaml` if it appears on multiple pages.
 
 **`No active page set`** — a step ran before `Given User is on "..." screen`. Ensure every scenario starts with the correct screen step.
+
+**Feature file not found when running by name** — use `--list` to debug what gets resolved:
+
+```bash
+npm run run -- myFeature --list
+```
 
 ---
 
@@ -431,15 +380,21 @@ Always exclude `@wip` in CI: `--tags "not @wip"`.
 
 | Command | Description |
 |---|---|
-| `npm run pw` | Start the Playwright recorder (artifacts auto-generated on stop) |
-| `npm run record` | Start the standalone recorder (`record.js`) |
-| `npm run generate` | Convert a recorded session into feature + locator artifacts |
-| `npm run inspect` | Launch the element inspector |
 | `npm run test:all` | Run all feature files |
 | `npm run test:web` | Run all UI-only features |
 | `npm run test:api` | Run all API-only features |
 | `npm run test:e2e` | Run all end-to-end (UI + API) features |
 | `npm run cucumber` \| `npm test` | Launch Cucumber CLI directly |
+
+### Runner Commands
+
+| Command | Description |
+|---|---|
+| `npm run run` | Run all features |
+| `npm run run -- <name>` | Run a feature file by name |
+| `npm run run -- <a> <b>` | Run multiple named features |
+| `npm run run -- --tags @smoke` | Run by tag expression |
+| `npm run run -- --list` | List matched files only (no run) |
 
 ### Supported Browsers
 

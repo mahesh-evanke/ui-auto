@@ -2,7 +2,7 @@
   "name": "wdio-playwright-library",
   "version": "1.0.0",
   "private": false,
-  "description": "Playwright + Cucumber framework: recorder + AI Scenario CLI (authoring) plus the step-definition/execution engine (running) — the full toolkit consumers install as a dependency",
+  "description": "Playwright + Cucumber step-definition/execution engine — runs Gherkin feature files against Playwright. No recorder or AI authoring tooling; feature files and locators are authored in the consumer project (see wdio-playwright-recording / wdio-playwright-recording-ai for authoring).",
   "files": [
     "e2e/stepdefinitions",
     "e2e/support",
@@ -15,26 +15,17 @@
   ],
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
-    "record": "node e2e/support/scripts/record.js",
-    "pw": "ts-node e2e/support/recorder.ts",
-    "ai": "node e2e/support/scripts/ai-cli.js",
-    "ai:ui": "node e2e/support/scripts/ai-ui.js",
-    "ai:mcp": "node e2e/support/scripts/ai-mcp.js",
-    "generate": "node e2e/support/scripts/generate.js",
-    "inspect": "node e2e/support/scripts/inspect.js",
     "cucumber": "cucumber-js",
     "run": "node e2e/support/scripts/run.js",
     "test:all": "node e2e/support/scripts/run.js",
     "test:web": "node e2e/support/scripts/run.js web",
     "test:api": "node e2e/support/scripts/run.js api",
-    "test:ai": "node e2e/support/scripts/test-ai.js",
     "test:e2e": "node e2e/support/scripts/run.js endtoend"
   },
   "dependencies": {
     "@cucumber/cucumber": "^11.3.0",
     "@playwright/test": "^1.53.0",
     "js-yaml": "^4.1.0",
-    "jszip": "^3.10.1",
     "playwright": "^1.53.0"
   },
   "devDependencies": {

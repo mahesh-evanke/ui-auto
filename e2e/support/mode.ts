@@ -20,9 +20,6 @@ export type RunConfig = {
    * - Otherwise we throw (replay-only mode).
    */
   allowDirectApiExecution: boolean;
-
-  /** If true, we generate a feature file from captured APIs after the scenario. */
-  shouldGenerateFeatureFromCapture: boolean;
 };
 
 function envBool(name: string, defaultValue: boolean): boolean {
@@ -43,7 +40,6 @@ export function readRunConfigFromEnv(): RunConfig {
   const shouldOpenBrowser = mode === 'API_UI' || capture || openBrowser;
   const captureEnabled = shouldOpenBrowser;
   const allowDirectApiExecution = mode === 'API' && !capture && !openBrowser;
-  const shouldGenerateFeatureFromCapture = capture;
 
   return {
     mode,
@@ -52,7 +48,6 @@ export function readRunConfigFromEnv(): RunConfig {
     shouldOpenBrowser,
     captureEnabled,
     allowDirectApiExecution,
-    shouldGenerateFeatureFromCapture,
   };
 }
 

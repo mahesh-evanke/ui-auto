@@ -9,7 +9,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { attachApiCapture } from '../support/capture';
 import { contextOptions, launchOptions } from '../support/contextOptions';
-import { generateFeatureFromCapturedApis } from '../support/formatter';
 import { readRunConfigFromEnv } from '../support/mode';
 import { createEmptyApiState } from './apiState';
 import { AutomationWorld } from './world';
@@ -107,23 +106,5 @@ After(async function (this: AutomationWorld, scenario: ITestCaseHookParameter) {
     await this.browser?.close();
   } catch {
     // ignore
-  }
-
-  if (!this.runConfig?.shouldGenerateFeatureFromCapture) return;
-
-  try {
-    const featureText = generateFeatureFromCapturedApis({
-      capturedApis: this.apiState.capturedApis,
-      featureName: 'Captured API Replay',
-      scenarioName: 'API calls',
-    });
-
-    // Generated capture output goes into e2e/features/generated/
-    const outDir = path.join(process.cwd(), 'e2e', 'features', 'generated');
-    ensureDir(outDir);
-    const outPath = path.join(outDir, `api-capture-${nowFileStamp()}.feature`);
-    fs.writeFileSync(outPath, featureText, 'utf8');
-  } catch {
-    // Don't hide the original test failure.
   }
 });

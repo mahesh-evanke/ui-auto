@@ -75,7 +75,7 @@ export function findLocatorFile(pageKey: string): string | null {
       if (fs.existsSync(fp)) return fp;
     }
   }
-  // Per-page files written by ai-cli into the pages/ subfolder (combined mode).
+  // Per-page locator files under locators/generated/ai/pages/ (combined mode).
   for (const ext of exts) {
     const aiPages = path.join(LOCATOR_ROOT, 'ai', 'pages', `${pageKey}.${ext}`);
     if (fs.existsSync(aiPages)) return aiPages;

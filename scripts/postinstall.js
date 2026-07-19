@@ -114,19 +114,11 @@ writeIfMissing(
 
 const nm = `node_modules/${PKG_NAME}`;
 mergePackageJsonField('scripts', {
-  record: `node ${nm}/e2e/support/scripts/record.js`,
-  pw: `ts-node ${nm}/e2e/support/recorder.ts`,
-  ai: `node ${nm}/e2e/support/scripts/ai-cli.js`,
-  'ai:ui': `node ${nm}/e2e/support/scripts/ai-ui.js`,
-  'ai:mcp': `node ${nm}/e2e/support/scripts/ai-mcp.js`,
-  generate: `node ${nm}/e2e/support/scripts/generate.js`,
-  inspect: `node ${nm}/e2e/support/scripts/inspect.js`,
   test: 'cucumber-js',
   run: `node ${nm}/e2e/support/scripts/run.js`,
   'test:all': `node ${nm}/e2e/support/scripts/run.js`,
   'test:web': `node ${nm}/e2e/support/scripts/run.js web`,
   'test:api': `node ${nm}/e2e/support/scripts/run.js api`,
-  'test:ai': `node ${nm}/e2e/support/scripts/test-ai.js`,
   'test:e2e': `node ${nm}/e2e/support/scripts/run.js endtoend`,
 });
 
@@ -136,5 +128,7 @@ mergePackageJsonField('scripts', {
 // so the consumer must add these themselves.
 console.log(
   `[${PKG_NAME}] Scaffold complete. Next: npm install --save-dev ts-node@^10.9.2 typescript@^5.7.2` +
-    ` (pin these — ts-node 10 does not support typescript 7's native compiler), then: npm run record | npm run ai | npx cucumber-js`,
+    ` (pin these — ts-node 10 does not support typescript 7's native compiler), then: npx cucumber-js` +
+    ` (this package only executes feature files — author scenarios with wdio-playwright-recording` +
+    ` or wdio-playwright-recording-ai, or write .feature files and locator YAML by hand).`,
 );

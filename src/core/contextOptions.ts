@@ -1,5 +1,5 @@
 /**
- * Shared browser launch + context options for the recorder and the test runner.
+ * Shared browser launch + context options.
  *  - Mobile/device emulation via Playwright device descriptors (config: browser.viewportDevice)
  *  - Optional video recording (config: browser.recordVideo)
  *  - Hides the "Chrome is being controlled by automated test software" banner.

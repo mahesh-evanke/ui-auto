@@ -8,17 +8,11 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "declaration": true,
     "outDir": "dist",
     "rootDir": ".",
     "moduleResolution": "node"
   },
-  "include": ["e2e/**/*.ts"],
-  "exclude": ["node_modules", "dist"],
-  // ts-node CLI (npm run pw) resolves the tsconfig for its own bundled files
-  // relative to this package's location, not the consumer's cwd — so this
-  // package's own tsconfig also needs transpileOnly to skip type-checking
-  // against whatever @types packages the consumer does or doesn't have.
-  "ts-node": {
-    "transpileOnly": true
-  }
+  "include": ["src/**/*.ts", "playwright.config.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

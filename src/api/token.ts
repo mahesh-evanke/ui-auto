@@ -23,4 +23,3 @@ export function buildAuthorizationHeader(authToken?: string): Record<string, str
   if (!authToken) return {};
   return { Authorization: `Bearer ${authToken}` };
 }
-

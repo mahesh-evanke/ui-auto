@@ -1,7 +1,6 @@
 /**
  * URL normalization and captured-API matching.
  */
-
 import type { CapturedApi } from './capture';
 
 function stripTrailingSlash(p: string): string {
@@ -9,11 +8,6 @@ function stripTrailingSlash(p: string): string {
   return p.endsWith('/') ? p.slice(0, -1) : p;
 }
 
-/**
- * Normalize URL by removing host/scheme.
- * Example:
- *   https://api.example.com/auth/login?x=1 -> /auth/login?x=1
- */
 export function normalizeUrl(inputUrl: string): string {
   const raw = String(inputUrl || '').trim();
   if (!raw) return '';
@@ -23,8 +17,6 @@ export function normalizeUrl(inputUrl: string): string {
     const pathname = stripTrailingSlash(u.pathname || '/');
     return `${pathname}${u.search || ''}`;
   } catch {
-    // Best-effort for non-absolute URLs.
-    // Requirement: ONLY normalize for matching; never modify actual request URL.
     const withoutSchemeHost = raw.replace(/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\/[^/]+/i, '');
     const qIndex = withoutSchemeHost.indexOf('?');
     const base = qIndex >= 0 ? withoutSchemeHost.slice(0, qIndex) : withoutSchemeHost;
@@ -87,4 +79,3 @@ export async function waitForCapturedApi(args: {
   }
   return undefined;
 }
-

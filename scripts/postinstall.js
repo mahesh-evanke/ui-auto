@@ -1,16 +1,18 @@
 /**
- * Scaffolds a consumer project's cucumber.js, tsconfig.json, e2e/config/config.yaml,
- * e2e/locators/*, and a starter e2e/features/example.feature on first `npm install`
- * of this package. Never overwrites a file that already exists.
+ * Scaffolds a consumer project's playwright.config.ts, tsconfig.json,
+ * e2e/config/config.yaml, e2e/locators/common.yaml, and a starter
+ * tests/example.spec.ts on first `npm install` of this package. Never
+ * overwrites a file that already exists.
  *
- * Skipped when this package IS the project being installed (i.e. running `npm install`
- * inside this repo itself, not as a dependency of some other project) — detected via
- * INIT_CWD, which npm sets to the directory the install was originally run from.
+ * Skipped when this package IS the project being installed (i.e. running
+ * `npm install` inside this repo itself, not as a dependency of some other
+ * project) — detected via INIT_CWD, which npm sets to the directory the
+ * install was originally run from.
  */
 const fs = require('fs');
 const path = require('path');
 
-const PKG_NAME = 'wdio-playwright-library';
+const PKG_NAME = 'playwright-without-bdd-library';
 const libraryRoot = path.resolve(__dirname, '..');
 const consumerRoot = process.env.INIT_CWD || process.cwd();
 
@@ -53,16 +55,20 @@ function mergePackageJsonField(field, entries) {
 }
 
 writeIfMissing(
-  'cucumber.js',
-  `// Points require at this package's step definitions inside node_modules.
-module.exports = {
-  default: {
-    paths: ['e2e/features/**/*.feature'],
-    require: ['node_modules/${PKG_NAME}/e2e/stepdefinitions/**/*.ts'],
-    requireModule: ['ts-node/register'],
-    format: ['progress'],
+  'playwright.config.ts',
+  `import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: 'tests',
+  timeout: 60_000,
+  reporter: [['html', { outputFolder: 'reports/integrationTests', open: 'never' }], ['list']],
+  use: {
+    headless: process.env.HEADLESS !== 'false',
+    viewport: { width: 1280, height: 800 },
+    ignoreHTTPSErrors: true,
+    trace: 'retain-on-failure',
   },
-};
+});
 `,
 );
 
@@ -81,12 +87,6 @@ writeIfMissing(
         resolveJsonModule: true,
         moduleResolution: 'node',
       },
-      // ts-node ignores node_modules by default; this override lets it transpile
-      // this one package's .ts files despite living under node_modules.
-      'ts-node': {
-        transpileOnly: true,
-        ignore: [`node_modules/(?!${PKG_NAME})`],
-      },
     },
     null,
     2,
@@ -94,41 +94,30 @@ writeIfMissing(
 );
 
 const templateConfig = path.join(libraryRoot, 'e2e', 'config', 'config.yaml');
-writeIfMissing(
-  'e2e/config/config.yaml',
-  fs.existsSync(templateConfig) ? fs.readFileSync(templateConfig, 'utf8') : '',
-);
+writeIfMissing('e2e/config/config.yaml', fs.existsSync(templateConfig) ? fs.readFileSync(templateConfig, 'utf8') : '');
 
 writeIfMissing('e2e/locators/common.yaml', '');
-writeIfMissing('e2e/locators/pages.yaml', '');
 
 writeIfMissing(
-  'e2e/features/example.feature',
-  `Feature: Example smoke test (runs against the installed ${PKG_NAME})
+  'tests/example.spec.ts',
+  `import { test, expect } from '${PKG_NAME}';
 
-  Scenario: Verify the-internet homepage loads
-    Given User navigates to "https://the-internet.herokuapp.com/" URL
-    When verify "Welcome to the-internet" text is present on the screen
+test('homepage loads', async ({ webActions }) => {
+  await webActions.navigate('https://the-internet.herokuapp.com/');
+  await webActions.verifyTextPresent('Welcome to the-internet');
+});
 `,
 );
 
-const nm = `node_modules/${PKG_NAME}`;
 mergePackageJsonField('scripts', {
-  test: 'cucumber-js',
-  run: `node ${nm}/e2e/support/scripts/run.js`,
-  'test:all': `node ${nm}/e2e/support/scripts/run.js`,
-  'test:web': `node ${nm}/e2e/support/scripts/run.js web`,
-  'test:api': `node ${nm}/e2e/support/scripts/run.js api`,
-  'test:e2e': `node ${nm}/e2e/support/scripts/run.js endtoend`,
+  test: 'playwright test',
+  'test:headed': 'playwright test --headed',
+  'test:ui': 'playwright test --ui',
+  report: 'playwright show-report reports/integrationTests',
 });
 
-// NOTE: deliberately NOT writing ts-node/typescript into devDependencies here.
-// npm rewrites package.json's dependency fields from its own install state
-// right after this script runs, silently discarding edits made mid-install —
-// so the consumer must add these themselves.
 console.log(
-  `[${PKG_NAME}] Scaffold complete. Next: npm install --save-dev ts-node@^10.9.2 typescript@^5.7.2` +
-    ` (pin these — ts-node 10 does not support typescript 7's native compiler), then: npx cucumber-js` +
-    ` (this package only executes feature files — author scenarios with wdio-playwright-recording` +
-    ` or wdio-playwright-recording-ai, or write .feature files and locator YAML by hand).`,
+  `[${PKG_NAME}] Scaffold complete. Next: npx playwright install, then: npm test` +
+    ` (this package has no test cases of its own — write your *.spec.ts files under tests/,` +
+    ` importing { test, expect } from '${PKG_NAME}').`,
 );

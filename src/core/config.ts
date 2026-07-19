@@ -3,7 +3,7 @@
  * env-based code keeps working without a .env file.
  *
  * Real environment variables ALWAYS win over config.yaml (so you can still
- * override on the command line, e.g. NO_LLM=1 npm run pw).
+ * override on the command line, e.g. HEADLESS=false npx playwright test).
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -21,11 +21,9 @@ type ConfigShape = {
     recordVideo?: boolean;
   };
   run?: {
-    tags?: string;
     retryOnFail?: number | string;
     reportFolder?: string;
     maxInstances?: number;
-    features?: string;
     getPageTimeoutMs?: number;
     redirectWaitMs?: number;
     verifyTimeoutMs?: number;
@@ -76,10 +74,8 @@ export function loadConfig(): ConfigShape {
 
   // ── Run ──
   if (cfg.run) {
-    setEnv('CUCUMBER_TAGS', cfg.run.tags);
     setEnv('RETRY_ON_FAIL', cfg.run.retryOnFail);
     setEnv('REPORT_FOLDER', cfg.run.reportFolder);
-    setEnv('FEATURES_GLOB', cfg.run.features);
     setEnv('GET_PAGE_TIMEOUT_MS', cfg.run.getPageTimeoutMs);
     setEnv('REDIRECT_WAIT_MS', cfg.run.redirectWaitMs);
     setEnv('VERIFY_TIMEOUT_MS', cfg.run.verifyTimeoutMs);

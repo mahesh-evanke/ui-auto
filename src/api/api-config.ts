@@ -44,12 +44,10 @@ function loadAliases(): Record<string, string> {
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
       const doc = parsed as Record<string, unknown>;
 
-      // Read from "urls:" section if present
       if (doc.urls && typeof doc.urls === 'object' && !Array.isArray(doc.urls)) {
         collectStrings(doc.urls as Record<string, unknown>, aliases);
       }
 
-      // Also read top-level string values (legacy api-config.yaml format)
       collectStrings(doc, aliases);
     } catch {
       // skip malformed files
@@ -67,12 +65,11 @@ export function clearApiUrlAliasCache(): void {
 
 /**
  * Replaces every ${name} token in a URL with the matching base URL from
- * the api-config.yaml files.  Returns the URL unchanged if no token is found.
+ * the api-config.yaml files. Returns the URL unchanged if no token is found.
  */
 export function resolveApiUrl(url: string): string {
   if (!url || !url.includes('${')) return url;
   const aliases = loadAliases();
   const resolved = url.replace(/\$\{([^}]+)\}/g, (_match, name: string) => aliases[name] ?? _match);
-  // Deduplicate consecutive slashes in the path (keep http:// and https:// intact)
   return resolved.replace(/([^:])\/\/+/g, '$1/');
 }

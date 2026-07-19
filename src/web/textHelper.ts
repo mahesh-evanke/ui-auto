@@ -52,8 +52,6 @@ async function sleep(ms: number): Promise<void> {
 export async function verifyTextOnScreen(page: Page, text: string, opts?: TextVerifyOptions): Promise<void> {
   const debug = shouldDebug(opts?.debug);
   const strict = Boolean(opts?.strict);
-  // Wait limits come from config.yaml (run.verifyTimeoutMs / run.redirectWaitMs),
-  // overridable per call via opts. Defaults used only if config is absent.
   const envNum = (k: string, d: number) => {
     const n = Number(process.env[k]);
     return Number.isFinite(n) && n > 0 ? n : d;
@@ -63,47 +61,27 @@ export async function verifyTextOnScreen(page: Page, text: string, opts?: TextVe
   const redirectWaitMs = envNum('REDIRECT_WAIT_MS', 15000);
 
   const needle = resolveDynamicTokens(text);
-  if (debug) {
-    // eslint-disable-next-line no-console
-    console.log(`[verifyTextOnScreen] Searching for text (strict=${strict}): "${needle}"`);
-  }
+  if (debug) console.log(`[verifyTextOnScreen] Searching for text (strict=${strict}): "${needle}"`);
 
-  // If a previous action (e.g. clicking Login) triggered a redirect, let the new
-  // page settle first — so we check the page the user actually lands on, not the
-  // one being navigated away from. Limit comes from config (run.redirectWaitMs).
   await page.waitForLoadState('domcontentloaded', { timeout: redirectWaitMs }).catch(() => {});
   await page.waitForLoadState('networkidle', { timeout: Math.min(redirectWaitMs, 8000) }).catch(() => {});
 
-  // Primary (matches existing step behavior): getByText(...).first() visible.
-  // This is a LIVE locator: it keeps re-checking the current DOM for `timeoutMs`,
-  // so a redirect that lands within the window is picked up automatically.
   try {
     await page.getByText(needle, { exact: strict }).first().waitFor({ state: 'visible', timeout: timeoutMs });
-    if (debug) {
-      // eslint-disable-next-line no-console
-      console.log(`[verifyTextOnScreen] Text found: "${needle}"`);
-    }
+    if (debug) console.log(`[verifyTextOnScreen] Text found: "${needle}"`);
     return;
-  } catch (e) {
-    if (debug) {
-      // eslint-disable-next-line no-console
-      console.log(`[verifyTextOnScreen] Primary search failed, retrying...`);
-    }
+  } catch {
+    if (debug) console.log(`[verifyTextOnScreen] Primary search failed, retrying...`);
   }
 
-  // Fallback retry: poll a global DOM contains search for a short window.
   const deadline = Date.now() + Math.max(0, fallbackRetryMs);
-  const xpath =
-    `//body//*[contains(normalize-space(.), ${JSON.stringify(needle)})]`;
+  const xpath = `//body//*[contains(normalize-space(.), ${JSON.stringify(needle)})]`;
 
   while (Date.now() < deadline) {
     try {
       const loc = page.locator(`xpath=${xpath}`).first();
       if (await loc.isVisible({ timeout: 500 })) {
-        if (debug) {
-          // eslint-disable-next-line no-console
-          console.log(`[verifyTextOnScreen] Text found via XPath fallback: "${needle}"`);
-        }
+        if (debug) console.log(`[verifyTextOnScreen] Text found via XPath fallback: "${needle}"`);
         return;
       }
     } catch {
@@ -112,15 +90,10 @@ export async function verifyTextOnScreen(page: Page, text: string, opts?: TextVe
     await sleep(250);
   }
 
-  // Frame fallback: the text may live inside an iframe (embedded demos, editors,
-  // payment widgets, etc.). Search every child frame before giving up.
   for (const frame of page.frames()) {
     try {
       if (await frame.getByText(needle, { exact: strict }).first().isVisible({ timeout: 500 })) {
-        if (debug) {
-          // eslint-disable-next-line no-console
-          console.log(`[verifyTextOnScreen] Text found inside iframe: "${needle}"`);
-        }
+        if (debug) console.log(`[verifyTextOnScreen] Text found inside iframe: "${needle}"`);
         return;
       }
     } catch {
@@ -128,15 +101,15 @@ export async function verifyTextOnScreen(page: Page, text: string, opts?: TextVe
     }
   }
 
-  if (debug) {
-    // eslint-disable-next-line no-console
-    console.log(`[verifyTextOnScreen] Text NOT found: "${needle}"`);
-  }
+  if (debug) console.log(`[verifyTextOnScreen] Text NOT found: "${needle}"`);
   let where = '';
-  try { where = page.url(); } catch { /* ignore */ }
+  try {
+    where = page.url();
+  } catch {
+    /* ignore */
+  }
   throw new Error(
     `Text not found on screen: "${needle}"` +
       (where ? `\nChecked page: ${where} (waited ${(timeoutMs + fallbackRetryMs) / 1000}s incl. redirect).` : ''),
   );
 }
-

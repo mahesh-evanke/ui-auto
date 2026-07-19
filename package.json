@@ -1,29 +1,24 @@
 {
-  "name": "wdio-playwright-library",
+  "name": "playwright-without-bdd-library",
   "version": "1.0.0",
   "private": false,
-  "description": "Playwright + Cucumber step-definition/execution engine — runs Gherkin feature files against Playwright. No recorder or AI authoring tooling; feature files and locators are authored in the consumer project (see wdio-playwright-recording / wdio-playwright-recording-ai for authoring).",
+  "description": "Playwright test automation library with no BDD/Gherkin layer — reusable WebActions/ApiActions helper classes called directly from plain TypeScript spec files, using Playwright Test's own runner. The consumer project holds the *.spec.ts files; this package holds no test cases.",
   "files": [
-    "e2e/stepdefinitions",
-    "e2e/support",
-    "e2e/config/config.yaml",
-    "e2e/locators/common.yaml",
-    "e2e/locators/pages.yaml",
-    "cucumber.js",
+    "src",
+    "playwright.config.ts",
     "tsconfig.json",
     "scripts/postinstall.js"
   ],
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
-    "cucumber": "cucumber-js",
-    "run": "node e2e/support/scripts/run.js",
-    "test:all": "node e2e/support/scripts/run.js",
-    "test:web": "node e2e/support/scripts/run.js web",
-    "test:api": "node e2e/support/scripts/run.js api",
-    "test:e2e": "node e2e/support/scripts/run.js endtoend"
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report reports/integrationTests"
   },
   "dependencies": {
-    "@cucumber/cucumber": "^11.3.0",
     "@playwright/test": "^1.53.0",
     "js-yaml": "^4.1.0",
     "playwright": "^1.53.0"
@@ -31,7 +26,6 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
-    "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
   }
 }

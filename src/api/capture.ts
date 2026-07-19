@@ -34,10 +34,6 @@ export type ApiCaptureOptions = {
   urlFilters?: string[];
 };
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
-
 function redactHeaderValue(key: string, value: string): string {
   const k = key.toLowerCase();
   if (k === 'authorization') return '[REDACTED_AUTHORIZATION]';
@@ -93,7 +89,6 @@ function makeRequestKey(req: Request): string {
   const postData = req.postData();
   const postLen = postData ? String(postData).length : 0;
   const ct = contentType ? String(contentType) : '';
-  // Key is not perfect under concurrency; we still use closest timestamp in matching.
   return `${method}|${normalizedUrl}|${ct}|${postLen}`;
 }
 
@@ -108,10 +103,8 @@ export function attachApiCapture(page: Page, targetCapturedApis: CapturedApi[], 
       ? [options.urlFilter.trim()]
       : [];
 
-  const urlMatches = (url: string) =>
-    activeFilters.length === 0 || activeFilters.some((f) => url.includes(f));
+  const urlMatches = (url: string) => activeFilters.length === 0 || activeFilters.some((f) => url.includes(f));
 
-  // Store partial request info so we can merge at response time.
   const inflightByKey = new Map<string, Array<{ timestamp: number; request: Request; headers: Record<string, string>; requestBody: unknown }>>();
 
   const onRequest = (req: Request) => {
@@ -146,7 +139,6 @@ export function attachApiCapture(page: Page, targetCapturedApis: CapturedApi[], 
     const key = makeRequestKey(req);
     const inflight = inflightByKey.get(key) ?? [];
 
-    // Find the closest request entry by timestamp.
     let chosenIdx = -1;
     let chosen: (typeof inflight)[number] | undefined;
     const respTs = Date.now();
@@ -159,7 +151,6 @@ export function attachApiCapture(page: Page, targetCapturedApis: CapturedApi[], 
         chosen = inflight[i];
       }
     }
-    // Remove chosen from inflight to avoid memory growth.
     if (chosenIdx >= 0) inflight.splice(chosenIdx, 1);
     inflightByKey.set(key, inflight);
 
@@ -236,4 +227,3 @@ export function attachApiCapture(page: Page, targetCapturedApis: CapturedApi[], 
 
   return { stop };
 }
-

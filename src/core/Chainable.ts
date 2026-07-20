@@ -17,14 +17,42 @@
  * single call still works exactly as before, since each `await` just flushes
  * whatever is queued at that point.
  */
-export abstract class Chainable<TSelf> implements PromiseLike<void> {
-  private queue: Array<() => Promise<void>> = [];
-  private _lastError?: Error;
+type QueueItem = { action: () => Promise<void>; soft: boolean };
 
-  /** Queues an action and returns `this` for chaining. */
+export abstract class Chainable<TSelf> implements PromiseLike<void> {
+  private queue: QueueItem[] = [];
+  private _lastError?: Error;
+  private _soft = false;
+  private _softFailures: Error[] = [];
+
+  /** Queues an action and returns `this` for chaining. Soft-ness is captured at enqueue time, so only actions queued after softly() are affected. */
   protected enqueue(action: () => Promise<void>): TSelf {
-    this.queue.push(action);
+    this.queue.push({ action, soft: this._soft });
     return this as unknown as TSelf;
+  }
+
+  /**
+   * Switches every action queued *after* this call into soft-assert mode:
+   * its failure is collected instead of stopping the chain, so the rest of
+   * the chain still runs. The final `await` still throws (summarizing every
+   * collected failure) if any soft action failed - inspect them individually
+   * beforehand via getSoftFailures(). Resets to hard mode once the chain drains.
+   *
+   *   await webActions
+   *     .softly()
+   *     .verifyFieldText('First Name', 'Jane')
+   *     .verifyFieldText('Last Name', 'Doe')
+   *     .verifyFieldText('Email', 'jane@example.com');
+   *   // all three checks run even if the first one fails
+   */
+  softly(): TSelf {
+    this._soft = true;
+    return this as unknown as TSelf;
+  }
+
+  /** Failures collected while in soft mode during the last drained chain. */
+  getSoftFailures(): Error[] {
+    return this._softFailures;
   }
 
   /** The error from the last chain that threw, if any (queue is cleared either way). */
@@ -33,11 +61,25 @@ export abstract class Chainable<TSelf> implements PromiseLike<void> {
   }
 
   private async drain(): Promise<void> {
+    this._lastError = undefined;
+    this._softFailures = [];
     try {
-      this._lastError = undefined;
       while (this.queue.length > 0) {
-        const action = this.queue.shift();
-        if (action) await action();
+        const item = this.queue.shift();
+        if (!item) continue;
+        try {
+          await item.action();
+        } catch (error) {
+          if (item.soft) {
+            this._softFailures.push(error as Error);
+          } else {
+            throw error;
+          }
+        }
+      }
+      if (this._softFailures.length > 0) {
+        const summary = this._softFailures.map((e, i) => `${i + 1}) ${e.message}`).join('\n');
+        throw new Error(`${this._softFailures.length} soft assertion(s) failed:\n${summary}`);
       }
     } catch (error) {
       this._lastError = error as Error;
@@ -45,6 +87,7 @@ export abstract class Chainable<TSelf> implements PromiseLike<void> {
       throw error;
     } finally {
       this.queue = [];
+      this._soft = false;
     }
   }
 

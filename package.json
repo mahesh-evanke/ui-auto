@@ -7,10 +7,17 @@
     "src",
     "playwright.config.ts",
     "tsconfig.json",
-    "scripts/postinstall.js"
+    "scripts/postinstall.js",
+    "scripts/scaffold.js",
+    "scripts/init.js",
+    "scripts/generate-locator-types.js"
   ],
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "bin": {
+    "playwright-without-bdd-init": "scripts/init.js",
+    "playwright-without-bdd-generate-types": "scripts/generate-locator-types.js"
+  },
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
     "test": "playwright test",

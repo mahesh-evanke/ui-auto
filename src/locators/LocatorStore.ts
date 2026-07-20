@@ -10,6 +10,7 @@ import * as yaml from 'js-yaml';
 import type { Frame, FrameLocator, Locator, Page } from 'playwright';
 import { buildLocatorFromTuple, type LocatorTuple } from './locatorResolver';
 import { findCommonFiles, findLocatorFile } from './locatorPaths';
+import { suggestClosestName } from './suggestLocatorName';
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -91,8 +92,22 @@ export class LocatorStore {
     return found ? found[1] : null;
   }
 
+  /** Every locator name currently loaded (page-scoped + common), for "did you mean...?" suggestions. */
+  allKnownNames(): string[] {
+    return [...this.pageLocatorByName.keys(), ...this.commonLocatorByName.keys()];
+  }
+
+  /** Warns with the closest known name when `name` isn't registered in any loaded locator YAML. */
+  private warnIfUnresolved(name: string): void {
+    const suggestion = suggestClosestName(name, this.allKnownNames());
+    if (suggestion) {
+      console.warn(`[locators] "${name}" not found in any loaded locator YAML - did you mean "${suggestion}"? Falling back to a broad guess.`);
+    }
+  }
+
   /** Fallback when a name isn't registered in any locator YAML: a broad semantic guess. */
   smartLocator(page: Page, name: string): Locator {
+    this.warnIfUnresolved(name);
     const n = name.trim();
     return page
       .getByRole('button', { name: n })

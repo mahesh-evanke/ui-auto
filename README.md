@@ -53,6 +53,12 @@ npm install playwright-without-bdd-library
 - `tests/example.spec.ts` — a starter smoke test
 - npm scripts merged into your `package.json` (`test`, `test:headed`, `test:ui`, `report`)
 
+If your package manager skips lifecycle scripts (pnpm's default, `npm install --ignore-scripts`), or you deleted a generated file and want it back, run the same scaffold manually:
+
+```bash
+npx playwright-without-bdd-init
+```
+
 Install Playwright's browser binaries:
 
 ```bash
@@ -171,6 +177,38 @@ Both styles work and can be mixed freely — `await`ing after every single call 
 
 `test.describe`/`test()` group scenarios the same way `Feature:`/`Scenario:` did — just as code instead of Gherkin.
 
+### Soft assertions (`softly()`)
+
+Call `.softly()` mid-chain to switch every action queued *after* it into soft-assert mode: a failure is collected instead of stopping the chain, so the rest of the checks still run. The final `await` still throws — summarizing every collected failure — so the test still fails overall:
+
+```ts
+await webActions
+  .softly()
+  .verifyFieldText('First Name', 'Jane')
+  .verifyFieldText('Last Name', 'Doe')
+  .verifyFieldText('Email', 'jane@example.com');
+// all three run even if the first one fails; the await throws with all failures listed
+```
+
+Inspect individual failures (e.g. in a `catch` block) via `webActions.getSoftFailures()`. Actions queued *before* `.softly()` are unaffected — they still fail the chain immediately, as usual.
+
+### Combined web + API chain (`actions` fixture)
+
+For tests that interleave UI steps and direct API calls, the `actions` fixture chains both `WebActions` and `ApiActions` into one statement instead of two separate chains:
+
+```ts
+test('checkout page reflects the API total', async ({ actions }) => {
+  await actions
+    .navigate('https://example.com/cart')
+    .verifyTextPresent('Your Cart')
+    .sendRequest('GET', '/api/cart/total')
+    .expectStatus(200)
+    .validateResponseFields({ total: 42 });
+});
+```
+
+`actions.web` and `actions.api` are the underlying `WebActions`/`ApiActions` instances, for anything not covered by `CombinedActions`' own methods.
+
 ---
 
 ## Locators
@@ -203,6 +241,43 @@ Email Address:
 | anything else | `page.locator('[<kind>="<value>"]')` — generic attribute fallback |
 
 Files live at `e2e/locators/generated/<category>/<pageKey>.yaml` in **your** project (`category` is `web`, `api`, or `endtoend`), plus `e2e/locators/common.yaml` for elements shared across pages.
+
+### Shorthand format
+
+`- kind: value` shorthand — a single YAML mapping entry — can stand in for the `[kind, value]` pair, saving a line:
+
+```yaml
+Password Field:
+  - label: Password
+  - //input[@id='password']       # xpath fallback, still optional
+```
+
+is equivalent to:
+
+```yaml
+Password Field:
+  - label
+  - Password
+  - //input[@id='password']
+```
+
+### Typo suggestions
+
+If a name passed to `webActions.fill()`/`.click()`/etc. isn't found in any loaded locator YAML, the library falls back to a broad semantic guess (as before) but also logs a "did you mean...?" warning naming the closest registered name, so a typo doesn't silently degrade into flaky matching:
+
+```
+[locators] "Usernam Field" not found in any loaded locator YAML - did you mean "Username Field"? Falling back to a broad guess.
+```
+
+### Typed locator names
+
+Regenerate a `LocatorName` union type covering every name across your locator YAML files:
+
+```bash
+npx playwright-without-bdd-generate-types
+```
+
+This writes `e2e/locators/generated/locator-names.d.ts`. Import `LocatorName` in your own typed wrapper functions (or reference it in editor tooling) to catch a typo'd element name at compile time instead of at runtime. Re-run it whenever you add or rename a locator entry.
 
 ---
 

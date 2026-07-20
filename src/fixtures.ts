@@ -8,11 +8,13 @@ import { test as base, expect } from '@playwright/test';
 import './core/config'; // load e2e/config/config.yaml -> env on first import
 import { WebActions } from './web/WebActions';
 import { ApiActions } from './api/ApiActions';
+import { CombinedActions } from './combined/CombinedActions';
 import { attachApiCapture } from './api/capture';
 
 type Fixtures = {
   webActions: WebActions;
   apiActions: ApiActions;
+  actions: CombinedActions;
 };
 
 export const test = base.extend<Fixtures>({
@@ -25,6 +27,9 @@ export const test = base.extend<Fixtures>({
   },
   webActions: async ({ page }, use) => {
     await use(new WebActions(page));
+  },
+  actions: async ({ webActions, apiActions }, use) => {
+    await use(new CombinedActions(webActions, apiActions));
   },
 });
 

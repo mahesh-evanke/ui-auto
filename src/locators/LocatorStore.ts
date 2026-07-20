@@ -11,7 +11,29 @@ import type { Frame, FrameLocator, Locator, Page } from 'playwright';
 import { buildLocatorFromTuple, type LocatorTuple } from './locatorResolver';
 import { findCommonFiles, findLocatorFile } from './locatorPaths';
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Converts a YAML list value into a LocatorTuple. Supports two forms:
+ *   - [kind, value, xpathFallback?]        e.g. [label, Password, //input[@id='password']]
+ *   - [{kind: value}, xpathFallback?]      e.g. [{label: Password}, //input[@id='password']]
+ * The second form is shorthand: a single YAML mapping entry standing in for
+ * the [kind, value] pair, so a locator can be written in one line less:
+ *   Password Field:
+ *     - label: Password
+ *     - //input[@id='password']
+ */
 function tupleFromYamlValue(v: unknown[]): LocatorTuple {
+  if (v.length >= 1 && isPlainObject(v[0])) {
+    const entries = Object.entries(v[0]);
+    if (entries.length === 1) {
+      const [kind, value] = entries[0];
+      const xpathFallback = v[1] !== undefined ? String(v[1]) : undefined;
+      return xpathFallback ? [kind, String(value), xpathFallback] : [kind, String(value)];
+    }
+  }
   return v.length >= 3 ? [String(v[0]), String(v[1]), String(v[2])] : [String(v[0]), String(v[1])];
 }
 

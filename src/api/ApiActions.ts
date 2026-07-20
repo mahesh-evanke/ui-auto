@@ -2,8 +2,22 @@
  * Reusable API automation methods - the non-BDD equivalent of api.ts's step
  * bodies. Request bodies and expected-response shapes are passed as plain
  * JS objects directly (no Cucumber DataTable to convert).
+ *
+ * Fluent/chainable (see Chainable / WebActions): sendRequest/expectStatus/
+ * validateResponseFields all queue and run in written order, so
+ *
+ *   await apiActions
+ *     .sendRequest('POST', url, body)
+ *     .expectStatus(201)
+ *     .validateResponseFields({ title: 'foo' });
+ *
+ * is one statement instead of three. sendRequest must be queued (not
+ * immediate) too - otherwise a second sendRequest() call chained before the
+ * first expectStatus() has actually run would overwrite the pending request
+ * out of order.
  */
 import { expect, type APIRequestContext } from '@playwright/test';
+import { Chainable } from '../core/Chainable';
 import type { CapturedApi } from './capture';
 import { findCapturedApi, normalizeUrl, waitForCapturedApi } from './matcher';
 import { extractTokenFromJson, buildAuthorizationHeader } from './token';
@@ -75,106 +89,114 @@ async function assertJsonIncludesPaths(actual: unknown, expected: unknown): Prom
   }
 }
 
-export class ApiActions {
+export class ApiActions extends Chainable<ApiActions> {
   capturedApis: CapturedApi[] = [];
   private readonly consumedCapturedApiIndices = new Set<number>();
   private authToken?: string;
   private pendingRequest?: PendingApiRequest;
   private lastResponse?: ApiLastResponse;
 
-  constructor(private readonly apiRequestContext: APIRequestContext) {}
+  constructor(private readonly apiRequestContext: APIRequestContext) {
+    super();
+  }
 
   /** Registers a request to be executed/matched on the next expectStatus() call. */
-  sendRequest(method: string, url: string, body?: unknown): void {
-    const resolvedUrl = resolveApiUrl(url);
-    this.pendingRequest = {
-      method: String(method || '').toUpperCase(),
-      url: resolvedUrl,
-      normalizedUrl: normalizeUrl(resolvedUrl),
-      body,
-    };
+  sendRequest(method: string, url: string, body?: unknown): ApiActions {
+    return this.enqueue(async () => {
+      const resolvedUrl = resolveApiUrl(url);
+      this.pendingRequest = {
+        method: String(method || '').toUpperCase(),
+        url: resolvedUrl,
+        normalizedUrl: normalizeUrl(resolvedUrl),
+        body,
+      };
+    });
   }
 
   /**
    * Executes the pending request (or replays a matching one captured from a
    * live UI session, if any) and asserts the response status code.
    */
-  async expectStatus(expectedStatusCode: number): Promise<void> {
-    const pending = this.pendingRequest;
-    if (!pending) throw new Error('No pending API request. Call sendRequest(...) first.');
+  expectStatus(expectedStatusCode: number): ApiActions {
+    return this.enqueue(async () => {
+      const pending = this.pendingRequest;
+      if (!pending) throw new Error('No pending API request. Call sendRequest(...) first.');
 
-    const normalizedUrl = pending.normalizedUrl;
-    const method = pending.method;
+      const normalizedUrl = pending.normalizedUrl;
+      const method = pending.method;
 
-    const replay = findCapturedApi({
-      capturedApis: this.capturedApis,
-      consumedCapturedApiIndices: this.consumedCapturedApiIndices,
-      method,
-      normalizedUrl,
-    });
+      const replay = findCapturedApi({
+        capturedApis: this.capturedApis,
+        consumedCapturedApiIndices: this.consumedCapturedApiIndices,
+        method,
+        normalizedUrl,
+      });
 
-    const doReplay = async (): Promise<boolean> => {
-      const found =
-        replay ??
-        (await waitForCapturedApi({
-          capturedApis: this.capturedApis,
-          consumedCapturedApiIndices: this.consumedCapturedApiIndices,
-          method,
-          normalizedUrl,
-          timeoutMs: this.capturedApis.length ? 10000 : 0,
-          pollIntervalMs: 150,
-        }));
+      const doReplay = async (): Promise<boolean> => {
+        const found =
+          replay ??
+          (await waitForCapturedApi({
+            capturedApis: this.capturedApis,
+            consumedCapturedApiIndices: this.consumedCapturedApiIndices,
+            method,
+            normalizedUrl,
+            timeoutMs: this.capturedApis.length ? 10000 : 0,
+            pollIntervalMs: 150,
+          }));
 
-      if (!found) return false;
+        if (!found) return false;
 
-      console.log(`[api] Using captured API: ${method} ${normalizedUrl}`);
-      this.consumedCapturedApiIndices.add(found.index);
-      const synthetic = createSyntheticResponse(found.api);
-      const responseBody = await synthetic.json();
-      const token = extractTokenFromJson(responseBody);
-      if (token) this.authToken = token;
-      this.lastResponse = { status: synthetic.status(), body: responseBody };
-      return true;
-    };
+        console.log(`[api] Using captured API: ${method} ${normalizedUrl}`);
+        this.consumedCapturedApiIndices.add(found.index);
+        const synthetic = createSyntheticResponse(found.api);
+        const responseBody = await synthetic.json();
+        const token = extractTokenFromJson(responseBody);
+        if (token) this.authToken = token;
+        this.lastResponse = { status: synthetic.status(), body: responseBody };
+        return true;
+      };
 
-    if (replay) {
-      const used = await doReplay();
-      if (used) {
-        expect(this.lastResponse?.status).toBe(expectedStatusCode);
-        this.pendingRequest = undefined;
-        return;
+      if (replay) {
+        const used = await doReplay();
+        if (used) {
+          expect(this.lastResponse?.status).toBe(expectedStatusCode);
+          this.pendingRequest = undefined;
+          return;
+        }
       }
-    }
 
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
-    Object.assign(headers, buildAuthorizationHeader(this.authToken));
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      Object.assign(headers, buildAuthorizationHeader(this.authToken));
 
-    const data = pending.body !== undefined ? JSON.stringify(pending.body) : undefined;
-    const response = await this.apiRequestContext.fetch(pending.url, {
-      method: pending.method,
-      headers,
-      data,
+      const data = pending.body !== undefined ? JSON.stringify(pending.body) : undefined;
+      const response = await this.apiRequestContext.fetch(pending.url, {
+        method: pending.method,
+        headers,
+        data,
+      });
+
+      const status = response.status();
+      const body = await parseResponseBodyFromJsonOrText(response);
+      const token = extractTokenFromJson(body);
+      if (token) this.authToken = token;
+
+      this.lastResponse = { status, body };
+      this.pendingRequest = undefined;
+
+      expect(status).toBe(expectedStatusCode);
     });
-
-    const status = response.status();
-    const body = await parseResponseBodyFromJsonOrText(response);
-    const token = extractTokenFromJson(body);
-    if (token) this.authToken = token;
-
-    this.lastResponse = { status, body };
-    this.pendingRequest = undefined;
-
-    expect(status).toBe(expectedStatusCode);
   }
 
   /** Asserts the last response body contains (at minimum) the given fields, at any depth. */
-  async validateResponseFields(expected: unknown): Promise<void> {
-    const last = this.lastResponse;
-    if (!last) throw new Error('No last API response found. Call expectStatus(...) first.');
-    await assertJsonIncludesPaths(last.body, expected);
+  validateResponseFields(expected: unknown): ApiActions {
+    return this.enqueue(async () => {
+      const last = this.lastResponse;
+      if (!last) throw new Error('No last API response found. Call expectStatus(...) first.');
+      await assertJsonIncludesPaths(last.body, expected);
+    });
   }
 
-  /** The full body of the last response, for assertions beyond validateResponseFields(). */
+  /** The full body of the last response - read after awaiting the chain. */
   get lastResponseBody(): unknown {
     return this.lastResponse?.body;
   }

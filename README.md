@@ -142,6 +142,33 @@ test('login', async ({ webActions }) => {
 });
 ```
 
+### Fluent chaining (fewer lines)
+
+`WebActions` and `ApiActions` are chainable — inspired by [playwright-fluent](https://github.com/hdorgeval/playwright-fluent). Every action queues and returns `this`, so one `await` at the end runs the whole sequence instead of one `await` per line:
+
+```ts
+test('login', async ({ webActions }) => {
+  await webActions
+    .navigate('https://example.com/login')
+    .usePage('LoginPage')
+    .fill('Username Field', 'tomsmith')
+    .fill('Password Field', 'SuperSecretPassword!')
+    .click('Login Button')
+    .verifyTextPresent('You logged into a secure area');
+});
+```
+
+Same idea for `ApiActions`:
+
+```ts
+await apiActions
+  .sendRequest('POST', url, { title: 'foo' })
+  .expectStatus(201)
+  .validateResponseFields({ title: 'foo' });
+```
+
+Both styles work and can be mixed freely — `await`ing after every single call still runs immediately, exactly as before; chaining several calls under one `await` just batches them. Pick whichever reads better for a given test.
+
 `test.describe`/`test()` group scenarios the same way `Feature:`/`Scenario:` did — just as code instead of Gherkin.
 
 ---

@@ -3,8 +3,7 @@ Username Field:
   - Username
   - //input[@id='username']
 Password Field:
-  - label
-  - Password
+  - label: Password
   - //input[@id='password']
 Login Button:
   - role:button

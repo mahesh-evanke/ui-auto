@@ -4,6 +4,7 @@
 export { test, expect } from './fixtures';
 export { WebActions } from './web/WebActions';
 export { ApiActions } from './api/ApiActions';
+export { Chainable } from './core/Chainable';
 export { LocatorStore } from './locators/LocatorStore';
 export { buildLocatorFromTuple, type LocatorTuple } from './locators/locatorResolver';
 export type { TableRows, WebTableVerifyOptions } from './web/tableHelper';

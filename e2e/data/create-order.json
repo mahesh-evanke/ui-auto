@@ -1,0 +1,29 @@
+{
+  "orderRef": "ORD-{{userId}}",
+  "customer": {
+    "id": "{{userId}}",
+    "email": "{{LOGIN_FORM.email}}",
+    "contact": {
+      "phone": "9876543210",
+      "preferredChannel": "email"
+    }
+  },
+  "billing": {
+    "address": {
+      "line1": "12 Test Street",
+      "city": "Hyderabad",
+      "state": "Telangana",
+      "postcode": "500081"
+    },
+    "currency": "INR"
+  },
+  "items": [
+    { "sku": "SKU-001", "name": "Widget", "qty": 2, "unitPrice": 250 },
+    { "sku": "SKU-002", "name": "Gadget", "qty": 1, "unitPrice": 999 }
+  ],
+  "meta": {
+    "source": "automation",
+    "createdOn": "<CURRENT_DATE>",
+    "notes": "Order for {{LOGIN_FORM.email}}"
+  }
+}

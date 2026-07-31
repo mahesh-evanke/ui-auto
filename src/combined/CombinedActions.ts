@@ -14,7 +14,7 @@
  *     .validateResponseFields({ id: 1 });
  */
 import { Chainable } from '../core/Chainable';
-import { TestContext } from '../core/TestContext';
+import { ScenarioCache } from '../cache/ScenarioCache';
 import { WebActions } from '../web/WebActions';
 import { ApiActions } from '../api/ApiActions';
 import type { TableRows } from '../web/tableHelper';
@@ -24,8 +24,8 @@ export class CombinedActions extends Chainable<CombinedActions> {
     super();
   }
 
-  /** Shared per-test key/value store (same instance as web.context/api.context) - see TestContext. */
-  get context(): TestContext {
+  /** Shared per-test key/value store (same instance as web.context/api.context) - see ScenarioCache. */
+  get context(): ScenarioCache {
     return this.api.context;
   }
 
@@ -57,6 +57,27 @@ export class CombinedActions extends Chainable<CombinedActions> {
   extractText(name: string, key: string): CombinedActions {
     return this.enqueue(async () => {
       await this.web.extractText(name, key);
+    });
+  }
+
+  /** Reads several named fields at once (e.g. a login/password form) and saves them as one object under `key`. */
+  extractFields(fields: Record<string, string>, key: string): CombinedActions {
+    return this.enqueue(async () => {
+      await this.web.extractFields(fields, key);
+    });
+  }
+
+  /** Reads several named fields and writes them straight to e2e/data/<fileName>.json - one call, no cache key needed. */
+  saveFieldsToFile(fields: Record<string, string>, fileName: string): CombinedActions {
+    return this.enqueue(async () => {
+      await this.web.saveFieldsToFile(fields, fileName);
+    });
+  }
+
+  /** Reads a table's actual current rows and saves them under `key` - the capture counterpart to verifyWebTable(). */
+  readWebTable(name: string, key: string): CombinedActions {
+    return this.enqueue(async () => {
+      await this.web.readWebTable(name, key);
     });
   }
 
@@ -113,6 +134,11 @@ export class CombinedActions extends Chainable<CombinedActions> {
   /** The full body of the last API response - read after awaiting the chain. */
   get lastResponseBody(): unknown {
     return this.api.lastResponseBody;
+  }
+
+  /** The body that was actually sent on the last API request - read after awaiting the chain. */
+  get lastRequestBody(): unknown {
+    return this.api.lastRequestBody;
   }
 
   /** Reads a previously-received API response body by method+URL - every response is cached automatically, no explicit save call needed. Immediate (not queued). */

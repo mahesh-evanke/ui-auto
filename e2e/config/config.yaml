@@ -44,4 +44,19 @@ urls:
   val: https://customer-billing-deve.vercel.app/
   dev: https://customer-billing-deve.vercel.app/
 
+# ── Locators (optional) ──────────────────────────────────────────────────────
+# Preferred format when both a .yaml and .json exist for a page. Both always
+# load regardless; this only controls which wins. Default: yaml.
+locators:
+  format: yaml   # yaml | json
+
+# ── Database (optional — only used if a spec requests the dbActions fixture) ──
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  database: postgres
+  ssl: false
+
 

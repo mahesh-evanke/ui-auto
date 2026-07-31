@@ -1,6 +1,5 @@
 Username Field:
-  - label
-  - Username
+  - label: Username
   - //input[@id='username']
 Password Field:
   - label: Password

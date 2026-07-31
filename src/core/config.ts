@@ -28,6 +28,18 @@ type ConfigShape = {
     redirectWaitMs?: number;
     verifyTimeoutMs?: number;
   };
+  database?: {
+    host?: string;
+    port?: number;
+    user?: string;
+    password?: string;
+    database?: string;
+    ssl?: boolean;
+  };
+  locators?: {
+    /** Preferred locator file format when both exist. Default 'yaml'. Both always load regardless. */
+    format?: 'yaml' | 'json';
+  };
 };
 
 function setEnv(key: string, value: unknown): void {
@@ -80,6 +92,19 @@ export function loadConfig(): ConfigShape {
     setEnv('REDIRECT_WAIT_MS', cfg.run.redirectWaitMs);
     setEnv('VERIFY_TIMEOUT_MS', cfg.run.verifyTimeoutMs);
     setEnv('MAX_INSTANCES', cfg.run.maxInstances);
+  }
+
+  // ── Locators ──
+  if (cfg.locators?.format) setEnv('LOCATOR_FORMAT', cfg.locators.format);
+
+  // ── Database ──
+  if (cfg.database) {
+    setEnv('DB_HOST', cfg.database.host);
+    setEnv('DB_PORT', cfg.database.port);
+    setEnv('DB_USER', cfg.database.user);
+    setEnv('DB_PASSWORD', cfg.database.password);
+    setEnv('DB_NAME', cfg.database.database);
+    if (cfg.database.ssl !== undefined) setEnv('DB_SSL', cfg.database.ssl ? 'true' : 'false');
   }
 
   return cfg;

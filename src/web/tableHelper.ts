@@ -6,6 +6,7 @@
  */
 import type { Frame, Locator, Page } from 'playwright';
 import { resolveDynamicTokens } from './textHelper';
+import type { TableRow } from '../models';
 
 /** header row + data rows, e.g. [['Name','Age'],['John','30']] */
 export type TableRows = string[][];
@@ -171,6 +172,25 @@ async function readTableData(table: Locator): Promise<{ headers: string[]; rows:
 
     return { headers, rows };
   });
+}
+
+/**
+ * Reads a table's *actual* current rows as header-keyed objects, e.g.
+ * [{ 'Last Name': 'Smith', 'First Name': 'John' }, ...] - the capture
+ * counterpart to verifyWebTable()'s check: this returns what's really on
+ * screen instead of asserting against a given expected set, for saving into
+ * a ScenarioCache (see WebActions.readWebTable()).
+ */
+export async function readWebTableRows(page: Page, objName: string, deps?: { getLocator?: (name: string) => Locator }): Promise<TableRow[]> {
+  const root = await resolveTableRoot(page, objName, deps?.getLocator);
+  const table = await ensureTableElement(root);
+  const { headers, rows } = await readTableData(table);
+
+  if (!headers.length) {
+    // No header row detected - fall back to positional keys ("0", "1", ...).
+    return rows.map((row) => Object.fromEntries(row.map((cell, idx) => [String(idx), cell])));
+  }
+  return rows.map((row) => Object.fromEntries(headers.map((h, idx) => [normalizeSpaces(h), row[idx] ?? ''])));
 }
 
 type ExpectedRow = Record<string, string>;

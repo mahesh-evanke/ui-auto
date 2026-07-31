@@ -34,14 +34,14 @@ export type ApiCaptureOptions = {
   urlFilters?: string[];
 };
 
-function redactHeaderValue(key: string, value: string): string {
+export function redactHeaderValue(key: string, value: string): string {
   const k = key.toLowerCase();
   if (k === 'authorization') return '[REDACTED_AUTHORIZATION]';
   if (k === 'cookie' || k === 'set-cookie') return '[REDACTED_COOKIE]';
   return value;
 }
 
-function redactHeaders(headers: Record<string, string | undefined>): Record<string, string> {
+export function redactHeaders(headers: Record<string, string | undefined>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers)) {
     if (v === undefined) continue;

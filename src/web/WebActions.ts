@@ -21,10 +21,12 @@
  */
 import { expect, type Locator, type Page, type Frame } from '@playwright/test';
 import { Chainable } from '../core/Chainable';
-import { TestContext } from '../core/TestContext';
+import { ScenarioCache } from '../cache/ScenarioCache';
 import { LocatorStore } from '../locators/LocatorStore';
 import { resolveDynamicTokens, verifyTextOnScreen } from './textHelper';
-import { verifyWebTable, type TableRows } from './tableHelper';
+import { verifyWebTable, readWebTableRows, type TableRows } from './tableHelper';
+import type { TableRow } from '../models';
+import { saveJsonFile } from '../utils/loadJsonFixture';
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -39,7 +41,7 @@ export class WebActions extends Chainable<WebActions> {
 
   constructor(
     private readonly page: Page,
-    readonly context: TestContext = new TestContext(),
+    readonly context: ScenarioCache = new ScenarioCache(),
   ) {
     super();
   }
@@ -248,13 +250,60 @@ export class WebActions extends Chainable<WebActions> {
     });
   }
 
-  /** Reads a named field's value (inputs/textareas) or text content (everything else) and saves it under `key`, for reuse in a later step. */
+  /** Reads a named field's current value (inputs/textareas) or text content (everything else) - shared by extractText()/extractFields(). */
+  private async readFieldValue(name: string): Promise<string> {
+    const { loc } = await this.resolveVisible(name);
+    const tagName = await loc.evaluate((el: Element) => el.tagName.toLowerCase());
+    return tagName === 'input' || tagName === 'textarea' ? await loc.inputValue() : ((await loc.textContent()) ?? '').trim();
+  }
+
+  /** Reads a named field's value/text and saves it under `key`, for reuse in a later step. */
   extractText(name: string, key: string): WebActions {
     return this.enqueue(async () => {
-      const { loc } = await this.resolveVisible(name);
-      const tagName = await loc.evaluate((el: Element) => el.tagName.toLowerCase());
-      const value = tagName === 'input' || tagName === 'textarea' ? await loc.inputValue() : ((await loc.textContent()) ?? '').trim();
+      const value = await this.readFieldValue(name);
       this.context.set(key, value);
+    });
+  }
+
+  /**
+   * Reads several named fields at once and saves them as one object under
+   * `key` - the single-object counterpart to readWebTable()'s array-of-rows
+   * capture, for forms that aren't tables (e.g. a login/password form):
+   *
+   *   await webActions.extractFields({ 'Username Field': 'username', 'Password Field': 'password' }, 'loginForm');
+   *   // context.get('loginForm') -> { username: '...', password: '...' }
+   */
+  extractFields(fields: Record<string, string>, key: string): WebActions {
+    return this.enqueue(async () => {
+      const result: Record<string, string> = {};
+      for (const [locatorName, resultKey] of Object.entries(fields)) {
+        result[resultKey] = await this.readFieldValue(locatorName);
+      }
+      this.context.set(key, result);
+    });
+  }
+
+  /**
+   * Reads several named fields and writes them straight to
+   * e2e/data/<fileName>.json - one call instead of extractFields() +
+   * ScenarioCache.saveToFile(). No cache key needed at all:
+   *
+   *   await webActions
+   *     .fill('Email Field', 'surya@evanke.com')
+   *     .fill('Password Field', 'Test@123')
+   *     .saveFieldsToFile({ 'Email Field': 'email', 'Password Field': 'password' }, 'customer-billing');
+   *   // -> e2e/data/customer-billing.json = { "email": "surya@evanke.com", "password": "Test@123" }
+   *
+   * Returns the full path written (read it via the drained chain's return
+   * value, or just call getFromJsonFile(fileName, ...) afterwards).
+   */
+  saveFieldsToFile(fields: Record<string, string>, fileName: string): WebActions {
+    return this.enqueue(async () => {
+      const result: Record<string, string> = {};
+      for (const [locatorName, resultKey] of Object.entries(fields)) {
+        result[resultKey] = await this.readFieldValue(locatorName);
+      }
+      saveJsonFile(fileName, result);
     });
   }
 
@@ -262,6 +311,14 @@ export class WebActions extends Chainable<WebActions> {
   verifyWebTable(name: string, rows: TableRows, options?: { headerDriven?: boolean; unordered?: boolean; strict?: boolean }): WebActions {
     return this.enqueue(async () => {
       await verifyWebTable(this.page, name, rows, { getLocator: (n) => this.getLocator(n) }, { headerDriven: true, ...options });
+    });
+  }
+
+  /** Reads the table's actual current rows (header-keyed objects) and saves them under `key`, for reuse in a later step - the capture counterpart to verifyWebTable()'s check. */
+  readWebTable(name: string, key: string): WebActions {
+    return this.enqueue(async () => {
+      const rows: TableRow[] = await readWebTableRows(this.page, name, { getLocator: (n) => this.getLocator(n) });
+      this.context.set(key, rows);
     });
   }
 

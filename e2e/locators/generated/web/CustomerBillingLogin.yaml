@@ -1,0 +1,22 @@
+# Confirmed against the real page's accessibility snapshot (captured from a
+# Playwright failure trace after running against
+# https://customer-billing-deve.vercel.app/login for real):
+#
+#   textbox "Email Address":  - /placeholder: Enter your email
+#   textbox "Password":       - /placeholder: Enter your password
+#   button "Login"
+#
+# The textbox's accessible NAME is "Email Address"/"Password" (not the
+# placeholder text) - role:textbox + that name is what actually matches.
+
+Email Field:
+  - role:textbox
+  - Email Address
+
+Password Field:
+  - role:textbox
+  - Password
+
+Login Button:
+  - role:button
+  - Login

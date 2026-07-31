@@ -18,7 +18,10 @@
  */
 import { expect, type APIRequestContext } from '@playwright/test';
 import { Chainable } from '../core/Chainable';
-import { TestContext, getByPath } from '../core/TestContext';
+import { ScenarioCache, getByPath } from '../cache/ScenarioCache';
+import { logApiCall } from '../utils/logger';
+import { autoMap, type AutoMapOptions } from '../utils/autoMap';
+import { analyzeApiChain, type ApiChainReport } from './chainAnalyzer';
 import type { CapturedApi } from './capture';
 import { findCapturedApi, normalizeUrl, waitForCapturedApi } from './matcher';
 import { extractTokenFromJson, buildAuthorizationHeader } from './token';
@@ -95,11 +98,12 @@ export class ApiActions extends Chainable<ApiActions> {
   private readonly consumedCapturedApiIndices = new Set<number>();
   private authToken?: string;
   private pendingRequest?: PendingApiRequest;
+  private lastRequest?: { method: string; url: string; body?: unknown };
   private lastResponse?: ApiLastResponse;
 
   constructor(
     private readonly apiRequestContext: APIRequestContext,
-    readonly context: TestContext = new TestContext(),
+    readonly context: ScenarioCache = new ScenarioCache(),
   ) {
     super();
   }
@@ -140,6 +144,32 @@ export class ApiActions extends Chainable<ApiActions> {
     });
   }
 
+  /**
+   * Builds a payload by auto-copying fields from `source` (defaults to the
+   * last response body) wherever field NAMES match - every `'<AUTO>'` leaf in
+   * `template` is filled from the source, so a chained call only spells out
+   * the fields that don't carry over. Immediate (not queued) - use it to build
+   * the body you pass to sendRequest(). See src/utils/autoMap.ts.
+   */
+  autoMapBody(template: unknown, source?: unknown, options?: AutoMapOptions): Record<string, unknown> {
+    return autoMap(template, source ?? this.lastResponse?.body, options);
+  }
+
+  /**
+   * sendRequest() whose body is auto-mapped from the last response: every
+   * `'<AUTO>'` leaf in `template` is filled by matching field name against the
+   * previous call's response (see autoMapBody). Queued, so the mapping runs
+   * after the previous expectStatus() has produced that response.
+   */
+  sendRequestAutoMapped(method: string, url: string | (() => string), template: unknown, options?: AutoMapOptions): ApiActions {
+    return this.sendRequest(method, url, () => this.autoMapBody(template, undefined, options));
+  }
+
+  /** Analyzes this test's captured API calls, surfacing which response field of one call feeds a request field of a later call. See chainAnalyzer. */
+  analyzeChain(): ApiChainReport {
+    return analyzeApiChain(this.capturedApis);
+  }
+
   /** Saves a field from the last response body (dot-path, e.g. "user.token") under `key`, for reuse in a later step. */
   saveResponseField(path: string, key: string): ApiActions {
     return this.enqueue(async () => {
@@ -165,6 +195,8 @@ export class ApiActions extends Chainable<ApiActions> {
     return this.enqueue(async () => {
       const pending = this.pendingRequest;
       if (!pending) throw new Error('No pending API request. Call sendRequest(...) first.');
+
+      this.lastRequest = { method: pending.method, url: pending.url, body: pending.body };
 
       const normalizedUrl = pending.normalizedUrl;
       const method = pending.method;
@@ -214,16 +246,20 @@ export class ApiActions extends Chainable<ApiActions> {
       Object.assign(headers, buildAuthorizationHeader(this.authToken));
 
       const data = pending.body !== undefined ? JSON.stringify(pending.body) : undefined;
+      const startedAt = Date.now();
       const response = await this.apiRequestContext.fetch(pending.url, {
         method: pending.method,
         headers,
         data,
       });
+      const durationMs = Date.now() - startedAt;
 
       const status = response.status();
       const body = await parseResponseBodyFromJsonOrText(response);
       const token = extractTokenFromJson(body);
       if (token) this.authToken = token;
+
+      logApiCall({ method: pending.method, url: pending.url, requestHeaders: headers, status, durationMs });
 
       this.lastResponse = { status, body };
       this.context.set(this.cacheKeyFor(method, normalizedUrl), body);
@@ -245,5 +281,10 @@ export class ApiActions extends Chainable<ApiActions> {
   /** The full body of the last response - read after awaiting the chain. */
   get lastResponseBody(): unknown {
     return this.lastResponse?.body;
+  }
+
+  /** The body that was actually sent on the last request - read after awaiting expectStatus(), for validating the request itself (see validateApiRequest()). */
+  get lastRequestBody(): unknown {
+    return this.lastRequest?.body;
   }
 }

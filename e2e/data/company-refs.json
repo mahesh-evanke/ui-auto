@@ -1,0 +1,63 @@
+{
+  "company": {
+    "name": "TechNova Solutions",
+
+    "manager": { "name": "Rahul Sharma" },
+
+    "departments": [
+      {
+        "id": "DEP-001",
+
+        "employees": [
+          {
+            "id": "EMP-101",
+            "name": "Surya",
+            "reportingManager": { "$ref": "company.manager" }
+          }
+        ],
+
+
+
+        
+
+        "teams": [
+          {
+            "name": "Backend",
+
+            "projects": [
+              {
+                "name": "Inventory API",
+
+                "owner": { "$ref": "company.manager" },
+
+                "members": [
+                  {
+                    "name": "Priya",
+
+                    "reviewer": { "$ref": "company.manager" }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+
+    "clients": [
+      {
+        "name": "ABC Retail",
+
+        "accountManager": { "$ref": "company.manager" }
+      }
+    ],
+
+    "audit": {
+      "approvedBy": { "$ref": "company.manager" }
+    },
+
+    "metadata": {
+      "createdBy": { "$ref": "company.manager" }
+    }
+  }
+}

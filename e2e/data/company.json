@@ -1,0 +1,137 @@
+{
+  "company": {
+    "id": "COMP-001",
+    "name": "TechNova Solutions",
+    "founded": 2018,
+    "headquarters": {
+      "country": "India",
+      "state": "Tamil Nadu",
+      "city": "Chennai",
+      "address": {
+        "street": "MG Road",
+        "zipcode": "600001",
+        "geo": {
+          "latitude": 13.0827,
+          "longitude": 80.2707
+        }
+      }
+    },
+    "departments": [
+      {
+        "id": "DEP-001",
+        "name": "Engineering",
+        "manager": {
+          "id": "EMP-100",
+          "name": "Rahul Sharma",
+          "contact": {
+            "email": "rahul@technova.com",
+            "phone": "+91-9876543210"
+          }
+        },
+        "teams": [
+          {
+            "id": "TEAM-001",
+            "name": "Backend",
+            "projects": [
+              {
+                "projectId": "PROJ-101",
+                "name": "Inventory API",
+                "status": "In Progress",
+                "budget": 250000,
+                "technologies": ["Python", "FastAPI", "MongoDB", "Redis"],
+                "milestones": [
+                  { "title": "Design", "completed": true },
+                  { "title": "Development", "completed": true },
+                  { "title": "Testing", "completed": false }
+                ],
+                "members": [
+                  {
+                    "id": "EMP-101",
+                    "name": "Surya",
+                    "role": "Backend Developer",
+                    "skills": ["Python", "FastAPI", "Docker"],
+                    "tasks": [
+                      {
+                        "taskId": "TASK-001",
+                        "title": "Create Authentication API",
+                        "priority": "High",
+                        "completed": true,
+                        "comments": [
+                          { "user": "Manager", "message": "Good progress", "likes": 12 },
+                          { "user": "QA", "message": "Need more unit tests", "likes": 3 }
+                        ]
+                      },
+                      {
+                        "taskId": "TASK-002",
+                        "title": "Optimize Database Queries",
+                        "priority": "Medium",
+                        "completed": false,
+                        "comments": []
+                      }
+                    ]
+                  },
+                  {
+                    "id": "EMP-102",
+                    "name": "Priya",
+                    "role": "Backend Developer",
+                    "skills": ["Node.js", "MongoDB"],
+                    "tasks": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "TEAM-002",
+            "name": "Frontend",
+            "projects": [
+              {
+                "projectId": "PROJ-102",
+                "name": "Customer Portal",
+                "status": "Completed",
+                "framework": "React",
+                "members": [{ "id": "EMP-103", "name": "Anil", "role": "Frontend Developer" }]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "DEP-002",
+        "name": "HR",
+        "manager": {
+          "id": "EMP-200",
+          "name": "Meena"
+        },
+        "employees": [{ "id": "EMP-201", "name": "Kiran", "designation": "HR Executive" }]
+      }
+    ],
+    "clients": [
+      {
+        "clientId": "CL-001",
+        "name": "ABC Retail",
+        "contacts": [
+          {
+            "name": "John",
+            "designation": "CTO",
+            "emails": ["john@abc.com", "john.work@abc.com"]
+          }
+        ],
+        "contracts": [{ "contractId": "CON-001", "value": 500000, "currency": "USD", "active": true }]
+      }
+    ],
+    "settings": {
+      "notifications": { "email": true, "sms": false, "push": true },
+      "security": {
+        "mfa": true,
+        "passwordPolicy": { "minLength": 12, "requireSpecialChar": true, "history": 5 }
+      }
+    },
+    "metadata": {
+      "createdAt": "2026-01-10T10:00:00Z",
+      "updatedAt": "2026-07-30T08:45:00Z",
+      "tags": ["IT", "Software", "Cloud"],
+      "version": 2
+    }
+  }
+}

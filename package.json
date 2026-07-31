@@ -10,13 +10,15 @@
     "scripts/postinstall.js",
     "scripts/scaffold.js",
     "scripts/init.js",
-    "scripts/generate-locator-types.js"
+    "scripts/generate-locator-types.js",
+    "scripts/locators-to-yaml.js"
   ],
   "main": "src/index.ts",
   "types": "src/index.ts",
   "bin": {
     "playwright-without-bdd-init": "scripts/init.js",
-    "playwright-without-bdd-generate-types": "scripts/generate-locator-types.js"
+    "playwright-without-bdd-generate-types": "scripts/generate-locator-types.js",
+    "playwright-without-bdd-locators-to-yaml": "scripts/locators-to-yaml.js"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
@@ -28,11 +30,13 @@
   "dependencies": {
     "@playwright/test": "^1.53.0",
     "js-yaml": "^4.1.0",
+    "pg": "^8.22.0",
     "playwright": "^1.53.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.20.0",
     "typescript": "^5.7.2"
   }
 }

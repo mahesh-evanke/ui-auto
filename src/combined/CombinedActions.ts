@@ -14,6 +14,7 @@
  *     .validateResponseFields({ id: 1 });
  */
 import { Chainable } from '../core/Chainable';
+import { TestContext } from '../core/TestContext';
 import { WebActions } from '../web/WebActions';
 import { ApiActions } from '../api/ApiActions';
 import type { TableRows } from '../web/tableHelper';
@@ -21,6 +22,11 @@ import type { TableRows } from '../web/tableHelper';
 export class CombinedActions extends Chainable<CombinedActions> {
   constructor(readonly web: WebActions, readonly api: ApiActions) {
     super();
+  }
+
+  /** Shared per-test key/value store (same instance as web.context/api.context) - see TestContext. */
+  get context(): TestContext {
+    return this.api.context;
   }
 
   navigate(url: string): CombinedActions {
@@ -41,9 +47,16 @@ export class CombinedActions extends Chainable<CombinedActions> {
     });
   }
 
-  fill(name: string, text: string): CombinedActions {
+  fill(name: string, text: string | (() => string)): CombinedActions {
     return this.enqueue(async () => {
       await this.web.fill(name, text);
+    });
+  }
+
+  /** Reads a named field's value/text and saves it under `key`, for reuse in a later step. */
+  extractText(name: string, key: string): CombinedActions {
+    return this.enqueue(async () => {
+      await this.web.extractText(name, key);
     });
   }
 
@@ -65,7 +78,7 @@ export class CombinedActions extends Chainable<CombinedActions> {
     });
   }
 
-  sendRequest(method: string, url: string, body?: unknown): CombinedActions {
+  sendRequest(method: string, url: string | (() => string), body?: unknown | (() => unknown)): CombinedActions {
     return this.enqueue(async () => {
       await this.api.sendRequest(method, url, body);
     });
@@ -83,8 +96,27 @@ export class CombinedActions extends Chainable<CombinedActions> {
     });
   }
 
+  /** Saves a field from the last API response body (dot-path) under `key`, for reuse in a later step. */
+  saveResponseField(path: string, key: string): CombinedActions {
+    return this.enqueue(async () => {
+      await this.api.saveResponseField(path, key);
+    });
+  }
+
+  /** Saves the entire last API response body under `key`, for reuse in a later step. */
+  saveResponseBody(key: string): CombinedActions {
+    return this.enqueue(async () => {
+      await this.api.saveResponseBody(key);
+    });
+  }
+
   /** The full body of the last API response - read after awaiting the chain. */
   get lastResponseBody(): unknown {
     return this.api.lastResponseBody;
+  }
+
+  /** Reads a previously-received API response body by method+URL - every response is cached automatically, no explicit save call needed. Immediate (not queued). */
+  getCachedResponse<T = unknown>(method: string, url: string): T {
+    return this.api.getCachedResponse<T>(method, url);
   }
 }

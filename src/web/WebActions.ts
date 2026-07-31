@@ -21,6 +21,7 @@
  */
 import { expect, type Locator, type Page, type Frame } from '@playwright/test';
 import { Chainable } from '../core/Chainable';
+import { TestContext } from '../core/TestContext';
 import { LocatorStore } from '../locators/LocatorStore';
 import { resolveDynamicTokens, verifyTextOnScreen } from './textHelper';
 import { verifyWebTable, type TableRows } from './tableHelper';
@@ -36,7 +37,10 @@ function normalizeWs(s: string): string {
 export class WebActions extends Chainable<WebActions> {
   private readonly locators = new LocatorStore();
 
-  constructor(private readonly page: Page) {
+  constructor(
+    private readonly page: Page,
+    readonly context: TestContext = new TestContext(),
+  ) {
     super();
   }
 
@@ -115,10 +119,16 @@ export class WebActions extends Chainable<WebActions> {
     });
   }
 
-  /** Fills standard inputs/textareas; falls back to keystroke entry and DOM value assignment. */
-  fill(name: string, text: string): WebActions {
+  /**
+   * Fills standard inputs/textareas; falls back to keystroke entry and DOM
+   * value assignment. `text` can be a zero-arg function instead of a plain
+   * string - it's only called when this queued action actually runs, so it
+   * can safely reference a value saved earlier in the same chain (see
+   * extractText() / ApiActions.saveResponseField()).
+   */
+  fill(name: string, text: string | (() => string)): WebActions {
     return this.enqueue(async () => {
-      let txt = text;
+      let txt = typeof text === 'function' ? text() : text;
       if (txt.includes('<CURRENT_DATE')) txt = resolveDynamicTokens(txt);
       const { loc } = await this.resolveVisible(name);
       try {
@@ -235,6 +245,16 @@ export class WebActions extends Chainable<WebActions> {
         return;
       }
       await expect(loc).toContainText(expected);
+    });
+  }
+
+  /** Reads a named field's value (inputs/textareas) or text content (everything else) and saves it under `key`, for reuse in a later step. */
+  extractText(name: string, key: string): WebActions {
+    return this.enqueue(async () => {
+      const { loc } = await this.resolveVisible(name);
+      const tagName = await loc.evaluate((el: Element) => el.tagName.toLowerCase());
+      const value = tagName === 'input' || tagName === 'textarea' ? await loc.inputValue() : ((await loc.textContent()) ?? '').trim();
+      this.context.set(key, value);
     });
   }
 

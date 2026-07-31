@@ -18,6 +18,7 @@
  */
 import { expect, type APIRequestContext } from '@playwright/test';
 import { Chainable } from '../core/Chainable';
+import { TestContext, getByPath } from '../core/TestContext';
 import type { CapturedApi } from './capture';
 import { findCapturedApi, normalizeUrl, waitForCapturedApi } from './matcher';
 import { extractTokenFromJson, buildAuthorizationHeader } from './token';
@@ -96,20 +97,63 @@ export class ApiActions extends Chainable<ApiActions> {
   private pendingRequest?: PendingApiRequest;
   private lastResponse?: ApiLastResponse;
 
-  constructor(private readonly apiRequestContext: APIRequestContext) {
+  constructor(
+    private readonly apiRequestContext: APIRequestContext,
+    readonly context: TestContext = new TestContext(),
+  ) {
     super();
   }
 
-  /** Registers a request to be executed/matched on the next expectStatus() call. */
-  sendRequest(method: string, url: string, body?: unknown): ApiActions {
+  /** Cache key every response is auto-saved under: "<METHOD> <normalized-url>", e.g. "GET /posts/1". */
+  private cacheKeyFor(method: string, normalizedUrl: string): string {
+    return `${String(method || '').toUpperCase()} ${normalizedUrl}`;
+  }
+
+  /**
+   * Reads a previously-received response body by method+URL - every response
+   * is cached automatically as it's received, so this works without an
+   * explicit saveResponseField()/saveResponseBody() call for that response.
+   * Immediate (not queued): call after awaiting the request that produced it.
+   */
+  getCachedResponse<T = unknown>(method: string, url: string): T {
+    const normalizedUrl = normalizeUrl(resolveApiUrl(url));
+    return this.context.get<T>(this.cacheKeyFor(method, normalizedUrl));
+  }
+
+  /**
+   * Registers a request to be executed/matched on the next expectStatus()
+   * call. `url`/`body` can be a plain value, or a zero-arg function that's
+   * only called when this queued action actually runs - so it can safely
+   * reference a value saved earlier in the same chain (see saveResponseField()).
+   */
+  sendRequest(method: string, url: string | (() => string), body?: unknown | (() => unknown)): ApiActions {
     return this.enqueue(async () => {
-      const resolvedUrl = resolveApiUrl(url);
+      const resolvedRawUrl = typeof url === 'function' ? url() : url;
+      const resolvedBody = typeof body === 'function' ? (body as () => unknown)() : body;
+      const resolvedUrl = resolveApiUrl(resolvedRawUrl);
       this.pendingRequest = {
         method: String(method || '').toUpperCase(),
         url: resolvedUrl,
         normalizedUrl: normalizeUrl(resolvedUrl),
-        body,
+        body: resolvedBody,
       };
+    });
+  }
+
+  /** Saves a field from the last response body (dot-path, e.g. "user.token") under `key`, for reuse in a later step. */
+  saveResponseField(path: string, key: string): ApiActions {
+    return this.enqueue(async () => {
+      if (!this.lastResponse) throw new Error('No last API response found. Call expectStatus(...) first.');
+      const value = getByPath(this.lastResponse.body, path);
+      this.context.set(key, value);
+    });
+  }
+
+  /** Saves the entire last response body under `key`, for reuse in a later step. */
+  saveResponseBody(key: string): ApiActions {
+    return this.enqueue(async () => {
+      if (!this.lastResponse) throw new Error('No last API response found. Call expectStatus(...) first.');
+      this.context.set(key, this.lastResponse.body);
     });
   }
 
@@ -153,6 +197,7 @@ export class ApiActions extends Chainable<ApiActions> {
         const token = extractTokenFromJson(responseBody);
         if (token) this.authToken = token;
         this.lastResponse = { status: synthetic.status(), body: responseBody };
+        this.context.set(this.cacheKeyFor(method, normalizedUrl), responseBody);
         return true;
       };
 
@@ -181,6 +226,7 @@ export class ApiActions extends Chainable<ApiActions> {
       if (token) this.authToken = token;
 
       this.lastResponse = { status, body };
+      this.context.set(this.cacheKeyFor(method, normalizedUrl), body);
       this.pendingRequest = undefined;
 
       expect(status).toBe(expectedStatusCode);

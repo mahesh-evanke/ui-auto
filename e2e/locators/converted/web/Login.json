@@ -1,0 +1,17 @@
+{
+  "Username Field": [
+    "label",
+    "Username",
+    "//input[@id='username']"
+  ],
+  "Password Field": [
+    "label",
+    "Password",
+    "//input[@id='password']"
+  ],
+  "Login Button": [
+    "role:button",
+    "Login",
+    "//button[normalize-space(.)='Login']"
+  ]
+}

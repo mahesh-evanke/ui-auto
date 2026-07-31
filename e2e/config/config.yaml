@@ -38,6 +38,19 @@ run:
   # How long to keep re-checking the page for the expected text (covers slow redirects).
   verifyTimeoutMs: 200000
 
+# ── Locators ──────────────────────────────────────────────────────────────────
+locators:
+  # Preferred file format for locator lookups: yaml | json
+  # A page/common locator file can exist as either .yaml or .json; whichever
+  # format you set here is looked for FIRST. The other format is still used
+  # as a fallback if the preferred one isn't found, so mixed-format projects
+  # keep working - this just controls which one wins when both exist.
+  format: yaml
+  # Output folder for the JSON<->YAML converter CLI (npm run convert:locators).
+  # Always a SEPARATE folder from the source locators - converted files never
+  # land next to the originals.
+  convertedOutputDir: ./e2e/locators/converted
+
 # ── Environment URLs (optional convenience) ───────────────────────────────────
 urls:
   standalone: http://localhost:4042/

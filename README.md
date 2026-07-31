@@ -197,6 +197,36 @@ Defines shared elements available on **every page** — navigation bar, logout b
 
 Tracks the page title and a representative label for each registered page key. Used by the `User is on "..." screen` step to optionally verify the page loaded correctly.
 
+### Configuring the locator format (YAML vs JSON)
+
+A locator file — page-specific or `common` — can be authored as either `.yaml` or `.json` (same `[kind, value, xpathFallback?]` tuple shape either way, just serialized differently). Which one wins when **both** exist for the same page/common key is controlled by `e2e/config/config.yaml`:
+
+```yaml
+locators:
+  format: yaml   # or: json
+```
+
+`format` picks which extension is looked for **first**; the other is still used as a fallback if the preferred one is missing, so a project with a mix of `.yaml` and `.json` files keeps working — this setting only decides the tie-break. See [e2e/support/featurePaths.ts](e2e/support/featurePaths.ts)'s `preferredLocatorExts()` (used by `findLocatorFile()`/`findCommonFiles()`) and [e2e/support/config.ts](e2e/support/config.ts) (maps `locators.format` → the `LOCATOR_FORMAT` env var read there).
+
+Example: with two files for the same page — `e2e/locators/generated/web/Login.yaml` and `e2e/locators/generated/web/Login.json` — setting `format: json` makes the `.json` one win; setting `format: yaml` (the default) makes the `.yaml` one win.
+
+### Converting locators between JSON and YAML
+
+A CLI converts locator files in either direction. Converted files are always written to a **separate output folder** — never next to the source files — controlled by `locators.convertedOutputDir` in config (default `./e2e/locators/converted`):
+
+```bash
+npm run convert:locators:to-json    # e2e/locators/generated/**/*.yaml -> e2e/locators/converted/**/*.json
+npm run convert:locators:to-yaml    # e2e/locators/generated/**/*.json -> e2e/locators/converted/**/*.yaml
+```
+
+Custom input/output folders and overwrite behavior:
+
+```bash
+node node_modules/wdio-playwright-library/scripts/convert-locators.js to-json --in e2e/locators/generated/web --out e2e/locators/converted/web --overwrite
+```
+
+The tool refuses to run if `--out` resolves to the same folder as `--in` (or a subfolder of it) — see [scripts/convert-locators.js](scripts/convert-locators.js). Example: converting the checked-in [e2e/locators/generated/web/Login.yaml](e2e/locators/generated/web/Login.yaml) with `npm run convert:locators:to-json` produces `e2e/locators/converted/web/Login.json`, with the page's directory structure preserved under the output folder.
+
 ---
 
 ## Running Tests

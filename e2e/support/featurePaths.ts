@@ -54,8 +54,8 @@ export function locatorDir(cat: FeatureCategory): string {
 export function locatorFilePath(cat: FeatureCategory, pageKey: string, ext: 'yaml' | 'json' = 'yaml'): string {
   return path.join(LOCATOR_ROOT, cat, `${pageKey}.${ext}`);
 }
-export function commonFilePath(cat: FeatureCategory): string {
-  return path.join(LOCATOR_ROOT, cat, 'common.yaml');
+export function commonFilePath(cat: FeatureCategory, ext: 'yaml' | 'json' = 'yaml'): string {
+  return path.join(LOCATOR_ROOT, cat, `common.${ext}`);
 }
 
 /** Create the category feature + locator folders (+ empty common.yaml). */
@@ -66,9 +66,21 @@ export function ensureCategoryDirs(cat: FeatureCategory): void {
   if (!fs.existsSync(cp)) fs.writeFileSync(cp, '', 'utf8');
 }
 
+/**
+ * Which locator file extension to look for FIRST, driven by
+ * e2e/config/config.yaml's `locators.format` (LOCATOR_FORMAT env var, set by
+ * support/config.ts). The other extension is still tried as a fallback, so a
+ * project with mixed yaml/json files keeps working - this only decides which
+ * one wins when both exist for the same page/common key.
+ */
+export function preferredLocatorExts(): Array<'yaml' | 'json'> {
+  const fmt = String(process.env.LOCATOR_FORMAT || '').toLowerCase();
+  return fmt === 'json' ? ['json', 'yaml'] : ['yaml', 'json'];
+}
+
 /** Runtime: locate a page's locator file (yaml or json) across category folders, with legacy fallbacks. */
 export function findLocatorFile(pageKey: string): string | null {
-  const exts: Array<'yaml' | 'json'> = ['yaml', 'json'];
+  const exts = preferredLocatorExts();
   for (const cat of CATEGORIES) {
     for (const ext of exts) {
       const fp = locatorFilePath(cat, pageKey, ext);
@@ -101,17 +113,15 @@ export function findLocatorFile(pageKey: string): string | null {
 /** Runtime: every common locator file (yaml or json) across categories (+ legacy locations). */
 export function findCommonFiles(): string[] {
   const out: string[] = [];
+  const exts = preferredLocatorExts();
   const push = (...candidates: string[]) => candidates.forEach((f) => fs.existsSync(f) && out.push(f));
   for (const cat of CATEGORIES) {
-    push(commonFilePath(cat), path.join(LOCATOR_ROOT, cat, 'common.json'));
+    push(...exts.map((ext) => commonFilePath(cat, ext)));
   }
-  push(path.join(LOCATOR_ROOT, 'common.yaml'), path.join(LOCATOR_ROOT, 'common.json'));
+  push(...exts.map((ext) => path.join(LOCATOR_ROOT, `common.${ext}`)));
   for (const cat of CATEGORIES) {
-    push(
-      path.join(ROOT, 'generated', cat, 'locator', 'common.yaml'),
-      path.join(ROOT, 'generated', cat, 'locator', 'common.json'),
-    );
+    push(...exts.map((ext) => path.join(ROOT, 'generated', cat, 'locator', `common.${ext}`)));
   }
-  push(path.join(ROOT, 'locators', 'common.yaml'), path.join(ROOT, 'locators', 'common.json'));
+  push(...exts.map((ext) => path.join(ROOT, 'locators', `common.${ext}`)));
   return out;
 }

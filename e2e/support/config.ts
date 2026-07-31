@@ -30,6 +30,10 @@ type ConfigShape = {
     redirectWaitMs?: number;
     verifyTimeoutMs?: number;
   };
+  locators?: {
+    format?: string;
+    convertedOutputDir?: string;
+  };
 };
 
 function setEnv(key: string, value: unknown): void {
@@ -84,6 +88,13 @@ export function loadConfig(): ConfigShape {
     setEnv('REDIRECT_WAIT_MS', cfg.run.redirectWaitMs);
     setEnv('VERIFY_TIMEOUT_MS', cfg.run.verifyTimeoutMs);
     setEnv('MAX_INSTANCES', cfg.run.maxInstances);
+  }
+
+  // ── Locators ──
+  if (cfg.locators) {
+    const fmt = String(cfg.locators.format || '').toLowerCase();
+    if (fmt === 'yaml' || fmt === 'json') setEnv('LOCATOR_FORMAT', fmt);
+    setEnv('LOCATOR_CONVERTED_OUTPUT_DIR', cfg.locators.convertedOutputDir);
   }
 
   return cfg;

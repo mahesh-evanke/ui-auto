@@ -120,6 +120,8 @@ mergePackageJsonField('scripts', {
   'test:web': `node ${nm}/e2e/support/scripts/run.js web`,
   'test:api': `node ${nm}/e2e/support/scripts/run.js api`,
   'test:e2e': `node ${nm}/e2e/support/scripts/run.js endtoend`,
+  'convert:locators:to-yaml': `node ${nm}/scripts/convert-locators.js to-yaml`,
+  'convert:locators:to-json': `node ${nm}/scripts/convert-locators.js to-json`,
 });
 
 // NOTE: deliberately NOT writing ts-node/typescript into devDependencies here.

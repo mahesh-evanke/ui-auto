@@ -11,7 +11,8 @@
     "e2e/locators/pages.yaml",
     "cucumber.js",
     "tsconfig.json",
-    "scripts/postinstall.js"
+    "scripts/postinstall.js",
+    "scripts/convert-locators.js"
   ],
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
@@ -20,7 +21,9 @@
     "test:all": "node e2e/support/scripts/run.js",
     "test:web": "node e2e/support/scripts/run.js web",
     "test:api": "node e2e/support/scripts/run.js api",
-    "test:e2e": "node e2e/support/scripts/run.js endtoend"
+    "test:e2e": "node e2e/support/scripts/run.js endtoend",
+    "convert:locators:to-yaml": "node scripts/convert-locators.js to-yaml",
+    "convert:locators:to-json": "node scripts/convert-locators.js to-json"
   },
   "dependencies": {
     "@cucumber/cucumber": "^11.3.0",

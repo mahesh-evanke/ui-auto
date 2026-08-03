@@ -40,3 +40,4 @@ export type {
 export type { TableRows, WebTableVerifyOptions } from './web/tableHelper';
 export type { TextVerifyOptions } from './web/textHelper';
 export type { CapturedApi, ApiCaptureOptions } from './api/capture';
+export * as workflowEngine from './workflow-engine';

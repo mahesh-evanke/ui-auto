@@ -1,0 +1,11 @@
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJlbWFpbCI6InN1cnlhQGV2YW5rZS5jb20iLCJleHAiOjE3ODU4MzExOTV9.a-W6unKCIt_yhhIn3INJxBbJwwSre0zuDotlXc0pI9w",
+  "token_type": "bearer",
+  "user": {
+    "id": 8,
+    "email": "surya@evanke.com",
+    "first_name": "surya",
+    "last_name": "reddy",
+    "created_at": "2026-02-18T11:56:26.649370"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "testpilot-agent",
+  "version": "0.1.0",
+  "description": "Read-only local AI test generation agent: analyzes an already-implemented repository (read-only) and generates Playwright/Cucumber test artifacts for a plain-English requirement. Never runs the app or executes tests. Uses a local Ollama model.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "testpilot": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.cli.json",
+    "qa": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "web": "next dev",
+    "web:build": "next build",
+    "web:start": "next start"
+  },
+  "dependencies": {
+    "minimist": "^1.2.8",
+    "next": "^15.1.0",
+    "next-auth": "^4.24.10",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/minimist": "^1.2.5",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

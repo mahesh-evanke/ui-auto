@@ -1,0 +1,10 @@
+node_modules/
+dist/
+agent-workspace/
+qa-output/
+*.log
+.env
+.env.local
+.next/
+next-env.d.ts
+tsconfig.tsbuildinfo

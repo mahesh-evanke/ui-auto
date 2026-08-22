@@ -4,9 +4,12 @@ import type { StepDefinitionEntry, StepIntent, TestScenario } from "../types.js"
 const SYSTEM_PROMPT = `You break a single QA test scenario down into an ordered list of short step
 intents - the individual actions/assertions a Gherkin scenario would perform, one per step.
 
-You are given a list of AVAILABLE STEPS that the test framework already implements.
+You are given a list of AVAILABLE STEPS that the test framework already implements,
+and a list of UI ELEMENTS that actually exist in the application under test.
 
 Rules:
+- Use ONLY element labels from the UI ELEMENTS list. Never invent an element name.
+  If the list is empty, use labels taken verbatim from the scenario description.
 - STRONGLY PREFER an available step. Copy its wording exactly, replacing each {string}
   placeholder with a concrete value in double quotes and each {int} with a number.
   Example: available step \`User clicks on {string} button\` with the Save button
@@ -39,14 +42,19 @@ function renderCatalog(catalog: StepDefinitionEntry[]): string {
 export async function planStepIntents(
   client: OllamaClient,
   scenario: TestScenario,
-  catalog: StepDefinitionEntry[] = []
+  catalog: StepDefinitionEntry[] = [],
+  uiElements = ""
 ): Promise<StepIntent[]> {
   const userPrompt = `AVAILABLE STEPS (reuse these wherever possible):
 ${renderCatalog(catalog)}
 
+UI ELEMENTS that exist in the application under test (use these exact labels):
+${uiElements || "(none found - use labels from the scenario description)"}
+
 Scenario [${scenario.category}]: ${scenario.description}
 
-Produce the step intents JSON now, reusing the available steps above wherever they fit.`;
+Produce the step intents JSON now, reusing the available steps above wherever they fit
+and referring only to the UI elements listed.`;
 
   const result = await client.chatJson<{ steps: StepIntent[] }>([
     { role: "system", content: SYSTEM_PROMPT },

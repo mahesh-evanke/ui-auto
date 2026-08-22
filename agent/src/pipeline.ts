@@ -11,6 +11,7 @@ import { generateFeatureFile } from "./agents/gherkinGeneratorAgent.js";
 import { generateStepDefinitions } from "./agents/stepDefinitionGeneratorAgent.js";
 import { generatePlaywrightSpec } from "./agents/specGeneratorAgent.js";
 import { retrieveRelevantFiles } from "./retrieval/codeSearch.js";
+import { extractUiElements, renderUiElements } from "./retrieval/uiElements.js";
 import { findExistingTests } from "./retrieval/existingTestSearch.js";
 import { indexTargetRepoSteps, findReusableStep, shortlistSteps } from "./retrieval/stepDefinitionIndex.js";
 import { writeGeneratedTestFile, writeAnalysisFile } from "./guard.js";
@@ -133,12 +134,17 @@ export async function runJob(
   const existingStepsOnly = (opts.harness ?? "bundled") === "bundled";
   const unsupportedSteps: string[] = [];
   for (const item of testPlan.items) {
+    // The real, concrete UI elements from the application's own source. Step
+    // text is written against these so it names things that actually exist,
+    // instead of being invented from the requirement wording alone.
+    const uiElements = renderUiElements(extractUiElements(relevantFilesByReq.get(item.requirementId) ?? []));
+
     for (const scenario of item.scenarios) {
       // Show the model the framework's own steps that best fit this scenario,
       // so it reuses them instead of inventing prose no step definition
       // implements (post-hoc matching alone reused only ~11% of steps).
       const catalog = shortlistSteps(scenario.description, stepPool);
-      const intents = await planStepIntents(client, scenario, catalog);
+      const intents = await planStepIntents(client, scenario, catalog, uiElements);
       const steps: ResolvedStep[] = [];
       for (const intent of intents) {
         const reused = findReusableStep(intent, stepPool);

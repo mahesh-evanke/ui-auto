@@ -96,6 +96,11 @@ function classifyFile(rel: string): CandidateFile["kind"] {
   if (lower.includes("/routes/") || lower.includes("/api/")) return "route";
   if (lower.includes("/components/")) return "component";
   if (/\.(config)\.(ts|js|mjs|cjs)$/.test(lower) || lower.endsWith(".config.ts")) return "config";
+  // A UI file doesn't have to live under pages/ or components/ - plenty of
+  // apps (create-react-app being the obvious one) put the whole UI in
+  // src/App.js. Treat a PascalCase source file as a component so it still
+  // ranks as UI rather than being written off as noise.
+  if (/(^|\/)[A-Z][A-Za-z0-9]*\.(tsx|jsx|ts|js|vue|svelte)$/.test(rel)) return "component";
   return "other";
 }
 
@@ -114,10 +119,15 @@ export function analyzeRepository(rootDir: string): RepoAnalysis {
   const hasPlaywright = Boolean(deps["@playwright/test"] ?? deps["playwright"]);
   const hasPlaywrightConfig = fileTree.some((f) => /playwright\.config\.(ts|js|mjs)$/.test(f));
 
+  // Every source file is a candidate. Previously anything classified "other"
+  // was dropped here, which silently emptied the candidate list for any repo
+  // not using pages/ or components/ directories (e.g. create-react-app's
+  // src/App.js) - retrieval then found nothing and the model wrote the
+  // feature from the requirement text alone, never reading the repo.
+  // Irrelevant files score 0 in retrieval and fall out there instead.
   const candidateFiles: CandidateFile[] = fileTree
-    .filter((f) => /\.(ts|tsx|js|jsx|vue)$/.test(f))
-    .map((f) => ({ path: f, kind: classifyFile(f) }))
-    .filter((c) => c.kind !== "other");
+    .filter((f) => /\.(ts|tsx|js|jsx|vue|svelte|html)$/.test(f))
+    .map((f) => ({ path: f, kind: classifyFile(f) }));
 
   return {
     rootDir,

@@ -38,7 +38,19 @@ export function indexTargetRepoSteps(analysis: RepoAnalysis, target: TargetFrame
  * are always included since almost every scenario needs them but their
  * wording rarely overlaps a scenario description's tokens.
  */
-export function shortlistSteps(text: string, index: StepDefinitionEntry[], limit = 24): StepDefinitionEntry[] {
+/**
+ * Steps the generator can actually emit. A step whose handler takes a
+ * DataTable/DocString needs a table under it in the .feature, which nothing
+ * here can invent meaningfully - emitting one anyway fails at runtime with
+ * "table.hashes is not a function", so they are excluded from the vocabulary
+ * entirely rather than offered and then breaking the run.
+ */
+export function usableSteps(index: StepDefinitionEntry[]): StepDefinitionEntry[] {
+  return index.filter((entry) => !entry.requiresDataTable);
+}
+
+export function shortlistSteps(text: string, allSteps: StepDefinitionEntry[], limit = 24): StepDefinitionEntry[] {
+  const index = usableSteps(allSteps);
   const tokens = new Set(tokenize(text));
   const scored = index
     .map((entry) => {
@@ -118,7 +130,10 @@ function normalizeToShape(text: string): string {
     .toLowerCase();
 }
 
-export function findReusableStep(intent: StepIntent, index: StepDefinitionEntry[], minScore = 2): ResolvedStep | null {
+export function findReusableStep(intent: StepIntent, allSteps: StepDefinitionEntry[], minScore = 2): ResolvedStep | null {
+  // Same exclusion as shortlistSteps: never resolve to a step that would need
+  // a DataTable the generated .feature cannot supply.
+  const index = usableSteps(allSteps);
   const intentTokens = new Set(tokenize(intent.description));
   if (intentTokens.size === 0) return null;
 

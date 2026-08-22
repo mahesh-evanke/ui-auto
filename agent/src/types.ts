@@ -108,6 +108,13 @@ export interface StepDefinitionEntry {
   keyword: "Given" | "When" | "Then";
   kind: "ui" | "api";
   sourceFile: string;
+  /**
+   * True when the step's handler takes a Cucumber DataTable/DocString. The
+   * generator has no way to invent a meaningful table, and calling such a
+   * step without one fails at runtime ("table.hashes is not a function"), so
+   * these are excluded from the reusable vocabulary.
+   */
+  requiresDataTable?: boolean;
 }
 
 export interface ReferenceFrameworkProfile {

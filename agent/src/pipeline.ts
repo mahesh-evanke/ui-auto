@@ -122,6 +122,16 @@ export async function runJob(
   const scenarioSteps: GeneratedScenarioSteps[] = [];
   let reusedCount = 0;
   let newCount = 0;
+
+  // With the bundled harness the framework already implements the vocabulary
+  // (UI, API and DB step definitions), so a step it cannot express is dropped
+  // rather than invented. That keeps every generated .feature runnable as-is
+  // against the existing step definitions, and avoids emitting a generated
+  // .steps.ts - which cucumber could not load anyway, since this agent
+  // package is ESM ("type": "module") while the framework requires CommonJS.
+  // Dropped steps are reported as gaps instead of silently disappearing.
+  const existingStepsOnly = (opts.harness ?? "bundled") === "bundled";
+  const unsupportedSteps: string[] = [];
   for (const item of testPlan.items) {
     for (const scenario of item.scenarios) {
       // Show the model the framework's own steps that best fit this scenario,
@@ -135,6 +145,8 @@ export async function runJob(
         if (reused) {
           steps.push(reused);
           reusedCount++;
+        } else if (existingStepsOnly) {
+          unsupportedSteps.push(`${intent.keyword} ${intent.description}`);
         } else {
           steps.push({ text: intent.description, keyword: intent.keyword, reused: false });
           newCount++;
@@ -150,6 +162,9 @@ export async function runJob(
   const usableScenarioSteps = scenarioSteps.filter((s) => s.steps.length > 0);
   if (emptyScenarioCount > 0) {
     emit(`Dropped ${emptyScenarioCount} scenario(s) with no usable steps`);
+  }
+  if (unsupportedSteps.length > 0) {
+    emit(`Dropped ${unsupportedSteps.length} step(s) with no existing step definition (see report gaps)`);
   }
   emit(`Step matching complete: ${reusedCount} reused, ${newCount} new step(s) needed`);
 
@@ -195,6 +210,12 @@ export async function runJob(
       const fileName = `${featureSlug}.steps.ts`;
       const relPath = `cucumber/step-definitions/${fileName}`;
       const absPath = writeGeneratedTestFile(paths, relPath, content);
+      // This agent package is ESM ("type": "module"), and the job workspace
+      // lives inside it - so Node would treat a generated .ts step file as an
+      // ES module and cucumber's --require (CommonJS) fails with
+      // "expected a CommonJS module but found an ES module". Scoping the
+      // containing directory back to CommonJS makes the file loadable.
+      writeGeneratedTestFile(paths, "cucumber/step-definitions/package.json", `{ "type": "commonjs" }\n`);
       artifacts.push(toArtifact("step-definitions", fileName, relPath, absPath, content));
       emit(`New step definitions generated: ${relPath} (${newUiSteps.length} step(s))`);
     }
@@ -240,7 +261,16 @@ export async function runJob(
       "Selectors/step text for reused steps come from the reference framework's existing step definitions and/or the target repo's own existing tests.",
       "Selectors for newly-generated steps or spec files are inferred from static source excerpts - review before running.",
     ],
-    gaps: referenceProfile.notes,
+    gaps: [
+      ...referenceProfile.notes,
+      ...(unsupportedSteps.length > 0
+        ? [
+            `${unsupportedSteps.length} step(s) were dropped because no existing step definition matched. ` +
+              `Add a step definition for these in the framework (e2e/stepdefinitions/) if the behavior needs covering:`,
+            ...[...new Set(unsupportedSteps)].map((s) => `  - ${s}`),
+          ]
+        : []),
+    ],
     startedAt,
     finishedAt,
   };

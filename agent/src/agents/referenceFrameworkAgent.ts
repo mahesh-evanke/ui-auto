@@ -40,9 +40,38 @@ export function extractSteps(filePath: string, kind: "ui" | "api"): StepDefiniti
       keyword: keyword as "Given" | "When" | "Then",
       kind,
       sourceFile: filePath,
+      requiresDataTable: handlerNeedsDataTable(content, match.index + match[0].length),
     });
   }
   return entries;
+}
+
+/**
+ * Decides whether the handler registered at `handlerStart` accepts a
+ * DataTable, covering both shapes the framework uses:
+ *
+ *   When('...', async function (this: W, table: DataTable) { ... })   // inline
+ *   When('...', stepMoreInfoModal);                                    // named function
+ *
+ * For the named form the function's own declaration is looked up in the same
+ * file. Only the text up to the next step registration is inspected, so a
+ * later unrelated step's DataTable can't leak into this one.
+ */
+function handlerNeedsDataTable(content: string, handlerStart: number): boolean {
+  const rest = content.slice(handlerStart);
+  const nextRegistration = rest.search(/\b(Given|When|Then)\s*\(\s*['"`]/);
+  const handlerText = nextRegistration === -1 ? rest : rest.slice(0, nextRegistration);
+
+  if (/\bDataTable\b|\bDocString\b/.test(handlerText)) return true;
+
+  // Named-function form: `, stepMoreInfoModal);` - resolve its declaration.
+  const named = handlerText.match(/^\s*,\s*([A-Za-z_$][\w$]*)\s*\)/);
+  if (named) {
+    const fnName = named[1];
+    const declaration = new RegExp(`function\\s+${fnName}\\s*\\(([^)]*)\\)`).exec(content);
+    if (declaration && /\bDataTable\b|\bDocString\b/.test(declaration[1])) return true;
+  }
+  return false;
 }
 
 function findOneLocatorExample(rootDir: string): string | null {

@@ -102,10 +102,14 @@ GitHub sign-in → pick a repository and branch → enter the requirement → wa
 generation progress → review artifacts and the coverage report → optionally
 run against a URL.
 
-## Step reuse
+## Step reuse — existing step definitions only
 
-Reuse is what makes the generated tests runnable. Two mechanisms work
-together:
+Under the bundled harness the generator uses **only step definitions that
+already exist** in `e2e/stepdefinitions/` (UI, API and DB alike — the whole
+directory is scanned recursively, so steps you add later are picked up with no
+configuration). It never invents a new step definition file.
+
+Three mechanisms make that work:
 
 1. **Catalog-constrained planning** — before writing any step text, the model
    is shown the framework steps most relevant to the scenario and told to copy
@@ -114,9 +118,36 @@ together:
    placeholders collapse to a common marker) and compared against the real
    templates, so `User clicks on "Save" button` is recognized as
    `User clicks on {string} button`.
+3. **Unsupported steps are dropped, not invented** — anything with no match is
+   removed and listed under *Potential Gaps* in the report, telling you exactly
+   which step definitions you'd need to add to cover that behavior. A scenario
+   left with no steps is dropped too, rather than written out as invalid
+   Gherkin.
 
-Anything with no match becomes a newly generated step definition written to a
-**new** file — existing step-definition files are never edited.
+Steps whose handler takes a Cucumber **DataTable** (e.g.
+`User inputs information on {string} screen with following params`,
+`verify {string} web table contains`) are excluded from the vocabulary — the
+generator has no way to invent a meaningful table, and calling such a step
+without one fails at runtime. On this framework that removes 20 of 80 steps,
+leaving 60 usable.
+
+With `--harness target` the old behavior returns: new step definitions are
+generated for unmatched steps, into a new file (existing files are never
+edited).
+
+## Running a generated feature yourself
+
+The agent's Run step is optional. A generated `.feature` uses only step
+definitions this framework already implements, so you can run it directly with
+the framework's own runner — set the URL first, since the model's guessed URL
+is only rewritten automatically by the Run step:
+
+```bash
+# from the repo root
+cp agent/agent-workspace/<job-id>/generated-tests/cucumber/<name>.feature e2e/features/generated/web/
+# edit the `User navigates to "..." URL` step to point at your running app, then:
+npx cucumber-js e2e/features/generated/web/<name>.feature
+```
 
 ## Run-time behavior worth knowing
 

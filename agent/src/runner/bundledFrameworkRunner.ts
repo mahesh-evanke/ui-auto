@@ -16,17 +16,37 @@ const RUN_DIR_NAME = ".testpilot-run";
  * still lands on the right application.
  */
 export function applyBaseUrlToFeature(featureContent: string, baseUrl: string): string {
-  const navigateRe = /(User navigates to\s+")([^"]*)(")/g;
-  if (navigateRe.test(featureContent)) {
-    return featureContent.replace(navigateRe, (_m, prefix: string, _old: string, suffix: string) => `${prefix}${baseUrl}${suffix}`);
-  }
-
-  // No navigate step - insert one as the first step of every Scenario.
-  return featureContent.replace(
-    /^(\s*)(Scenario(?: Outline)?:.*)$/gm,
-    (_m, indent: string, scenarioLine: string) =>
-      `${indent}${scenarioLine}\n${indent}  Given User navigates to "${baseUrl}" URL`
+  // 1. Point every existing navigate step at the URL the user supplied
+  //    (single or double quoted - the model produces both).
+  const withUrl = featureContent.replace(
+    /(User navigates to\s+)(["'])([^"']*)\2/g,
+    (_m, prefix: string, quote: string) => `${prefix}${quote}${baseUrl}${quote}`
   );
+
+  // 2. Give every scenario that still has no navigate step one. Without this
+  //    such a scenario runs against about:blank and every assertion in it
+  //    fails for the wrong reason.
+  const lines = withUrl.split(/\r?\n/);
+  const out: string[] = [];
+  const scenarioRe = /^(\s*)(Scenario(?: Outline)?:)/;
+
+  for (let i = 0; i < lines.length; i++) {
+    out.push(lines[i]);
+    const m = lines[i].match(scenarioRe);
+    if (!m) continue;
+
+    // Look ahead to the end of this scenario for an existing navigate step.
+    let hasNavigate = false;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (scenarioRe.test(lines[j]) || /^\s*Feature:/.test(lines[j])) break;
+      if (/User navigates to\s+["']/.test(lines[j])) {
+        hasNavigate = true;
+        break;
+      }
+    }
+    if (!hasNavigate) out.push(`${m[1]}  Given User navigates to "${baseUrl}" URL`);
+  }
+  return out.join("\n");
 }
 
 /**

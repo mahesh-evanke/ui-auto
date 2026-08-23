@@ -82,10 +82,14 @@ Options:
 Usage (run a previously generated job against a live URL - explicit, opt-in, separate step):
   npm run qa -- --run <job-id> --base-url <url> [--no-headed] [--harness <bundled|target>]
                  [--browser <chromium|chrome|edge|firefox>] [--device "<name>"]
+                 [--no-auto-fix] [--max-fix-attempts <n>]
   (a browser window opens by default so you can watch the run; pass --no-headed for headless.
    --browser and --device only apply to the bundled harness; device names come from
    Playwright's device list, e.g. "iPhone 12 Pro", "iPad Pro", "Pixel 7" - unset = desktop.
-   firefox is not actually wired into e2e/stepdefinitions/hooks.ts yet and falls back to chromium.)
+   firefox is not actually wired into e2e/stepdefinitions/hooks.ts yet and falls back to chromium.
+   On a failure (bundled harness only), the failing scenario(s) are corrected and re-run
+   automatically - up to --max-fix-attempts times (default 2). Pass --no-auto-fix to just see
+   the raw failure instead. Uses the same --provider/--model flags as generation.)
 
 For a browser UI with GitHub sign-in instead of this CLI, run the Next.js app:
   npm run web
@@ -161,6 +165,15 @@ async function runExecute(argv: minimist.ParsedArgs): Promise<void> {
     harness: parseHarness(argv.harness),
     browserName: parseBrowser(argv.browser),
     viewportDevice: argv.device,
+    autoFix: Boolean(argv["auto-fix"]),
+    maxFixAttempts: argv["max-fix-attempts"] !== undefined ? Number(argv["max-fix-attempts"]) : undefined,
+    provider: parseProvider(argv.provider),
+    model: argv.model ?? DEFAULT_MODEL,
+    ollamaHost: argv["ollama-host"] ?? DEFAULT_OLLAMA_HOST,
+    openaiToken: argv["openai-token"] ?? process.env.OPENAI_API_KEY,
+    openaiModel: argv["openai-model"],
+    openrouterToken: argv["openrouter-token"] ?? process.env.OPENROUTER_API_KEY,
+    openrouterModel: argv["openrouter-model"],
   };
 
   const { result, reportPath } = await runGeneratedTests(
@@ -179,17 +192,28 @@ async function runExecute(argv: minimist.ParsedArgs): Promise<void> {
   for (const t of result.tests) {
     console.log(`  [${t.status.toUpperCase()}] ${t.title}`);
   }
+  if (result.fixAttempts && result.fixAttempts.length > 0) {
+    console.log("");
+    console.log("Auto-fix history:");
+    for (const a of result.fixAttempts) {
+      console.log(
+        `  Attempt ${a.attempt}: corrected ${a.correctedScenarioTitles.length}, ` +
+          `unfixable ${a.unfixableScenarioTitles.length} -> ${a.result.passed} passed, ${a.result.failed} failed`
+      );
+    }
+  }
   console.log("");
   console.log(`Full report: ${reportPath}`);
 }
 
 async function main(): Promise<void> {
   const argv = minimist(process.argv.slice(2), {
-    boolean: ["help", "headed"],
+    boolean: ["help", "headed", "auto-fix"],
     // Running against a URL is meant to be watched, so a browser window
-    // opens by default. Pass --no-headed (or --headed=false) to run
-    // background/headless instead - e.g. in CI.
-    default: { headed: true },
+    // opens by default (--no-headed for headless). A failure is meant to be
+    // corrected and re-run, so that's on by default too (--no-auto-fix to
+    // just see the raw failure).
+    default: { headed: true, "auto-fix": true },
     string: [
       "repo",
       "requirement",
@@ -209,6 +233,7 @@ async function main(): Promise<void> {
       "test-scope",
       "browser",
       "device",
+      "max-fix-attempts",
     ],
   });
 

@@ -73,11 +73,19 @@ interface ExecutedTestResult {
   durationMs: number;
 }
 
+interface FixAttempt {
+  attempt: number;
+  correctedScenarioTitles: string[];
+  unfixableScenarioTitles: string[];
+  result: { passed: number; failed: number; skipped: number };
+}
+
 interface TestRunResult {
   passed: number;
   failed: number;
   skipped: number;
   tests: ExecutedTestResult[];
+  fixAttempts?: FixAttempt[];
 }
 
 const DEVICES = [
@@ -93,6 +101,8 @@ function RunTestsPanel({ jobId }: { jobId: string }) {
   const [headed, setHeaded] = useState(true);
   const [browserName, setBrowserName] = useState<"chromium" | "chrome" | "edge" | "firefox">("chromium");
   const [viewportDevice, setViewportDevice] = useState("");
+  // On failure, the failing scenario(s) get corrected and re-run automatically by default.
+  const [autoFix, setAutoFix] = useState(true);
   const [runId, setRunId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [runEvents, setRunEvents] = useState<ProgressEvent[]>([]);
@@ -127,7 +137,7 @@ function RunTestsPanel({ jobId }: { jobId: string }) {
     const res = await fetch(`/api/jobs/${jobId}/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ baseUrl: baseUrl.trim(), headed, browserName, viewportDevice: viewportDevice || undefined }),
+      body: JSON.stringify({ baseUrl: baseUrl.trim(), headed, browserName, viewportDevice: viewportDevice || undefined, autoFix }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -157,6 +167,14 @@ function RunTestsPanel({ jobId }: { jobId: string }) {
         <label className="muted" style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <input type="checkbox" checked={headed} onChange={(e) => setHeaded(e.target.checked)} disabled={runStatus === "running"} />
           Headed
+        </label>
+        <label
+          className="muted"
+          style={{ display: "flex", alignItems: "center", gap: 4 }}
+          title="On failure, corrects the failing scenario(s) and re-runs automatically (bundled harness only)"
+        >
+          <input type="checkbox" checked={autoFix} onChange={(e) => setAutoFix(e.target.checked)} disabled={runStatus === "running"} />
+          Auto-fix failures
         </label>
         <select
           value={browserName}
@@ -207,6 +225,27 @@ function RunTestsPanel({ jobId }: { jobId: string }) {
             {runResult.failed > 0 && <span className="badge fail" style={{ marginLeft: 8 }}>{runResult.failed} failed</span>}{" "}
             {runResult.skipped > 0 && <span className="badge blocked" style={{ marginLeft: 8 }}>{runResult.skipped} skipped</span>}
           </p>
+
+          {runResult.fixAttempts && runResult.fixAttempts.length > 0 && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <h4 style={{ marginTop: 0 }}>Auto-fix history</h4>
+              <p className="muted">
+                Failing scenarios were rewritten in the generated .feature file and re-run. Only scenarios that were
+                still failing at the start of each round were touched.
+              </p>
+              {runResult.fixAttempts.map((a) => (
+                <div key={a.attempt} className="checklist-item" style={{ alignItems: "flex-start" }}>
+                  <span className="checklist-marker done">✓</span>
+                  <span>
+                    Attempt {a.attempt}: corrected {a.correctedScenarioTitles.length} scenario(s)
+                    {a.unfixableScenarioTitles.length > 0 && `, could not diagnose ${a.unfixableScenarioTitles.length}`} →{" "}
+                    {a.result.passed} passed, {a.result.failed} failed, {a.result.skipped} skipped
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <table>
             <thead>
               <tr>

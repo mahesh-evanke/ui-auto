@@ -11,6 +11,11 @@ Rules:
 - Each requirement needs 2-5 concrete acceptance criteria (things a QA engineer could verify).
 - priority is "high", "medium", or "low".
 - relatedUi should list plausible UI element/page names mentioned or implied (best guess, short strings).
+- NEVER invent a specific email address, password, name, phone number, or other value that looks like a
+  real person's credentials or personal data - even as a "realistic example". If the input didn't supply
+  one, describe it generically instead ("a valid registered email", "the correct password" ), never a
+  concrete-looking string you made up. Only use a specific value if the user's own input literally
+  contains it.
 - Respond with ONLY a JSON object of this exact shape, no prose:
 {
   "requirements": [

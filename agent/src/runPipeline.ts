@@ -4,6 +4,7 @@ import { getJobPaths } from "./workspace/jobWorkspace.js";
 import { runCucumberScenario } from "./runner/cucumberExecutionRunner.js";
 import { runPlaywrightSpec } from "./runner/playwrightExecutionRunner.js";
 import { runInBundledFramework } from "./runner/bundledFrameworkRunner.js";
+import { runBundledWithAutoFix } from "./autoFix.js";
 import { writeRunResultFile } from "./guard.js";
 import type { ProgressEvent, RunContext, RunOptionsForTests, TestRunResult } from "./types.js";
 
@@ -67,6 +68,24 @@ export async function runGeneratedTests(
       opts.browserName,
       opts.viewportDevice
     );
+
+    // Opt-out, not opt-in: correcting a failure and re-running is the whole
+    // point of a Run step that failed, so it happens unless explicitly
+    // disabled. Bundled-harness only - it rewrites the canonical .feature
+    // artifact and needs an LLM call, neither of which the target harness's
+    // own-repo execution does.
+    if (opts.autoFix !== false && result.failed > 0) {
+      result = await runBundledWithAutoFix(
+        opts,
+        runContext,
+        feature.absolutePath,
+        stepDefs?.absolutePath ?? null,
+        paths.runResults,
+        result,
+        emit,
+        onLog
+      );
+    }
   } else if (runContext.frameworkKind === "playwright-cucumber") {
     const feature = runContext.generatedArtifacts.find((a) => a.kind === "feature");
     if (!feature) throw new Error("No generated .feature file found for this job.");

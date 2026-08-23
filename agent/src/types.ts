@@ -269,6 +269,23 @@ export interface RunOptionsForTests {
   browserName?: BrowserName;
   /** A Playwright device name (e.g. "iPhone 12 Pro"), or unset/empty for desktop full window. */
   viewportDevice?: string;
+  /**
+   * When a run has failures, rewrite just the failing scenario(s) and re-run
+   * - up to maxFixAttempts times. Default true. Only applies to the bundled
+   * harness (needs an LLM call and rewrites the canonical .feature artifact,
+   * neither of which the "target" harness's own-repo execution path does).
+   */
+  autoFix?: boolean;
+  /** Correction rounds to attempt before giving up. Default 2. Each round re-runs the WHOLE feature, not just the scenarios it touched. */
+  maxFixAttempts?: number;
+  /** Which LLM backend powers auto-fix corrections - same shape as RunOptions, only read when autoFix is on. */
+  provider?: "ollama" | "openai" | "openrouter";
+  model?: string;
+  ollamaHost?: string;
+  openaiToken?: string;
+  openaiModel?: string;
+  openrouterToken?: string;
+  openrouterModel?: string;
 }
 
 export interface ExecutedTestResult {
@@ -276,6 +293,9 @@ export interface ExecutedTestResult {
   status: "passed" | "failed" | "skipped" | "unknown";
   error?: string;
   durationMs: number;
+  /** The exact Gherkin line that failed (keyword + text), when known - what a correction pass needs to target the right step. */
+  failedStepKeyword?: string;
+  failedStepText?: string;
 }
 
 export interface TestRunResult {
@@ -285,6 +305,17 @@ export interface TestRunResult {
   skipped: number;
   tests: ExecutedTestResult[];
   rawOutput: string;
+  /** Present only when autoFix ran - the history of correction rounds leading to this final result. */
+  fixAttempts?: FixAttempt[];
+}
+
+/** One correction round of the auto-fix loop - what was rewritten and what the re-run then produced. */
+export interface FixAttempt {
+  attempt: number;
+  correctedScenarioTitles: string[];
+  /** A scenario whose failure the fixer couldn't diagnose into a corrected step list - left as-is. */
+  unfixableScenarioTitles: string[];
+  result: TestRunResult;
 }
 
 export interface JobPaths {

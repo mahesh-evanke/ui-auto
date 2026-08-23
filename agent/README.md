@@ -232,6 +232,43 @@ cp agent/agent-workspace/<job-id>/generated-tests/cucumber/<name>.feature e2e/fe
 npx cucumber-js e2e/features/generated/web/<name>.feature
 ```
 
+## Auto-fix: failing scenarios get corrected and re-run
+
+When a run has failures (bundled harness only), the failing scenario(s) get
+rewritten and the whole feature is re-run — up to 2 rounds by default. This
+is on by default; pass `--no-auto-fix` on the CLI or uncheck "Auto-fix
+failures" in the web UI to just see the raw failure instead.
+
+What actually happens each round:
+
+1. For every currently-failing scenario, the model is shown the original
+   steps, which step failed, cucumber's real error message, the framework's
+   step catalog, and the UI elements extracted from the target repo's
+   source - then asked for a corrected, complete replacement step list for
+   that scenario (not just the failed line, since an early wrong step often
+   explains everything after it).
+2. A corrected step only lands in the file if it resolves to a step
+   definition the framework actually implements - same constraint as
+   generation. If nothing resolves, that scenario is left as-is and reported
+   as "unfixable" rather than guessed at.
+3. Only the failing scenario's own step lines are rewritten in the canonical
+   `.feature` file under `generated-tests/` - its comment header, blank-line
+   spacing, and every other scenario are untouched.
+4. The whole feature is re-run, and the loop repeats (skipping scenarios
+   that now pass) until everything passes or `--max-fix-attempts` (default
+   2) is reached.
+
+The web UI's results panel and the CLI's own output both show an "auto-fix
+history" - what was corrected each round and the resulting pass/fail count -
+so a plateau (the same failure surviving every round) is visible rather than
+silently retried forever. A failure the source code genuinely doesn't
+support (e.g. asserting a success message the app never implements) will
+correctly stay unfixed - auto-fix can only compose from what already exists,
+never invent a new capability for the app under test.
+
+Uses the same model provider as generation (Settings' connected
+provider on the web UI; `--provider`/`--model` flags on the CLI).
+
 ## Run-time behavior worth knowing
 
 - A visible browser window opens by default so you can watch the run (both

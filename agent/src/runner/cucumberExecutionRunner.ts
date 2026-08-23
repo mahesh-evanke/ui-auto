@@ -12,6 +12,10 @@ interface CucumberStepResult {
   duration?: { seconds?: number; nanos?: number };
 }
 interface CucumberStep {
+  /** "Given"/"When"/"Then" as literally written in the .feature - undefined for a Background step's own header line, present on the actual step. */
+  keyword?: string;
+  /** The step text (without the keyword), e.g. `enters "x" text in "email" textbox`. */
+  name?: string;
   result?: CucumberStepResult;
 }
 interface CucumberElement {
@@ -115,6 +119,8 @@ export function parseCucumberReport(report: CucumberFeatureReport[], rawOutput: 
         status,
         error: failedStep?.result?.error_message ?? (statuses.includes("undefined") ? "One or more steps had no matching step definition" : undefined),
         durationMs: Math.round(durationNs / 1e6),
+        failedStepKeyword: failedStep?.keyword?.trim(),
+        failedStepText: failedStep?.name,
       });
     }
   }

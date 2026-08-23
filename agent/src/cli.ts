@@ -12,10 +12,10 @@ function parseHarness(value: unknown): HarnessKind | undefined {
   process.exit(1);
 }
 
-function parseProvider(value: unknown): "ollama" | "copilot" | undefined {
+function parseProvider(value: unknown): "ollama" | "openai" | "openrouter" | undefined {
   if (value === undefined) return undefined;
-  if (value === "ollama" || value === "copilot") return value;
-  console.error(`Invalid --provider "${String(value)}". Expected "ollama" or "copilot".`);
+  if (value === "ollama" || value === "openai" || value === "openrouter") return value;
+  console.error(`Invalid --provider "${String(value)}". Expected "ollama", "openai", or "openrouter".`);
   process.exit(1);
 }
 
@@ -36,13 +36,15 @@ Options:
   --branch <name>               Branch to check out / clone. Default: repo's current branch.
   --model <name>                 Ollama model to use. Default: ${DEFAULT_MODEL}
   --ollama-host <url>            Ollama host. Default: ${DEFAULT_OLLAMA_HOST}
-  --provider <ollama|copilot>    Which LLM backend to use. Default: ollama
-                                  copilot uses GitHub Models (the API behind Copilot's model
-                                  catalog) via a Personal Access Token - see --copilot-token,
-                                  or connect one from the web UI's Settings page instead.
-  --copilot-token <token>        GitHub PAT for --provider copilot. Also read from
-                                  GITHUB_COPILOT_TOKEN if not passed.
-  --copilot-model <id>           GitHub Models catalog id, e.g. openai/gpt-4o-mini (default).
+  --provider <ollama|openai|openrouter>  Which LLM backend to use. Default: ollama
+                                  openai/openrouter need an API key - see below, or connect
+                                  one from the web UI's Settings page instead.
+  --openai-token <key>            OpenAI API key for --provider openai. Also read from
+                                  OPENAI_API_KEY if not passed.
+  --openai-model <id>             OpenAI model id, e.g. gpt-4o-mini (default).
+  --openrouter-token <key>        OpenRouter API key for --provider openrouter. Also read from
+                                  OPENROUTER_API_KEY if not passed.
+  --openrouter-model <id>         OpenRouter model id, e.g. openai/gpt-4o-mini (default).
   --reference-framework <path>   Local reference test framework to study conventions from.
                                   Default: ${DEFAULT_REFERENCE_FRAMEWORK_PATH}
   --harness <bundled|target>     Which framework runs the tests. Default: bundled
@@ -73,8 +75,10 @@ async function runGenerate(argv: minimist.ParsedArgs): Promise<void> {
     referenceFrameworkPath: argv["reference-framework"] ?? DEFAULT_REFERENCE_FRAMEWORK_PATH,
     harness: parseHarness(argv.harness),
     provider: parseProvider(argv.provider),
-    copilotToken: argv["copilot-token"] ?? process.env.GITHUB_COPILOT_TOKEN,
-    copilotModel: argv["copilot-model"],
+    openaiToken: argv["openai-token"] ?? process.env.OPENAI_API_KEY,
+    openaiModel: argv["openai-model"],
+    openrouterToken: argv["openrouter-token"] ?? process.env.OPENROUTER_API_KEY,
+    openrouterModel: argv["openrouter-model"],
   };
 
   const { paths, job } = await runJob(
@@ -157,8 +161,10 @@ async function main(): Promise<void> {
       "base-url",
       "harness",
       "provider",
-      "copilot-token",
-      "copilot-model",
+      "openai-token",
+      "openai-model",
+      "openrouter-token",
+      "openrouter-model",
     ],
   });
 

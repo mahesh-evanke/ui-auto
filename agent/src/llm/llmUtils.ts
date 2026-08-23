@@ -1,4 +1,4 @@
-/** Shared between OllamaClient and CopilotClient - JSON extraction/retry and secret redaction should behave identically regardless of backend. */
+/** Shared between OllamaClient and OpenAiCompatibleClient - JSON extraction/retry and secret redaction should behave identically regardless of backend. */
 
 const SECRET_LIKE = /(api[_-]?key|secret|token|password|authorization)\s*[:=]\s*["']?[\w\-.]{8,}/gi;
 

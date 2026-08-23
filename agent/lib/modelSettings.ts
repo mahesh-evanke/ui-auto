@@ -3,26 +3,30 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AGENT_WORKSPACE_DIR } from "../src/config.js";
 import { createLlmClient } from "../src/llm/createLlmClient.js";
-import { DEFAULT_COPILOT_MODEL } from "../src/llm/copilotClient.js";
+import { DEFAULT_OPENAI_MODEL, DEFAULT_OPENROUTER_MODEL } from "../src/llm/openAiCompatibleClient.js";
 import type { ModelProvider } from "../src/llm/createLlmClient.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // agent-workspace/ is already gitignored (see .gitignore) and holds
-// per-job artifacts, so the Copilot token - the only secret this file
-// stores - lives alongside them rather than in a new, easy-to-miss location.
+// per-job artifacts, so the API keys - the only secrets this file stores -
+// live alongside them rather than in a new, easy-to-miss location.
 const SETTINGS_PATH = path.join(__dirname, "..", AGENT_WORKSPACE_DIR, ".model-settings.json");
 
 interface StoredSettings {
   provider: ModelProvider;
-  copilotToken?: string;
-  copilotModel?: string;
+  openaiToken?: string;
+  openaiModel?: string;
+  openrouterToken?: string;
+  openrouterModel?: string;
 }
 
-/** Client-safe view: same shape minus the token, plus whether one is on file. */
+/** Client-safe view: same shape minus the tokens, plus whether each is on file. */
 export interface ModelSettingsStatus {
   provider: ModelProvider;
-  copilotConnected: boolean;
-  copilotModel: string;
+  openaiConnected: boolean;
+  openaiModel: string;
+  openrouterConnected: boolean;
+  openrouterModel: string;
 }
 
 const DEFAULT_SETTINGS: StoredSettings = { provider: "ollama" };
@@ -48,56 +52,89 @@ function load(): StoredSettings {
 function persist(settings: StoredSettings): void {
   globalForSettings.__testpilotModelSettings = settings;
   fs.mkdirSync(path.dirname(SETTINGS_PATH), { recursive: true });
-  // 0o600: this file holds a live GitHub token, same handling as any local
+  // 0o600: this file holds live API keys, same handling as any local
   // credential file (.env, ~/.netrc) - readable only by the current user.
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2), { mode: 0o600 });
 }
 
-/** For API routes rendering Settings: never includes the token itself. */
+/** For API routes rendering Settings: never includes the tokens themselves. */
 export function getModelSettingsStatus(): ModelSettingsStatus {
   const s = load();
   return {
     provider: s.provider,
-    copilotConnected: Boolean(s.copilotToken),
-    copilotModel: s.copilotModel || DEFAULT_COPILOT_MODEL,
+    openaiConnected: Boolean(s.openaiToken),
+    openaiModel: s.openaiModel || DEFAULT_OPENAI_MODEL,
+    openrouterConnected: Boolean(s.openrouterToken),
+    openrouterModel: s.openrouterModel || DEFAULT_OPENROUTER_MODEL,
   };
 }
 
-/** For job creation: the real settings, including the token if connected. Never send this object to the browser. */
+/** For job creation: the real settings, including tokens if connected. Never send this object to the browser. */
 export function getModelSettingsForJob(): StoredSettings {
   return load();
 }
 
 /**
- * Validates the token against GitHub Models (a cheap catalog-listing call,
- * not an inference request) before persisting it, so a typo'd or
- * insufficiently-scoped PAT is rejected immediately instead of surfacing as
- * a confusing failure on the next test-generation run.
+ * Validates a key against the provider's real API (a cheap auth-check call,
+ * not an inference request) before persisting it, so a typo'd or revoked key
+ * is rejected immediately instead of surfacing as a confusing failure on the
+ * next test-generation run.
  */
-export async function connectCopilot(token: string, model?: string): Promise<void> {
+async function connect(
+  provider: "openai" | "openrouter",
+  token: string,
+  model: string | undefined,
+  defaultModel: string
+): Promise<void> {
   const trimmed = token.trim();
-  if (!trimmed) throw new Error("Token is required.");
-  const chosenModel = model?.trim() || DEFAULT_COPILOT_MODEL;
-  const client = createLlmClient({ provider: "copilot", copilotToken: trimmed, copilotModel: chosenModel, ollamaHost: "", ollamaModel: "" });
+  if (!trimmed) throw new Error("API key is required.");
+  const chosenModel = model?.trim() || defaultModel;
+  const client = createLlmClient({
+    provider,
+    ollamaHost: "",
+    ollamaModel: "",
+    openaiToken: provider === "openai" ? trimmed : undefined,
+    openaiModel: provider === "openai" ? chosenModel : undefined,
+    openrouterToken: provider === "openrouter" ? trimmed : undefined,
+    openrouterModel: provider === "openrouter" ? chosenModel : undefined,
+  });
   const ok = await client.ping();
   if (!ok) {
     throw new Error(
-      "Could not verify that token against GitHub Models. Check that it's a valid GitHub Personal Access Token with model access (fine-grained tokens need the \"models: read\" permission)."
+      `Could not verify that key against ${provider === "openai" ? "OpenAI" : "OpenRouter"}. Check that it's valid and has not been revoked.`
     );
   }
-  persist({ ...load(), provider: "copilot", copilotToken: trimmed, copilotModel: chosenModel });
-}
-
-/** Disconnects Copilot and falls back to the local Ollama provider. */
-export function disconnectCopilot(): void {
   const current = load();
-  persist({ provider: "ollama", copilotModel: current.copilotModel });
+  if (provider === "openai") {
+    persist({ ...current, provider: "openai", openaiToken: trimmed, openaiModel: chosenModel });
+  } else {
+    persist({ ...current, provider: "openrouter", openrouterToken: trimmed, openrouterModel: chosenModel });
+  }
 }
 
-/** Switches the active provider without touching a stored Copilot token, so toggling back to Copilot later doesn't require reconnecting. */
+export function connectOpenAi(token: string, model?: string): Promise<void> {
+  return connect("openai", token, model, DEFAULT_OPENAI_MODEL);
+}
+
+export function connectOpenRouter(token: string, model?: string): Promise<void> {
+  return connect("openrouter", token, model, DEFAULT_OPENROUTER_MODEL);
+}
+
+/** Disconnects one provider's key and, if it was the active one, falls back to local Ollama. */
+export function disconnect(provider: "openai" | "openrouter"): void {
+  const current = load();
+  const next: StoredSettings =
+    provider === "openai"
+      ? { ...current, openaiToken: undefined }
+      : { ...current, openrouterToken: undefined };
+  if (current.provider === provider) next.provider = "ollama";
+  persist(next);
+}
+
+/** Switches the active provider without discarding a stored key for another provider, so toggling back later doesn't require reconnecting. */
 export function setProvider(provider: ModelProvider): void {
-  if (provider === "copilot" && !load().copilotToken) {
-    throw new Error("Connect GitHub Copilot first.");
-  }
-  persist({ ...load(), provider });
+  const current = load();
+  if (provider === "openai" && !current.openaiToken) throw new Error("Connect OpenAI first.");
+  if (provider === "openrouter" && !current.openrouterToken) throw new Error("Connect OpenRouter first.");
+  persist({ ...current, provider });
 }

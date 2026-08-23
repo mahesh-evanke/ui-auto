@@ -102,32 +102,36 @@ GitHub sign-in → pick a repository and branch → enter the requirement → wa
 generation progress → review artifacts and the coverage report → optionally
 run against a URL.
 
-## Model provider (Ollama or GitHub Copilot)
+## Model provider (Ollama, OpenAI, or OpenRouter)
 
 By default every job runs on local Ollama. From **Settings** you can also
-connect **GitHub Copilot** and switch to it instead - useful when the local
-model's small size is producing weak scenarios/steps and you want a
-stronger cloud model without changing anything else about the pipeline.
+connect **OpenAI** or **OpenRouter** and switch to either instead - useful
+when the local model's small size is producing weak scenarios/steps and you
+want a stronger cloud model without changing anything else about the
+pipeline.
 
-This does not call Copilot Chat directly - that API is private to GitHub's
-own official clients (VS Code, the Copilot CLI, ...). What "Connect GitHub
-Copilot" actually does is validate and store a GitHub Personal Access Token
-against [GitHub Models](https://docs.github.com/en/github-models), the
-public, PAT-authenticated inference API serving the same model catalog tied
-to your GitHub account and Copilot entitlement (default model:
-`openai/gpt-4o-mini`, changeable in Settings).
+There is no working third-party API for GitHub Copilot Chat itself - it's
+private to GitHub's own official clients - and GitHub Models, which used to
+be the closest public equivalent, was fully retired by GitHub in July 2026.
+OpenAI and OpenRouter are plain, currently-live, key-authenticated APIs
+instead: OpenAI is OpenAI's own models directly; OpenRouter is a single key
+that routes to many providers' models, including some free ones.
 
-- A classic PAT works as-is; a fine-grained token needs the "models: read" permission.
-- The token is validated against the catalog (not an inference call) before being
-  saved, so a bad token is rejected immediately rather than failing later mid-job.
-- It's stored server-side only, in `agent-workspace/.model-settings.json`
-  (already gitignored, written with `0o600` permissions) - never sent to the
-  browser, never logged. `GET /api/settings` only ever reports whether one is
+- Get a key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+  or [openrouter.ai/keys](https://openrouter.ai/keys).
+- The key is validated against the provider's real API (a cheap auth check,
+  not an inference call) before being saved, so a bad key is rejected
+  immediately rather than failing later mid-job.
+- Stored server-side only, in `agent-workspace/.model-settings.json` (already
+  gitignored, written with `0o600` permissions) - never sent to the browser,
+  never logged. `GET /api/settings` only ever reports whether a key is
   connected, not its value.
-- Switching back to Local Ollama does not discard a connected token - toggle
-  back to Copilot later without reconnecting. Disconnect clears it for good.
-- The CLI has the same capability: `--provider copilot --copilot-token <PAT>`
-  (or set `GITHUB_COPILOT_TOKEN`), plus `--copilot-model <id>`.
+- Switching back to Local Ollama does not discard a connected key for the
+  other providers - toggle back later without reconnecting. Disconnect
+  clears a specific provider's key for good.
+- The CLI has the same capability: `--provider openai --openai-token <key>`
+  (or set `OPENAI_API_KEY`), or `--provider openrouter --openrouter-token <key>`
+  (or set `OPENROUTER_API_KEY`), plus `--openai-model`/`--openrouter-model`.
 
 ## Step reuse — existing step definitions only
 

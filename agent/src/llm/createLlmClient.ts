@@ -1,15 +1,17 @@
 import { OllamaClient } from "./ollamaClient.js";
-import { CopilotClient, DEFAULT_COPILOT_MODEL } from "./copilotClient.js";
+import { createOpenAiClient, createOpenRouterClient } from "./openAiCompatibleClient.js";
 import type { LlmClient } from "./llmClient.js";
 
-export type ModelProvider = "ollama" | "copilot";
+export type ModelProvider = "ollama" | "openai" | "openrouter";
 
 export interface LlmClientSettings {
   provider?: ModelProvider;
   ollamaHost: string;
   ollamaModel: string;
-  copilotToken?: string;
-  copilotModel?: string;
+  openaiToken?: string;
+  openaiModel?: string;
+  openrouterToken?: string;
+  openrouterModel?: string;
 }
 
 /**
@@ -18,13 +20,17 @@ export interface LlmClientSettings {
  * interface, so swapping providers needs no other change.
  */
 export function createLlmClient(settings: LlmClientSettings): LlmClient {
-  if (settings.provider === "copilot") {
-    if (!settings.copilotToken) {
-      throw new Error(
-        "Copilot provider selected but no token is configured. Connect GitHub Copilot from Settings first."
-      );
+  if (settings.provider === "openai") {
+    if (!settings.openaiToken) {
+      throw new Error("OpenAI provider selected but no API key is configured. Connect it from Settings first.");
     }
-    return new CopilotClient({ token: settings.copilotToken, model: settings.copilotModel || DEFAULT_COPILOT_MODEL });
+    return createOpenAiClient(settings.openaiToken, settings.openaiModel);
+  }
+  if (settings.provider === "openrouter") {
+    if (!settings.openrouterToken) {
+      throw new Error("OpenRouter provider selected but no API key is configured. Connect it from Settings first.");
+    }
+    return createOpenRouterClient(settings.openrouterToken, settings.openrouterModel);
   }
   return new OllamaClient({ host: settings.ollamaHost, model: settings.ollamaModel });
 }

@@ -30,8 +30,10 @@ export async function POST(req: NextRequest) {
     referenceFrameworkPath: process.env.TESTPILOT_REFERENCE_FRAMEWORK_PATH ?? DEFAULT_REFERENCE_FRAMEWORK_PATH,
     githubToken: token,
     provider: modelSettings.provider,
-    copilotToken: modelSettings.copilotToken,
-    copilotModel: modelSettings.copilotModel,
+    openaiToken: modelSettings.openaiToken,
+    openaiModel: modelSettings.openaiModel,
+    openrouterToken: modelSettings.openrouterToken,
+    openrouterModel: modelSettings.openrouterModel,
   };
 
   const jobId = startJob(opts);

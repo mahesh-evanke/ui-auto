@@ -60,25 +60,30 @@ export async function runJob(
     provider: opts.provider ?? "ollama",
     ollamaHost: opts.ollamaHost,
     ollamaModel: opts.model,
-    copilotToken: opts.copilotToken,
-    copilotModel: opts.copilotModel,
+    openaiToken: opts.openaiToken,
+    openaiModel: opts.openaiModel,
+    openrouterToken: opts.openrouterToken,
+    openrouterModel: opts.openrouterModel,
   });
 
   const reachable = await client.ping();
   if (!reachable) {
-    if (opts.provider === "copilot") {
-      throw new Error(
-        `Could not reach GitHub Models with the connected Copilot token. Reconnect it from Settings - it may be expired or missing "models: read" access.`
-      );
+    if (opts.provider === "openai") {
+      throw new Error(`Could not reach OpenAI with the connected API key. Reconnect it from Settings - it may be invalid or revoked.`);
+    }
+    if (opts.provider === "openrouter") {
+      throw new Error(`Could not reach OpenRouter with the connected API key. Reconnect it from Settings - it may be invalid or revoked.`);
     }
     throw new Error(
       `Cannot reach Ollama at ${opts.ollamaHost}. Is it running? Try: ollama serve  (and ensure "${opts.model}" is pulled: ollama pull ${opts.model})`
     );
   }
   emit(
-    opts.provider === "copilot"
-      ? `GitHub Copilot connected (model: ${opts.copilotModel || "openai/gpt-4o-mini"})`
-      : `Ollama reachable at ${opts.ollamaHost} (model: ${opts.model})`
+    opts.provider === "openai"
+      ? `OpenAI connected (model: ${opts.openaiModel || "gpt-4o-mini"})`
+      : opts.provider === "openrouter"
+        ? `OpenRouter connected (model: ${opts.openrouterModel || "openai/gpt-4o-mini"})`
+        : `Ollama reachable at ${opts.ollamaHost} (model: ${opts.model})`
   );
 
   const paths = createJobWorkspace();

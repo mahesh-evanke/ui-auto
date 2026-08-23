@@ -92,14 +92,26 @@ function pickScript(pkg: PackageJsonInfo | null, candidates: string[]): string |
 function classifyFile(rel: string): CandidateFile["kind"] {
   const lower = rel.toLowerCase();
   if (/\.(spec|test)\.(ts|tsx|js|jsx)$/.test(lower)) return "test";
-  if (lower.includes("/pages/") || lower.includes("/app/") || /^(pages|app)\//.test(lower)) return "page";
-  if (lower.includes("/routes/") || lower.includes("/api/")) return "route";
-  if (lower.includes("/components/")) return "component";
+
+  // Path-segment matching, not substring matching: `lower.includes("/components/")`
+  // requires a slash BEFORE "components", which is never true when components/
+  // is a repo-root directory (the path starts "components/...", no leading
+  // slash) - a very common layout (this exact bug hid a real login form: it
+  // scored as "other" instead of "component" and got out-ranked in retrieval
+  // by unrelated files). Splitting into segments handles root-level and
+  // nested directories identically.
+  const segments = lower.split("/");
+  if (segments.includes("pages") || segments.includes("app")) return "page";
+  if (segments.includes("routes") || segments.includes("api")) return "route";
+  if (segments.includes("components")) return "component";
   if (/\.(config)\.(ts|js|mjs|cjs)$/.test(lower) || lower.endsWith(".config.ts")) return "config";
-  // A UI file doesn't have to live under pages/ or components/ - plenty of
-  // apps (create-react-app being the obvious one) put the whole UI in
-  // src/App.js. Treat a PascalCase source file as a component so it still
-  // ranks as UI rather than being written off as noise.
+  // A UI file doesn't have to live under a components/ (or pages/) directory
+  // at all - plenty of apps (create-react-app being the obvious one) put the
+  // whole UI in src/App.js. Treat a PascalCase source file as a component so
+  // it still ranks as UI rather than being written off as noise; kebab-case
+  // component files (login-form.tsx) are already caught above as long as
+  // they sit under *some* components/ directory, which is the overwhelmingly
+  // common case for that naming convention.
   if (/(^|\/)[A-Z][A-Za-z0-9]*\.(tsx|jsx|ts|js|vue|svelte)$/.test(rel)) return "component";
   return "other";
 }

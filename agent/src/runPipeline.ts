@@ -63,7 +63,9 @@ export async function runGeneratedTests(
       paths.runResults,
       opts.baseUrl,
       opts.headed,
-      onLog
+      onLog,
+      opts.browserName,
+      opts.viewportDevice
     );
   } else if (runContext.frameworkKind === "playwright-cucumber") {
     const feature = runContext.generatedArtifacts.find((a) => a.kind === "feature");

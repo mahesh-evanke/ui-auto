@@ -19,6 +19,8 @@ function NewJobForm() {
   const [branches, setBranches] = useState<GithubBranch[] | null>(null);
   const [branch, setBranch] = useState(defaultBranch);
   const [requirement, setRequirement] = useState("");
+  const [outputFormat, setOutputFormat] = useState<"gherkin" | "spec" | "both">("gherkin");
+  const [testScope, setTestScope] = useState<"web" | "api" | "both">("both");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +40,7 @@ function NewJobForm() {
       const res = await fetch("/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cloneUrl, branch, requirement }),
+        body: JSON.stringify({ cloneUrl, branch, requirement, outputFormat, testScope }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
@@ -83,6 +85,43 @@ function NewJobForm() {
             "Example: Add a Save button to the profile page. It should save the user's changes, show a loading state, prevent duplicate submissions, and show success/error feedback."
           }
         />
+
+        <div style={{ marginTop: 16 }}>
+          <label className="muted" style={{ display: "block", marginBottom: 6 }}>Output format</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            {(["gherkin", "spec", "both"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                className={outputFormat === v ? "btn" : "btn secondary"}
+                onClick={() => setOutputFormat(v)}
+              >
+                {v === "gherkin" ? "Gherkin (.feature)" : v === "spec" ? "Playwright spec (.ts)" : "Both"}
+              </button>
+            ))}
+          </div>
+
+          <label className="muted" style={{ display: "block", marginBottom: 6 }}>Test scope</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            {(["web", "api", "both"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                className={testScope === v ? "btn" : "btn secondary"}
+                onClick={() => setTestScope(v)}
+              >
+                {v === "web" ? "Web only" : v === "api" ? "API only" : "Both (web + API)"}
+              </button>
+            ))}
+          </div>
+          <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
+            {testScope === "both"
+              ? "Scenarios follow real navigation order: a UI action that triggers a backend call is followed by that call's result, then the next screen."
+              : testScope === "web"
+                ? "Scenarios describe only what happens on screen - no API assertions."
+                : "Scenarios describe only requests and responses - no UI interaction."}
+          </p>
+        </div>
 
         {error && <p style={{ color: "var(--bad)" }}>{error}</p>}
 

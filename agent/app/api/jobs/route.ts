@@ -3,7 +3,14 @@ import { getGithubAccessToken } from "../../../lib/serverToken.js";
 import { startJob } from "../../../lib/jobRegistry.js";
 import { getModelSettingsForJob } from "../../../lib/modelSettings.js";
 import { DEFAULT_MODEL, DEFAULT_OLLAMA_HOST, DEFAULT_REFERENCE_FRAMEWORK_PATH } from "../../../src/config.js";
-import type { RunOptions } from "../../../src/types.js";
+import type { OutputFormat, RunOptions, TestScope } from "../../../src/types.js";
+
+function isOutputFormat(v: unknown): v is OutputFormat {
+  return v === "gherkin" || v === "spec" || v === "both";
+}
+function isTestScope(v: unknown): v is TestScope {
+  return v === "web" || v === "api" || v === "both";
+}
 
 export async function POST(req: NextRequest) {
   const token = await getGithubAccessToken(req);
@@ -12,7 +19,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json().catch(() => null)) as
-    | { cloneUrl?: string; branch?: string; requirement?: string }
+    | { cloneUrl?: string; branch?: string; requirement?: string; outputFormat?: string; testScope?: string }
     | null;
 
   if (!body?.cloneUrl || !body?.requirement) {
@@ -34,6 +41,8 @@ export async function POST(req: NextRequest) {
     openaiModel: modelSettings.openaiModel,
     openrouterToken: modelSettings.openrouterToken,
     openrouterModel: modelSettings.openrouterModel,
+    outputFormat: isOutputFormat(body.outputFormat) ? body.outputFormat : undefined,
+    testScope: isTestScope(body.testScope) ? body.testScope : undefined,
   };
 
   const jobId = startJob(opts);

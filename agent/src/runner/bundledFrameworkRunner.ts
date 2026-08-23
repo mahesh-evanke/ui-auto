@@ -3,7 +3,36 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { BUNDLED_FRAMEWORK_ROOT } from "../config.js";
 import { parseCucumberReport, type CucumberFeatureReport } from "./cucumberExecutionRunner.js";
-import type { TestRunResult } from "../types.js";
+import type { BrowserName, TestRunResult } from "../types.js";
+
+/**
+ * e2e/stepdefinitions/hooks.ts's Before hook does
+ * `chromium.launch({ channel: process.env.PW_CHANNEL || undefined })` -
+ * always through Playwright's chromium browser type. "chromium" itself
+ * (the bundled default) has no channel - undefined picks it. "chrome" and
+ * "edge" are real installed-browser channels Playwright recognizes.
+ * "firefox" is NOT: there is no firefox.launch() call anywhere in hooks.ts,
+ * so it can't actually be honored without a framework change outside this
+ * agent's scope - selecting it here logs a warning and falls back to
+ * Chromium rather than either crashing or silently pretending it worked.
+ */
+function resolvePwChannel(browserName: BrowserName | undefined, onLog: (line: string) => void): string | undefined {
+  switch (browserName) {
+    case "chrome":
+      return "chrome";
+    case "edge":
+      return "msedge";
+    case "firefox":
+      onLog(
+        "Note: \"firefox\" was selected, but e2e/stepdefinitions/hooks.ts only launches Chromium " +
+          "(no firefox.launch() branch exists yet) - running with Chromium instead.\n"
+      );
+      return undefined;
+    case "chromium":
+    default:
+      return undefined;
+  }
+}
 
 const RUN_DIR_NAME = ".testpilot-run";
 
@@ -70,7 +99,9 @@ export async function runInBundledFramework(
   reportDir: string,
   baseUrl: string,
   headed: boolean,
-  onLog: (line: string) => void
+  onLog: (line: string) => void,
+  browserName?: BrowserName,
+  viewportDevice?: string
 ): Promise<TestRunResult> {
   const frameworkRoot = BUNDLED_FRAMEWORK_ROOT;
 
@@ -108,7 +139,10 @@ export async function runInBundledFramework(
     const withUrl = applyBaseUrlToFeature(original, baseUrl);
     const featureCopyPath = path.join(runDir, path.basename(featureAbsPath));
     fs.writeFileSync(featureCopyPath, withUrl, "utf-8");
-    onLog(`Running against ${baseUrl} using the bundled framework at ${frameworkRoot}\n`);
+    onLog(
+      `Running against ${baseUrl} using the bundled framework at ${frameworkRoot} ` +
+        `(browser: ${browserName ?? "chromium"}${viewportDevice ? `, device: ${viewportDevice}` : ""})\n`
+    );
 
     const jsonReportPath = path.join(reportDir, "cucumber-report.json");
     const args = [
@@ -120,6 +154,7 @@ export async function runInBundledFramework(
       path.join(stepDefsDir, "**", "*.ts"),
     ];
     if (newStepDefsAbsPath) args.push("--require", newStepDefsAbsPath);
+    const pwChannel = resolvePwChannel(browserName, onLog);
     // Both parts quoted: an unquoted Windows report path ("C:\...") makes the
     // drive-letter colon ambiguous with the format/target separator, which
     // cucumber warns about and may mis-split.
@@ -161,6 +196,12 @@ export async function runInBundledFramework(
             // reports/recorded/ and, because finalizing the file keeps child
             // handles open, delays this process's own exit - so force it off.
             RECORD_VIDEO: "0",
+            // Unset (rather than "") when not choosing a specific channel/
+            // device - hooks.ts/contextOptions.ts already treat a missing or
+            // empty value as "use the default", so there's nothing to gain
+            // from forcing an empty string through explicitly.
+            ...(pwChannel ? { PW_CHANNEL: pwChannel } : {}),
+            ...(viewportDevice ? { VIEWPORT_DEVICE: viewportDevice } : {}),
           },
           maxBuffer: 20 * 1024 * 1024,
         },

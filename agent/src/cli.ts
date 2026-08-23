@@ -3,12 +3,33 @@ import minimist from "minimist";
 import { DEFAULT_MODEL, DEFAULT_OLLAMA_HOST, DEFAULT_REFERENCE_FRAMEWORK_PATH } from "./config.js";
 import { runJob } from "./pipeline.js";
 import { runGeneratedTests } from "./runPipeline.js";
-import type { HarnessKind, RunOptions, RunOptionsForTests } from "./types.js";
+import type { BrowserName, HarnessKind, OutputFormat, RunOptions, RunOptionsForTests, TestScope } from "./types.js";
 
 function parseHarness(value: unknown): HarnessKind | undefined {
   if (value === undefined) return undefined;
   if (value === "bundled" || value === "target") return value;
   console.error(`Invalid --harness "${String(value)}". Expected "bundled" or "target".`);
+  process.exit(1);
+}
+
+function parseOutputFormat(value: unknown): OutputFormat | undefined {
+  if (value === undefined) return undefined;
+  if (value === "gherkin" || value === "spec" || value === "both") return value;
+  console.error(`Invalid --output-format "${String(value)}". Expected "gherkin", "spec", or "both".`);
+  process.exit(1);
+}
+
+function parseTestScope(value: unknown): TestScope | undefined {
+  if (value === undefined) return undefined;
+  if (value === "web" || value === "api" || value === "both") return value;
+  console.error(`Invalid --test-scope "${String(value)}". Expected "web", "api", or "both".`);
+  process.exit(1);
+}
+
+function parseBrowser(value: unknown): BrowserName | undefined {
+  if (value === undefined) return undefined;
+  if (value === "chromium" || value === "chrome" || value === "edge" || value === "firefox") return value;
+  console.error(`Invalid --browser "${String(value)}". Expected "chromium", "chrome", "edge", or "firefox".`);
   process.exit(1);
 }
 
@@ -51,10 +72,20 @@ Options:
                                   bundled = this repo's own Playwright + Cucumber framework
                                             (target repo only needs to be an app at a URL)
                                   target  = the target repo's own test framework
+  --output-format <gherkin|spec|both>  Which artifact(s) to generate. Default: auto (gherkin
+                                  under the bundled harness, spec otherwise). "both" writes a
+                                  .feature AND a .spec.ts for the same scenarios.
+  --test-scope <web|api|both>    What the scenarios cover. Default: both.
+                                  web  = UI only, api = API only,
+                                  both = interleaved UI-triggers-API in real navigation order.
 
 Usage (run a previously generated job against a live URL - explicit, opt-in, separate step):
   npm run qa -- --run <job-id> --base-url <url> [--no-headed] [--harness <bundled|target>]
-  (a browser window opens by default so you can watch the run; pass --no-headed for headless)
+                 [--browser <chromium|chrome|edge|firefox>] [--device "<name>"]
+  (a browser window opens by default so you can watch the run; pass --no-headed for headless.
+   --browser and --device only apply to the bundled harness; device names come from
+   Playwright's device list, e.g. "iPhone 12 Pro", "iPad Pro", "Pixel 7" - unset = desktop.
+   firefox is not actually wired into e2e/stepdefinitions/hooks.ts yet and falls back to chromium.)
 
 For a browser UI with GitHub sign-in instead of this CLI, run the Next.js app:
   npm run web
@@ -80,6 +111,8 @@ async function runGenerate(argv: minimist.ParsedArgs): Promise<void> {
     openaiModel: argv["openai-model"],
     openrouterToken: argv["openrouter-token"] ?? process.env.OPENROUTER_API_KEY,
     openrouterModel: argv["openrouter-model"],
+    outputFormat: parseOutputFormat(argv["output-format"]),
+    testScope: parseTestScope(argv["test-scope"]),
   };
 
   const { paths, job } = await runJob(
@@ -126,6 +159,8 @@ async function runExecute(argv: minimist.ParsedArgs): Promise<void> {
     baseUrl: argv["base-url"],
     headed: Boolean(argv.headed),
     harness: parseHarness(argv.harness),
+    browserName: parseBrowser(argv.browser),
+    viewportDevice: argv.device,
   };
 
   const { result, reportPath } = await runGeneratedTests(
@@ -170,6 +205,10 @@ async function main(): Promise<void> {
       "openai-model",
       "openrouter-token",
       "openrouter-model",
+      "output-format",
+      "test-scope",
+      "browser",
+      "device",
     ],
   });
 

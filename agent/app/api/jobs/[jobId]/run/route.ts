@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { startRun } from "../../../../../lib/runRegistry.js";
 import { getJob } from "../../../../../lib/jobRegistry.js";
+import type { BrowserName } from "../../../../../src/types.js";
+
+function isBrowserName(v: unknown): v is BrowserName {
+  return v === "chromium" || v === "chrome" || v === "edge" || v === "firefox";
+}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
   const { jobId } = await params;
-  const body = (await req.json().catch(() => null)) as { baseUrl?: string; headed?: boolean } | null;
+  const body = (await req.json().catch(() => null)) as
+    | { baseUrl?: string; headed?: boolean; browserName?: string; viewportDevice?: string }
+    | null;
 
   if (!body?.baseUrl) {
     return NextResponse.json({ error: "baseUrl is required" }, { status: 400 });
@@ -19,6 +26,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ job
   const record = getJob(jobId);
   const resolvedJobId = record?.result?.jobId ?? jobId;
 
-  const runId = startRun({ jobId: resolvedJobId, baseUrl: body.baseUrl, headed: Boolean(body.headed) });
+  const runId = startRun({
+    jobId: resolvedJobId,
+    baseUrl: body.baseUrl,
+    headed: Boolean(body.headed),
+    browserName: isBrowserName(body.browserName) ? body.browserName : undefined,
+    viewportDevice: body.viewportDevice || undefined,
+  });
   return NextResponse.json({ runId });
 }

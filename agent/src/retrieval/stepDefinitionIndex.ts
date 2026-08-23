@@ -1,5 +1,5 @@
 import { extractSteps } from "../agents/referenceFrameworkAgent.js";
-import type { RepoAnalysis, ResolvedStep, StepDefinitionEntry, StepIntent, TargetFrameworkAnalysis } from "../types.js";
+import type { RepoAnalysis, ResolvedStep, StepDefinitionEntry, StepIntent, TargetFrameworkAnalysis, TestScope } from "../types.js";
 
 const STOPWORDS = new Set(["the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "is", "should", "with", "user"]);
 
@@ -49,8 +49,15 @@ export function usableSteps(index: StepDefinitionEntry[]): StepDefinitionEntry[]
   return index.filter((entry) => !entry.requiresDataTable);
 }
 
-export function shortlistSteps(text: string, allSteps: StepDefinitionEntry[], limit = 24): StepDefinitionEntry[] {
-  const index = usableSteps(allSteps);
+/** Restricts the vocabulary to one kind - the "web"/"api" test-scope modes filter what's even offered to the model, not just what it's told to prefer. */
+function filterByScope(index: StepDefinitionEntry[], scope: TestScope): StepDefinitionEntry[] {
+  if (scope === "web") return index.filter((e) => e.kind === "ui");
+  if (scope === "api") return index.filter((e) => e.kind === "api");
+  return index;
+}
+
+export function shortlistSteps(text: string, allSteps: StepDefinitionEntry[], scope: TestScope = "both", limit = 24): StepDefinitionEntry[] {
+  const index = filterByScope(usableSteps(allSteps), scope);
   const tokens = new Set(tokenize(text));
   const scored = index
     .map((entry) => {

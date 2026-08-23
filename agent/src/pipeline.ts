@@ -133,8 +133,9 @@ export async function runJob(
     JSON.stringify({ relevantFiles: Object.fromEntries(relevantFilesByReq), existingTests: [...existingTestsFound] }, null, 2)
   );
 
-  emit("Building QA test plan...", "active");
-  const testPlan = await buildTestPlan(client, requirements, (req) => relevantFilesByReq.get(req.id) ?? []);
+  const testScope = opts.testScope ?? "both";
+  emit(`Building QA test plan (scope: ${testScope})...`, "active");
+  const testPlan = await buildTestPlan(client, requirements, (req) => relevantFilesByReq.get(req.id) ?? [], testScope);
   const scenarioCount = testPlan.items.reduce((n, i) => n + i.scenarios.length, 0);
   emit(`QA test plan created: ${scenarioCount} scenario(s)`);
 
@@ -163,8 +164,8 @@ export async function runJob(
       // Show the model the framework's own steps that best fit this scenario,
       // so it reuses them instead of inventing prose no step definition
       // implements (post-hoc matching alone reused only ~11% of steps).
-      const catalog = shortlistSteps(scenario.description, stepPool);
-      const intents = await planStepIntents(client, scenario, catalog, uiElements);
+      const catalog = shortlistSteps(scenario.description, stepPool, testScope);
+      const intents = await planStepIntents(client, scenario, catalog, uiElements, testScope);
       const steps: ResolvedStep[] = [];
       for (const intent of intents) {
         const reused = findReusableStep(intent, stepPool);
@@ -208,14 +209,18 @@ export async function runJob(
   ): GeneratedArtifact => ({ kind, fileName, relativePath, absolutePath: absPath, content });
 
   // With the bundled harness (the default), this repository's own framework
-  // executes the tests, and it is Cucumber-based - so we always emit Gherkin
-  // plus any new step definitions, even when the target repo has no test
-  // framework of its own. Only an explicit --harness target defers to
-  // whatever the target repo itself uses.
+  // executes the tests, and it is Cucumber-based - so Gherkin is the
+  // auto-selected default, even when the target repo has no test framework
+  // of its own. Only an explicit --harness target auto-selects a Playwright
+  // spec instead. An explicit outputFormat overrides this auto-selection -
+  // "both" runs both generators below rather than picking one.
   const harness = opts.harness ?? "bundled";
-  const emitGherkin = harness === "bundled" || targetFramework.kind === "playwright-cucumber";
+  const autoFormat: "gherkin" | "spec" = harness === "bundled" || targetFramework.kind === "playwright-cucumber" ? "gherkin" : "spec";
+  const outputFormat = opts.outputFormat ?? autoFormat;
+  const wantGherkin = outputFormat === "gherkin" || outputFormat === "both";
+  const wantSpec = outputFormat === "spec" || outputFormat === "both";
 
-  if (emitGherkin) {
+  if (wantGherkin) {
     emit("Generating .feature file...", "active");
     const featureContent = generateFeatureFile(feature, requirements, usableScenarioSteps);
     const featureFileName = `${featureSlug}.feature`;
@@ -245,7 +250,9 @@ export async function runJob(
       artifacts.push(toArtifact("step-definitions", fileName, relPath, absPath, content));
       emit(`New step definitions generated: ${relPath} (${newUiSteps.length} step(s))`);
     }
-  } else {
+  }
+
+  if (wantSpec) {
     emit("Generating Playwright spec...", "active");
     const excerpts = [...relevantFilesByReq.values()]
       .flat()

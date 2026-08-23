@@ -80,10 +80,19 @@ interface TestRunResult {
   tests: ExecutedTestResult[];
 }
 
+const DEVICES = [
+  "", "iPhone SE", "iPhone XR", "iPhone 12 Pro", "iPhone 14 Pro Max", "Pixel 7",
+  "Samsung Galaxy S8+", "Samsung Galaxy S20 Ultra", "iPad Mini", "iPad Air", "iPad Pro",
+  "Surface Pro 7", "Surface Duo", "Galaxy Z Fold 5", "Asus Zenbook Fold",
+  "Samsung Galaxy A51/71", "Nest Hub", "Nest Hub Max",
+];
+
 function RunTestsPanel({ jobId }: { jobId: string }) {
   const [baseUrl, setBaseUrl] = useState("");
   // A browser window opens by default so the run can be watched; uncheck to run headless.
   const [headed, setHeaded] = useState(true);
+  const [browserName, setBrowserName] = useState<"chromium" | "chrome" | "edge" | "firefox">("chromium");
+  const [viewportDevice, setViewportDevice] = useState("");
   const [runId, setRunId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [runEvents, setRunEvents] = useState<ProgressEvent[]>([]);
@@ -118,7 +127,7 @@ function RunTestsPanel({ jobId }: { jobId: string }) {
     const res = await fetch(`/api/jobs/${jobId}/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ baseUrl: baseUrl.trim(), headed }),
+      body: JSON.stringify({ baseUrl: baseUrl.trim(), headed, browserName, viewportDevice: viewportDevice || undefined }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -149,6 +158,28 @@ function RunTestsPanel({ jobId }: { jobId: string }) {
           <input type="checkbox" checked={headed} onChange={(e) => setHeaded(e.target.checked)} disabled={runStatus === "running"} />
           Headed
         </label>
+        <select
+          value={browserName}
+          onChange={(e) => setBrowserName(e.target.value as typeof browserName)}
+          disabled={runStatus === "running"}
+          style={{ width: "auto" }}
+          title="firefox is not wired into hooks.ts yet and falls back to chromium"
+        >
+          <option value="chromium">Chromium</option>
+          <option value="chrome">Chrome</option>
+          <option value="edge">Edge</option>
+          <option value="firefox">Firefox (falls back to Chromium)</option>
+        </select>
+        <select
+          value={viewportDevice}
+          onChange={(e) => setViewportDevice(e.target.value)}
+          disabled={runStatus === "running"}
+          style={{ width: "auto" }}
+        >
+          {DEVICES.map((d) => (
+            <option key={d} value={d}>{d || "Desktop (full window)"}</option>
+          ))}
+        </select>
         <button className="btn" disabled={runStatus === "running" || !baseUrl.trim()} onClick={handleRun}>
           {runStatus === "running" ? "Running..." : "Run Tests"}
         </button>

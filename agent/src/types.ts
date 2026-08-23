@@ -23,7 +23,24 @@ export interface RunOptions {
   openaiModel?: string;
   openrouterToken?: string;
   openrouterModel?: string;
+  /**
+   * Which artifact(s) to generate. Unset preserves the original auto-selected
+   * behavior (Gherkin under the bundled harness or a Cucumber target repo,
+   * Playwright spec otherwise) - set explicitly to force one or both.
+   */
+  outputFormat?: OutputFormat;
+  /**
+   * What the generated scenarios cover. "web" (UI only) and "api" (API only)
+   * each restrict the step catalog and the model's step choices to that
+   * kind. "both" (default) additionally instructs the planner to interleave
+   * them in real navigation order - a UI action that triggers a backend call
+   * gets a following API assertion step, not two separate scenarios.
+   */
+  testScope?: TestScope;
 }
+
+export type OutputFormat = "gherkin" | "spec" | "both";
+export type TestScope = "web" | "api" | "both";
 
 export type ProgressStatus = "done" | "active" | "failed";
 
@@ -231,11 +248,27 @@ export interface RunContext {
  */
 export type HarnessKind = "bundled" | "target";
 
+/**
+ * chromium/chrome/edge launch through Playwright's chromium browser type
+ * (chromium = bundled default, chrome/edge = installed-browser "channel").
+ * firefox is listed because e2e/config/config.yaml documents it as a
+ * supported value, but e2e/stepdefinitions/hooks.ts only ever calls
+ * chromium.launch(...) - there is no firefox.launch() branch today. Picking
+ * it here still runs (falls back to Chromium with a warning) rather than
+ * being rejected, since fixing that is a framework change out of this
+ * agent's scope, not something to silently paper over either.
+ */
+export type BrowserName = "chromium" | "chrome" | "edge" | "firefox";
+
 export interface RunOptionsForTests {
   jobId: string;
   baseUrl: string;
   headed: boolean;
   harness?: HarnessKind;
+  /** Only honored by the bundled harness (env vars PW_CHANNEL/VIEWPORT_DEVICE - see e2e/stepdefinitions/hooks.ts). */
+  browserName?: BrowserName;
+  /** A Playwright device name (e.g. "iPhone 12 Pro"), or unset/empty for desktop full window. */
+  viewportDevice?: string;
 }
 
 export interface ExecutedTestResult {

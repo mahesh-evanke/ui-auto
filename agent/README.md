@@ -111,9 +111,37 @@ Useful flags:
 |---|---|
 | `--harness bundled` | *(default)* run with this repo's framework — target needs no tests of its own |
 | `--harness target` | run with the target repo's own Playwright/Cucumber setup instead |
+| `--output-format gherkin\|spec\|both` | which artifact(s) to generate. Default: auto (matches the harness) |
+| `--test-scope web\|api\|both` | what the scenarios cover. Default: `both` |
 | `--no-headed` | run headless instead of the default visible browser window |
+| `--browser chromium\|chrome\|edge\|firefox` | run step only; `firefox` falls back to Chromium (see below) |
+| `--device "<name>"` | run step only; a Playwright device name, e.g. `"iPhone 12 Pro"` — unset = desktop |
 | `--branch <name>` | branch to clone/check out |
 | `--model <name>` | Ollama model (default `llama3.2`) |
+
+### Output format
+
+`--output-format` controls which artifact(s) get written for the same generated scenarios:
+
+- `gherkin` — a `.feature` file, run by the bundled Cucumber harness
+- `spec` — a Playwright `.spec.ts` file
+- `both` — both files, from the same test plan
+
+### Test scope
+
+`--test-scope` controls what the generated scenarios describe and which step definitions the model is even shown:
+
+- `web` — UI only. The step catalog offered to the model is filtered down to `kind: "ui"` steps, so an API step can't be picked even if the model tries.
+- `api` — API only. Same filtering, restricted to `kind: "api"` steps (status codes, response fields).
+- `both` *(default)* — the planner is explicitly instructed to describe the real navigation sequence: a UI action that would trigger a backend call, followed immediately by the step asserting that call's result, then the UI continuing (e.g. filling a login form → clicking Login → asserting the login request's status → landing on the next screen). Steps interleave `ui`/`api` within one scenario rather than splitting them into separate web and API scenarios.
+
+### Browser and device
+
+`--browser` and `--device` only apply to the bundled harness's run step (`e2e/stepdefinitions/hooks.ts` reading `PW_CHANNEL`/`VIEWPORT_DEVICE`). Worth knowing:
+
+- `chromium` (default), `chrome`, and `edge` all genuinely work — Playwright launches Chromium with the matching channel.
+- `firefox` is listed in `e2e/config/config.yaml`'s own comment as a supported value, but `hooks.ts` only ever calls `chromium.launch(...)` — there's no `firefox.launch()` branch. Selecting it logs a clear note and runs on Chromium instead of silently pretending or crashing. Real Firefox support would need that hook rewritten, which is a framework change outside this agent's scope.
+- `--device` accepts any [Playwright device name](https://playwright.dev/docs/emulation#devices) — the web UI's dropdown lists the same set `config.yaml` documents (iPhone SE/XR/12 Pro/14 Pro Max, Pixel 7, Galaxy S8+/S20 Ultra, iPad Mini/Air/Pro, Surface Pro 7/Duo, Galaxy Z Fold 5, Zenbook Fold, Galaxy A51/71, Nest Hub/Max). Leave unset for a full desktop window.
 
 ## Web UI
 

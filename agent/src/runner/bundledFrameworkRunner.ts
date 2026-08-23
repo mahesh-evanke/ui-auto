@@ -141,7 +141,12 @@ export async function runInBundledFramework(
           // fail, so the run step tightens them - while still deferring to
           // anything the user set explicitly in their own environment.
           env: {
-            SLOW_MO: "0",
+            // A small per-action delay in headed mode is what actually makes
+            // the run watchable - with 0 (used for headless, where nobody is
+            // looking), Playwright fires every click/navigation instantly and
+            // the window opens and closes too fast for a human to see
+            // anything happen, even though it genuinely ran headed.
+            SLOW_MO: headed ? "300" : "0",
             VERIFY_TIMEOUT_MS: "15000",
             GET_PAGE_TIMEOUT_MS: "60000",
             REDIRECT_WAIT_MS: "15000",

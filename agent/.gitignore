@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-e2e/
+.testpilot-run/
 agent-workspace/
 qa-output/
 *.log

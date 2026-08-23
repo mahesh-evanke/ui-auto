@@ -53,7 +53,8 @@ Options:
                                   target  = the target repo's own test framework
 
 Usage (run a previously generated job against a live URL - explicit, opt-in, separate step):
-  npm run qa -- --run <job-id> --base-url <url> [--headed] [--harness <bundled|target>]
+  npm run qa -- --run <job-id> --base-url <url> [--no-headed] [--harness <bundled|target>]
+  (a browser window opens by default so you can watch the run; pass --no-headed for headless)
 
 For a browser UI with GitHub sign-in instead of this CLI, run the Next.js app:
   npm run web
@@ -150,6 +151,10 @@ async function runExecute(argv: minimist.ParsedArgs): Promise<void> {
 async function main(): Promise<void> {
   const argv = minimist(process.argv.slice(2), {
     boolean: ["help", "headed"],
+    // Running against a URL is meant to be watched, so a browser window
+    // opens by default. Pass --no-headed (or --headed=false) to run
+    // background/headless instead - e.g. in CI.
+    default: { headed: true },
     string: [
       "repo",
       "requirement",

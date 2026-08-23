@@ -84,8 +84,21 @@ export async function runInBundledFramework(
 
   const stepDefsDir = path.join(frameworkRoot, "e2e", "stepdefinitions");
   if (!fs.existsSync(stepDefsDir)) {
-    throw new Error(`Bundled framework step definitions not found at ${stepDefsDir}`);
+    throw new Error(
+      `Bundled framework step definitions not found at ${stepDefsDir}.\n` +
+        `If this is a copy of just the agent/ folder, run "npm run sync-framework" from inside a full ` +
+        `checkout of the playwright-cucumber-framework repo first, then copy agent/ (it will include ` +
+        `its own e2e/ after that).`
+    );
   }
+
+  // ts-node needs a CommonJS tsconfig to compile these files - agent/'s own
+  // tsconfig.json is set up for the ESM Next.js app and would conflict.
+  // tsconfig.e2e.json exists when frameworkRoot is this agent's own synced
+  // copy (see scripts/sync-framework.mjs); fall back to the plain
+  // tsconfig.json some other checkout of the framework might use instead.
+  const e2eTsconfig = path.join(frameworkRoot, "tsconfig.e2e.json");
+  const tsNodeProject = fs.existsSync(e2eTsconfig) ? e2eTsconfig : path.join(frameworkRoot, "tsconfig.json");
 
   const runDir = path.join(frameworkRoot, RUN_DIR_NAME);
   fs.mkdirSync(runDir, { recursive: true });
@@ -134,6 +147,7 @@ export async function runInBundledFramework(
             REDIRECT_WAIT_MS: "15000",
             CLICK_TIMEOUT_MS: "15000",
             ...process.env,
+            TS_NODE_PROJECT: tsNodeProject,
             TESTPILOT_BASE_URL: baseUrl,
             CUCUMBER_HTML_REPORT: "0",
             HEADLESS: headed ? "false" : "true",

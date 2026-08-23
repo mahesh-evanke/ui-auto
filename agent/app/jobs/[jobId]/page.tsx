@@ -82,7 +82,8 @@ interface TestRunResult {
 
 function RunTestsPanel({ jobId }: { jobId: string }) {
   const [baseUrl, setBaseUrl] = useState("");
-  const [headed, setHeaded] = useState(false);
+  // A browser window opens by default so the run can be watched; uncheck to run headless.
+  const [headed, setHeaded] = useState(true);
   const [runId, setRunId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [runEvents, setRunEvents] = useState<ProgressEvent[]>([]);

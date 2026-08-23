@@ -4,15 +4,31 @@ A local AI agent that turns a plain-English testing requirement into runnable
 Gherkin, **reusing the step definitions this repository already ships**, and
 then executes them against a running application URL.
 
-The key difference from running TestPilot standalone: here the agent and the
-test framework live in the same repository, so the framework is both
+The key difference from running TestPilot standalone: this agent carries its
+own copy of the step definitions - `agent/e2e/` - so it's self-contained. A
+copy of just the `agent/` folder is runnable on its own; nobody using it
+needs to know or care that the framework's own `e2e/` lives one level up.
+`agent/e2e/` is both
 
 - the **step vocabulary** the generated tests are written in
-  (`e2e/stepdefinitions/` — 76 UI steps + 4 API steps), and
-- the **harness** that actually runs them.
+  (`stepdefinitions/` — 76 UI steps + 4 API steps), and
+- the **harness** that actually runs them (its own `cucumber.cjs`).
 
 A target repository therefore only has to be an application reachable at a
 URL. It does **not** need Playwright, Cucumber, or any tests of its own.
+
+`agent/e2e/` is a synced copy, not a fork: the framework repo's own `e2e/`
+(one level up) stays the single place to actually edit step definitions.
+After changing anything there, resync:
+
+```bash
+cd agent
+npm run sync-framework
+```
+
+This overwrites `agent/e2e/` and `agent/cucumber.cjs` from the framework
+root and re-commits cleanly as a normal file change - there's no ongoing
+process to keep running, just re-run it after editing step definitions.
 
 ---
 
@@ -45,15 +61,23 @@ target repo or into `e2e/`.
 
 Both packages install separately — the framework is CommonJS + Cucumber, the
 agent is ESM + Next.js, so they intentionally keep their own `package.json`.
+Cucumber, Playwright, and ts-node are also installed directly in
+`agent/package.json` (not just at the repo root), since `agent/e2e/` runs on
+`agent/`'s own `node_modules` — that's what makes it self-contained.
 
 ```bash
-# 1. the framework (repo root) — provides the step definitions AND the harness
+# 1. the framework (repo root) — its e2e/ is the source of truth agent/e2e/ is synced from
 npm install
 
-# 2. the agent
+# 2. the agent — installs its own copy of cucumber/playwright/ts-node too
 cd agent
 npm install
 ```
+
+Playwright's browsers are cached globally per version
+(`~/.cache/ms-playwright` / `%LOCALAPPDATA%\ms-playwright`), so installing
+the agent's own `playwright` package does not re-download them if the
+framework's `npm install` already did, as long as the versions match.
 
 You also need [Ollama](https://ollama.com) running locally:
 
@@ -87,7 +111,7 @@ Useful flags:
 |---|---|
 | `--harness bundled` | *(default)* run with this repo's framework — target needs no tests of its own |
 | `--harness target` | run with the target repo's own Playwright/Cucumber setup instead |
-| `--headed` | show the browser during the run |
+| `--no-headed` | run headless instead of the default visible browser window |
 | `--branch <name>` | branch to clone/check out |
 | `--model <name>` | Ollama model (default `llama3.2`) |
 
@@ -182,6 +206,9 @@ npx cucumber-js e2e/features/generated/web/<name>.feature
 
 ## Run-time behavior worth knowing
 
+- A visible browser window opens by default so you can watch the run (both
+  CLI and web UI). Pass `--no-headed` on the CLI, or uncheck "Headed" in the
+  web UI, to run headless instead.
 - The generated `.feature` contains whatever URL the model guessed. At run
   time the `User navigates to "<url>" URL` step is rewritten to the
   `--base-url` you supply, so the guessed value doesn't matter.

@@ -1,0 +1,7 @@
+{
+  "copilot": "copilot -p {prompt}",
+  "url": "https://demoqa.com/radio-button",
+  "mode": "both",
+  "locatorlayout": "combined",
+  "locatorformat": "json"
+}

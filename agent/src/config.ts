@@ -9,17 +9,20 @@ export const AGENT_WORKSPACE_DIR = "agent-workspace";
 
 /**
  * Walks up from this file to find the bundled test framework's root - the
- * directory holding both `e2e/` (step definitions, locators) and
- * `cucumber.js`. The agent lives at `<frameworkRoot>/agent`, so this is
- * normally one or two levels up depending on whether we're running from
- * `agent/src` (tsx) or `agent/dist` (compiled). Searching for the marker
- * files rather than hardcoding `../..` keeps both entry points working.
+ * directory holding both `e2e/` (step definitions, locators) and a cucumber
+ * config file. `npm run sync-framework` copies both directly into `agent/`
+ * (as `agent/e2e/` and `agent/cucumber.cjs` - .cjs because agent/'s own
+ * package.json is "type": "module"), so that's found first and is what a
+ * standalone copy of just the agent/ folder runs on. If that hasn't been
+ * synced, the walk continues up to the framework repo root's own
+ * `e2e/` + `cucumber.js`, so nothing breaks for an unsynced checkout either.
  */
 function findBundledFrameworkRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 6; i++) {
     const hasE2e = fs.existsSync(path.join(dir, "e2e", "stepdefinitions"));
-    const hasCucumberConfig = fs.existsSync(path.join(dir, "cucumber.js"));
+    const hasCucumberConfig =
+      fs.existsSync(path.join(dir, "cucumber.cjs")) || fs.existsSync(path.join(dir, "cucumber.js"));
     if (hasE2e && hasCucumberConfig) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;

@@ -13,7 +13,8 @@
     "start": "node dist/cli.js",
     "web": "next dev",
     "web:build": "next build",
-    "web:start": "next start"
+    "web:start": "next start",
+    "sync-framework": "node scripts/sync-framework.mjs"
   },
   "dependencies": {
     "minimist": "^1.2.8",
@@ -23,10 +24,16 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@cucumber/cucumber": "^11.3.0",
+    "@playwright/test": "^1.53.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/minimist": "^1.2.5",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.2",
+    "js-yaml": "^4.1.0",
+    "playwright": "^1.53.0",
+    "ts-node": "^10.9.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

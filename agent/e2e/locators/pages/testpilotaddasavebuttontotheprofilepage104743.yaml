@@ -1,0 +1,18 @@
+Button Or Link Name Save:
+  - xpath
+  - //*[@id="save-button"]
+Field Name:
+  - xpath
+  - //*[@id="name"]
+Save:
+  - xpath
+  - //*[contains(normalize-space(.), "Save")]
+Save Changes Button Or Link:
+  - xpath
+  - //*[@id="save-button"]
+The:
+  - xpath
+  - //table
+The Profile Information:
+  - xpath
+  - //table

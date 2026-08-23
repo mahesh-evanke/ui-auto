@@ -1,0 +1,6 @@
+Save:
+  - xpath
+  - //*[contains(normalize-space(.), "Save")]
+The:
+  - xpath
+  - //table

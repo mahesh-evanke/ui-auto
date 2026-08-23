@@ -1,24 +1,14 @@
-export interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
-}
+import type { ChatMessage, LlmClient } from "./llmClient.js";
+import { redactSecrets, sleep, extractJson } from "./llmUtils.js";
+
+export type { ChatMessage } from "./llmClient.js";
 
 export interface OllamaClientOptions {
   host: string;
   model: string;
 }
 
-const SECRET_LIKE = /(api[_-]?key|secret|token|password|authorization)\s*[:=]\s*["']?[\w\-.]{8,}/gi;
-
-function redactSecrets(text: string): string {
-  return text.replace(SECRET_LIKE, (m) => m.split(/[:=]/)[0] + ": [REDACTED]");
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-export class OllamaClient {
+export class OllamaClient implements LlmClient {
   private host: string;
   private model: string;
 
@@ -140,15 +130,4 @@ export class OllamaClient {
       `Model did not return valid JSON after retry. Last response:\n${second.slice(0, 500)}`
     );
   }
-}
-
-function extractJson(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenceMatch ? fenceMatch[1] : trimmed;
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1 || end < start) return null;
-  return candidate.slice(start, end + 1);
 }

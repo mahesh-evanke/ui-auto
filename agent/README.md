@@ -102,6 +102,33 @@ GitHub sign-in → pick a repository and branch → enter the requirement → wa
 generation progress → review artifacts and the coverage report → optionally
 run against a URL.
 
+## Model provider (Ollama or GitHub Copilot)
+
+By default every job runs on local Ollama. From **Settings** you can also
+connect **GitHub Copilot** and switch to it instead - useful when the local
+model's small size is producing weak scenarios/steps and you want a
+stronger cloud model without changing anything else about the pipeline.
+
+This does not call Copilot Chat directly - that API is private to GitHub's
+own official clients (VS Code, the Copilot CLI, ...). What "Connect GitHub
+Copilot" actually does is validate and store a GitHub Personal Access Token
+against [GitHub Models](https://docs.github.com/en/github-models), the
+public, PAT-authenticated inference API serving the same model catalog tied
+to your GitHub account and Copilot entitlement (default model:
+`openai/gpt-4o-mini`, changeable in Settings).
+
+- A classic PAT works as-is; a fine-grained token needs the "models: read" permission.
+- The token is validated against the catalog (not an inference call) before being
+  saved, so a bad token is rejected immediately rather than failing later mid-job.
+- It's stored server-side only, in `agent-workspace/.model-settings.json`
+  (already gitignored, written with `0o600` permissions) - never sent to the
+  browser, never logged. `GET /api/settings` only ever reports whether one is
+  connected, not its value.
+- Switching back to Local Ollama does not discard a connected token - toggle
+  back to Copilot later without reconnecting. Disconnect clears it for good.
+- The CLI has the same capability: `--provider copilot --copilot-token <PAT>`
+  (or set `GITHUB_COPILOT_TOKEN`), plus `--copilot-model <id>`.
+
 ## Step reuse — existing step definitions only
 
 Under the bundled harness the generator uses **only step definitions that

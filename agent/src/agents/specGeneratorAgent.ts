@@ -1,4 +1,4 @@
-import type { OllamaClient } from "../llm/ollamaClient.js";
+import type { LlmClient } from "../llm/llmClient.js";
 import type { GeneratedScenarioSteps, GeneratedSpec, RepoAnalysis, RequirementSet } from "../types.js";
 
 const SYSTEM_PROMPT = `You are a Test Generation Agent. You generate a single Playwright end-to-end
@@ -16,7 +16,7 @@ Rules:
 - Output ONLY the raw TypeScript file content. No markdown fences, no prose before or after.`;
 
 export async function generatePlaywrightSpec(
-  client: OllamaClient,
+  client: LlmClient,
   feature: string,
   requirements: RequirementSet,
   scenarioSteps: GeneratedScenarioSteps[],

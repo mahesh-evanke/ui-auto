@@ -1,4 +1,4 @@
-import type { OllamaClient } from "../llm/ollamaClient.js";
+import type { LlmClient } from "../llm/llmClient.js";
 import type { RequirementSet, TestPlan, TestPlanItem } from "../types.js";
 import type { RetrievedFile } from "../retrieval/codeSearch.js";
 
@@ -25,7 +25,7 @@ Respond with ONLY a JSON object of this exact shape, no prose:
 }`;
 
 export async function planTestsForRequirement(
-  client: OllamaClient,
+  client: LlmClient,
   requirementId: string,
   requirementDescription: string,
   acceptanceCriteria: string[],
@@ -58,7 +58,7 @@ Produce the scenario JSON now.`;
 }
 
 export async function buildTestPlan(
-  client: OllamaClient,
+  client: LlmClient,
   requirements: RequirementSet,
   fileLookup: (req: { id: string; description: string }) => RetrievedFile[]
 ): Promise<TestPlan> {

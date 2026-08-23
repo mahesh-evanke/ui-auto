@@ -12,6 +12,13 @@ function parseHarness(value: unknown): HarnessKind | undefined {
   process.exit(1);
 }
 
+function parseProvider(value: unknown): "ollama" | "copilot" | undefined {
+  if (value === undefined) return undefined;
+  if (value === "ollama" || value === "copilot") return value;
+  console.error(`Invalid --provider "${String(value)}". Expected "ollama" or "copilot".`);
+  process.exit(1);
+}
+
 function printUsage(): void {
   console.log(`
 TestPilot — read-only AI test generation agent (Ollama)
@@ -29,6 +36,13 @@ Options:
   --branch <name>               Branch to check out / clone. Default: repo's current branch.
   --model <name>                 Ollama model to use. Default: ${DEFAULT_MODEL}
   --ollama-host <url>            Ollama host. Default: ${DEFAULT_OLLAMA_HOST}
+  --provider <ollama|copilot>    Which LLM backend to use. Default: ollama
+                                  copilot uses GitHub Models (the API behind Copilot's model
+                                  catalog) via a Personal Access Token - see --copilot-token,
+                                  or connect one from the web UI's Settings page instead.
+  --copilot-token <token>        GitHub PAT for --provider copilot. Also read from
+                                  GITHUB_COPILOT_TOKEN if not passed.
+  --copilot-model <id>           GitHub Models catalog id, e.g. openai/gpt-4o-mini (default).
   --reference-framework <path>   Local reference test framework to study conventions from.
                                   Default: ${DEFAULT_REFERENCE_FRAMEWORK_PATH}
   --harness <bundled|target>     Which framework runs the tests. Default: bundled
@@ -58,6 +72,9 @@ async function runGenerate(argv: minimist.ParsedArgs): Promise<void> {
     ollamaHost: argv["ollama-host"] ?? DEFAULT_OLLAMA_HOST,
     referenceFrameworkPath: argv["reference-framework"] ?? DEFAULT_REFERENCE_FRAMEWORK_PATH,
     harness: parseHarness(argv.harness),
+    provider: parseProvider(argv.provider),
+    copilotToken: argv["copilot-token"] ?? process.env.GITHUB_COPILOT_TOKEN,
+    copilotModel: argv["copilot-model"],
   };
 
   const { paths, job } = await runJob(
@@ -129,7 +146,20 @@ async function runExecute(argv: minimist.ParsedArgs): Promise<void> {
 async function main(): Promise<void> {
   const argv = minimist(process.argv.slice(2), {
     boolean: ["help", "headed"],
-    string: ["repo", "requirement", "branch", "model", "ollama-host", "reference-framework", "run", "base-url", "harness"],
+    string: [
+      "repo",
+      "requirement",
+      "branch",
+      "model",
+      "ollama-host",
+      "reference-framework",
+      "run",
+      "base-url",
+      "harness",
+      "provider",
+      "copilot-token",
+      "copilot-model",
+    ],
   });
 
   if (argv.help) {

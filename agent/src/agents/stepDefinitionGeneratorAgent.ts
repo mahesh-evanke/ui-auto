@@ -1,4 +1,4 @@
-import type { OllamaClient } from "../llm/ollamaClient.js";
+import type { LlmClient } from "../llm/llmClient.js";
 import type { ResolvedStep } from "../types.js";
 
 const SYSTEM_PROMPT = `You write NEW Cucumber step definitions in TypeScript, using @cucumber/cucumber's
@@ -38,7 +38,7 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
-async function generateChunk(client: OllamaClient, steps: ResolvedStep[]): Promise<string> {
+async function generateChunk(client: LlmClient, steps: ResolvedStep[]): Promise<string> {
   const stepList = steps.map((s) => `${s.keyword}: "${s.text}"`).join("\n");
   const userPrompt = `New step definitions needed:
 ${stepList}
@@ -65,7 +65,7 @@ Generate the full TypeScript file now.`;
  * batching all steps into a single very large prompt was observed to risk
  * a network-level request failure/timeout on this model.
  */
-export async function generateStepDefinitions(client: OllamaClient, steps: ResolvedStep[]): Promise<string> {
+export async function generateStepDefinitions(client: LlmClient, steps: ResolvedStep[]): Promise<string> {
   const chunks = chunk(steps, MAX_STEPS_PER_CALL);
   // Sequential, not concurrent: a single local Ollama instance processes one
   // generation at a time anyway, so firing chunks concurrently just queues

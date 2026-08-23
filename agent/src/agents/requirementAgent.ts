@@ -1,4 +1,4 @@
-import type { OllamaClient } from "../llm/ollamaClient.js";
+import type { LlmClient } from "../llm/llmClient.js";
 import type { RepoAnalysis, RequirementSet } from "../types.js";
 
 const SYSTEM_PROMPT = `You are the Requirement Agent inside an autonomous QA platform. You convert a
@@ -25,7 +25,7 @@ Rules:
 }`;
 
 export async function generateRequirements(
-  client: OllamaClient,
+  client: LlmClient,
   requirementText: string,
   analysis: RepoAnalysis
 ): Promise<RequirementSet> {

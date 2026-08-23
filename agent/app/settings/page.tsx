@@ -1,11 +1,15 @@
+import ModelProviderSettings from "./ModelProviderSettings.js";
+
 export default function SettingsPage() {
   return (
     <div>
       <h1>Settings</h1>
+      <ModelProviderSettings />
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Local model</h3>
+        <h3 style={{ marginTop: 0 }}>Local Ollama configuration</h3>
         <p className="muted">
-          Configured via environment variables in <code>.env.local</code>:
+          Used when the model provider above is set to Local Ollama. Configured via environment variables in{" "}
+          <code>.env.local</code>:
         </p>
         <pre className="log">{`OLLAMA_HOST=${process.env.OLLAMA_HOST ?? "http://localhost:11434"}\nTESTPILOT_MODEL=${process.env.TESTPILOT_MODEL ?? "llama3.2"}`}</pre>
         <p className="muted">Restart the dev server after changing these.</p>

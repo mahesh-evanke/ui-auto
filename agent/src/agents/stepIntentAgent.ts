@@ -1,4 +1,4 @@
-import type { OllamaClient } from "../llm/ollamaClient.js";
+import type { LlmClient } from "../llm/llmClient.js";
 import type { StepDefinitionEntry, StepIntent, TestScenario } from "../types.js";
 
 const SYSTEM_PROMPT = `You break a single QA test scenario down into an ordered list of short step
@@ -40,7 +40,7 @@ function renderCatalog(catalog: StepDefinitionEntry[]): string {
  * produced mostly invented prose that no step definition could satisfy.
  */
 export async function planStepIntents(
-  client: OllamaClient,
+  client: LlmClient,
   scenario: TestScenario,
   catalog: StepDefinitionEntry[] = [],
   uiElements = ""

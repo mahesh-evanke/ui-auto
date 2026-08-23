@@ -1,4 +1,4 @@
-import { OllamaClient } from "./llm/ollamaClient.js";
+import { createLlmClient } from "./llm/createLlmClient.js";
 import { createJobWorkspace, writeLog } from "./workspace/jobWorkspace.js";
 import { resolveRepository, type ResolvedRepo } from "./agents/repositoryAgent.js";
 import { analyzeRepository } from "./agents/codebaseAnalysisAgent.js";
@@ -56,15 +56,30 @@ export async function runJob(
   const emit = (label: string, status: ProgressEvent["status"] = "done") => onProgress({ label, status });
 
   const startedAt = new Date().toISOString();
-  const client = new OllamaClient({ host: opts.ollamaHost, model: opts.model });
+  const client = createLlmClient({
+    provider: opts.provider ?? "ollama",
+    ollamaHost: opts.ollamaHost,
+    ollamaModel: opts.model,
+    copilotToken: opts.copilotToken,
+    copilotModel: opts.copilotModel,
+  });
 
   const reachable = await client.ping();
   if (!reachable) {
+    if (opts.provider === "copilot") {
+      throw new Error(
+        `Could not reach GitHub Models with the connected Copilot token. Reconnect it from Settings - it may be expired or missing "models: read" access.`
+      );
+    }
     throw new Error(
       `Cannot reach Ollama at ${opts.ollamaHost}. Is it running? Try: ollama serve  (and ensure "${opts.model}" is pulled: ollama pull ${opts.model})`
     );
   }
-  emit(`Ollama reachable at ${opts.ollamaHost} (model: ${opts.model})`);
+  emit(
+    opts.provider === "copilot"
+      ? `GitHub Copilot connected (model: ${opts.copilotModel || "openai/gpt-4o-mini"})`
+      : `Ollama reachable at ${opts.ollamaHost} (model: ${opts.model})`
+  );
 
   const paths = createJobWorkspace();
   emit(`Job workspace created: ${paths.root}`);

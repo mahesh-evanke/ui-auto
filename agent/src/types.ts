@@ -13,6 +13,16 @@ export interface RunOptions {
    * target repo with no test framework of its own is still fully supported.
    */
   harness?: HarnessKind;
+  /**
+   * Which LLM backend runs generation. "ollama" (default) is local and
+   * needs nothing configured. "copilot" uses a GitHub Personal Access Token
+   * connected from Settings (GitHub Models - the same account/entitlement
+   * Copilot uses, see src/llm/copilotClient.ts for why it's this API and not
+   * Copilot Chat directly) and requires copilotToken.
+   */
+  provider?: "ollama" | "copilot";
+  copilotToken?: string;
+  copilotModel?: string;
 }
 
 export type ProgressStatus = "done" | "active" | "failed";

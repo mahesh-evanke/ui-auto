@@ -65,7 +65,7 @@ a { color: var(--accent); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
 
-input[type="text"], input[type="search"], textarea, select {
+input[type="text"], input[type="search"], input[type="password"], textarea, select {
   width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--border);

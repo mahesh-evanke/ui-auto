@@ -21,6 +21,7 @@ function pathsForJobId(jobId: string): JobPaths {
     jobId,
     root,
     repository: path.join(root, "repository"),
+    legacyRepository: path.join(root, "legacy-repository"),
     analysis: path.join(root, "analysis"),
     generatedTests: path.join(root, "generated-tests"),
     reports: path.join(root, "reports"),

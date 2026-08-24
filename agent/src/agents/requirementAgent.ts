@@ -1,5 +1,6 @@
 import type { LlmClient } from "../llm/llmClient.js";
-import type { RepoAnalysis, RequirementSet } from "../types.js";
+import type { RepoAnalysis, RequirementSet, RequirementSourceInputs } from "../types.js";
+import type { FetchedLink } from "../retrieval/linkFetcher.js";
 
 const SYSTEM_PROMPT = `You are the Requirement Agent inside an autonomous QA platform. You convert a
 plain-English feature request or business rule into structured, testable requirements.
@@ -28,6 +29,27 @@ Rules:
     }
   ]
 }`;
+
+/**
+ * Merges every requirement source the user filled in - a pasted/uploaded
+ * document, fetched link text, and free-text notes - into one requirement
+ * text, purely by concatenation with clear section headers. No LLM call:
+ * this only decides what goes INTO the prompt generateRequirements() sends,
+ * it doesn't interpret anything.
+ */
+export function combineRequirementSources(sources: RequirementSourceInputs, fetchedLinks: FetchedLink[]): string {
+  const sections: string[] = [];
+  if (sources.documentText?.trim()) {
+    sections.push(`=== Requirements document ===\n${sources.documentText.trim()}`);
+  }
+  for (const link of fetchedLinks) {
+    sections.push(`=== From ${link.url} ===\n${link.text}`);
+  }
+  if (sources.notes?.trim()) {
+    sections.push(`=== User notes ===\n${sources.notes.trim()}`);
+  }
+  return sections.join("\n\n");
+}
 
 export async function generateRequirements(
   client: LlmClient,

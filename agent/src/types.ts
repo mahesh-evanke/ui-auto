@@ -322,11 +322,74 @@ export interface JobPaths {
   jobId: string;
   root: string;
   repository: string;
+  /** A second, separate read-only clone for legacy-modernization mode - see RequirementSourceInputs.isModernization. Never written to. */
+  legacyRepository: string;
   analysis: string;
   generatedTests: string;
   reports: string;
   logs: string;
   runResults: string;
+}
+
+// --- Requirements intake (multi-source) + gap analysis ---------------------
+
+/**
+ * Every field is optional and independent - a user fills in whichever
+ * sources they have (a pasted/uploaded doc, links, free-text notes) and any
+ * combination gets merged into one requirement text before the existing
+ * requirementAgent ever runs.
+ */
+export interface RequirementSourceInputs {
+  /** Text extracted from an uploaded requirements document (.txt/.md read client-side; other formats aren't parsed - see app/jobs/new/page.tsx). */
+  documentText?: string;
+  /** URLs to fetch and extract text from - best-effort; auth-walled pages (most Confluence/internal wikis) will fail and are reported, not silently dropped. */
+  links?: string[];
+  /** Free-text notes typed directly by the user. */
+  notes?: string;
+  /**
+   * When true, requirements are matched against BOTH the requirement
+   * sources above AND a legacy codebase (legacyRepo) - the legacy code is
+   * treated as the ground truth of current behavior, since a requirement
+   * doc can be incomplete or stale in a way old, still-running code isn't.
+   */
+  isModernization?: boolean;
+  /** Local path or git URL to the legacy codebase. Required when isModernization is true. */
+  legacyRepo?: string;
+  legacyBranch?: string;
+}
+
+export type ObservationSeverity = "high" | "medium" | "low";
+
+/** One thing the gap-analysis pass judged as not properly implemented in the target repo relative to the requirements (and legacy code, if modernization). */
+export interface Observation {
+  id: string;
+  requirementId?: string;
+  title: string;
+  description: string;
+  severity: ObservationSeverity;
+}
+
+export interface AnalysisResult {
+  requirements: RequirementSet;
+  observations: Observation[];
+  /** Links that failed to fetch (auth-walled, unreachable, etc.) - surfaced rather than silently ignored. */
+  unreadableLinks: string[];
+  isModernization: boolean;
+  legacyRepo?: string;
+}
+
+export interface AnalysisOptions {
+  repo: string;
+  branch?: string;
+  githubToken?: string;
+  sources: RequirementSourceInputs;
+  provider?: "ollama" | "openai" | "openrouter";
+  model?: string;
+  ollamaHost?: string;
+  openaiToken?: string;
+  openaiModel?: string;
+  openrouterToken?: string;
+  openrouterModel?: string;
 }
 
 export interface JobResult {

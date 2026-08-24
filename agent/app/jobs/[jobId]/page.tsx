@@ -95,7 +95,7 @@ const DEVICES = [
   "Samsung Galaxy A51/71", "Nest Hub", "Nest Hub Max",
 ];
 
-function RunTestsPanel({ jobId }: { jobId: string }) {
+export function RunTestsPanel({ jobId }: { jobId: string }) {
   const [baseUrl, setBaseUrl] = useState("");
   // A browser window opens by default so the run can be watched; uncheck to run headless.
   const [headed, setHeaded] = useState(true);

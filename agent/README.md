@@ -150,9 +150,40 @@ cd agent
 npm run web
 ```
 
-GitHub sign-in → pick a repository and branch → enter the requirement → watch
-generation progress → review artifacts and the coverage report → optionally
-run against a URL.
+GitHub sign-in → pick a repository and branch → the staged workflow below.
+
+### Requirements → Analyze → Manual scenarios → Automated tests
+
+Selecting a repository lands on **Requirements**, not straight into
+generation. This is a two-gate workflow, not one-shot:
+
+1. **Requirements** - fill in any combination of a requirements
+   document (upload a plain-text file, or paste directly - PDF/DOCX aren't
+   parsed), links (plain unauthenticated fetch, so an auth-walled page like
+   most internal wikis will fail to read and is reported, not silently
+   skipped), and free-text notes. Turning on **legacy modernization** adds a
+   legacy repository field - the legacy code is treated as the ground truth
+   of current behavior (it can't go stale the way a doc can), and gap
+   analysis matches against it too, not just the written requirements.
+2. Click **Analyze**. This resolves the repo(s), merges every source given,
+   generates structured requirements, then runs gap analysis - the result is
+   a list of **observations**: things that look not properly implemented in
+   the target repo, each with a severity and which requirement it relates
+   to. Missed something? Add more detail and click **Re-analyze** - it
+   reuses the already-resolved repo, no re-clone.
+3. Once requirements/observations look right, continue to **Test
+   Scenarios**, which has two sub-tabs:
+   - **Manual** - human-readable scenarios generated from the requirements.
+     Add notes and regenerate until they're right, same refine loop as
+     step 2. There's no point moving to automation without them.
+   - **Automated** - only reachable by approving Manual scenarios first.
+     Choose Gherkin/spec/both and generate - same generation, step-reuse,
+     and Run Tests machinery as the rest of this document, just fed from
+     the approved scenario list instead of skipping straight from a
+     one-line requirement to test code.
+
+Every generate step in this flow (Analyze, Manual, Automated) takes optional
+notes and can be re-run - nothing here is single-shot.
 
 ## Model provider (Ollama, OpenAI, or OpenRouter)
 

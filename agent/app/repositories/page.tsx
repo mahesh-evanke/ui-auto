@@ -149,7 +149,7 @@ export default function RepositoriesPage() {
                       className="btn secondary"
                       onClick={() =>
                         router.push(
-                          `/jobs/new?owner=${encodeURIComponent(r.owner)}&repo=${encodeURIComponent(r.name)}&cloneUrl=${encodeURIComponent(
+                          `/analysis/new?owner=${encodeURIComponent(r.owner)}&repo=${encodeURIComponent(r.name)}&cloneUrl=${encodeURIComponent(
                             r.cloneUrl
                           )}&defaultBranch=${encodeURIComponent(r.defaultBranch)}`
                         )

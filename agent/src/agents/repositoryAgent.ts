@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import type { JobPaths } from "../types.js";
 
 export interface ResolvedRepo {
   rootDir: string;
@@ -37,10 +36,16 @@ function currentBranch(dir: string): string {
  * otherwise echoes back the full argv (including the extraHeader) verbatim,
  * which would leak the token into logs/UI - see the catch block below.
  */
+/**
+ * @param targetDir Where to clone into if `input` is a git URL - normally a
+ *   job's paths.repository, but paths.legacyRepository for the second,
+ *   independent clone legacy-modernization mode resolves (see
+ *   RequirementSourceInputs.isModernization).
+ */
 export function resolveRepository(
   input: string,
   branch: string | undefined,
-  paths: JobPaths,
+  targetDir: string,
   githubToken?: string
 ): ResolvedRepo {
   if (isGitUrl(input)) {
@@ -50,7 +55,7 @@ export function resolveRepository(
       args.push("-c", `http.extraHeader=AUTHORIZATION: basic ${basic}`);
     }
     if (branch) args.push("--branch", branch);
-    args.push(input, paths.repository);
+    args.push(input, targetDir);
     try {
       execFileSync("git", args, { stdio: "pipe" });
     } catch (err) {
@@ -58,8 +63,8 @@ export function resolveRepository(
       throw new Error(`git clone failed for ${input} (branch: ${branch ?? "default"}).${stderr ? ` ${stderr.trim()}` : ""}`);
     }
     return {
-      rootDir: paths.repository,
-      branch: branch ?? currentBranch(paths.repository),
+      rootDir: targetDir,
+      branch: branch ?? currentBranch(targetDir),
       clonedByTool: true,
     };
   }

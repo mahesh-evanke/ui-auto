@@ -89,7 +89,7 @@ export async function runJob(
   const paths = createJobWorkspace();
   emit(`Job workspace created: ${paths.root}`);
 
-  const resolved = resolveRepository(opts.repo, opts.branch, paths, opts.githubToken);
+  const resolved = resolveRepository(opts.repo, opts.branch, paths.repository, opts.githubToken);
   emit(`Repository resolved (read-only): ${resolved.rootDir} (branch: ${resolved.branch})`);
 
   const analysis = analyzeRepository(resolved.rootDir);

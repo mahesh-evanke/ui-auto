@@ -1,3 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * "Cockpit HUD" theme for the new step-by-step workflow (app/analysis/new) -
+ * deep navy + electric cyan + amber, distinct from generic shadcn zinc/slate
+ * defaults, fitting the TestPilot name. Older pages (Settings, the original
+ * jobs/* flow) keep using the flat --bg/--surface/etc tokens below untouched;
+ * these HSL tokens are additive, not a replacement, so nothing there needs
+ * to change for the new page to render correctly.
+ */
+:root {
+  --background: 222 47% 6%;
+  --foreground: 210 25% 94%;
+  --card: 222 42% 9%;
+  --card-foreground: 210 25% 94%;
+  --popover: 222 42% 9%;
+  --popover-foreground: 210 25% 94%;
+  --primary: 189 94% 55%;
+  --primary-foreground: 222 47% 6%;
+  --secondary: 222 30% 15%;
+  --secondary-foreground: 210 25% 94%;
+  --muted: 222 28% 13%;
+  --muted-foreground: 215 16% 63%;
+  --accent: 38 92% 55%;
+  --accent-foreground: 222 47% 6%;
+  --destructive: 0 78% 60%;
+  --destructive-foreground: 210 25% 97%;
+  --success: 152 60% 45%;
+  --success-foreground: 222 47% 6%;
+  --warning: 38 92% 55%;
+  --warning-foreground: 222 47% 6%;
+  --border: 222 25% 18%;
+  --input: 222 25% 18%;
+  --ring: 189 94% 55%;
+  --radius: 0.75rem;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Subtle signature touches for the new workflow page - a soft radial cyan
+   glow anchored top-center and a faint dot grid, kept low-contrast so they
+   read as texture, not decoration competing with content. */
+.hud-backdrop {
+  background-image:
+    radial-gradient(ellipse 900px 500px at 50% -10%, hsl(var(--primary) / 0.12), transparent 60%),
+    radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px);
+  background-size: auto, 24px 24px;
+  background-position: 0 0, 0 0;
+}
+.hud-glow {
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.4), 0 0 24px -4px hsl(var(--primary) / 0.35);
+}
+.hud-scanline {
+  background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.6), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2.5s linear infinite;
+}
+
 :root {
   --bg: #0b0d10;
   --surface: #14171c;

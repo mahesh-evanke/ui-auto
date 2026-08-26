@@ -356,6 +356,16 @@ export interface RequirementSourceInputs {
   /** Local path or git URL to the legacy codebase. Required when isModernization is true. */
   legacyRepo?: string;
   legacyBranch?: string;
+  /**
+   * Same idea as documentText/links/notes above, but describing the LEGACY
+   * system specifically (e.g. its own spec doc, an old wiki page, notes on
+   * how it currently behaves) - merged into the gap-analysis prompt
+   * alongside the legacy code excerpts, not into the primary requirement
+   * text used to generate the requirements themselves.
+   */
+  legacyDocumentText?: string;
+  legacyLinks?: string[];
+  legacyNotes?: string;
 }
 
 export type ObservationSeverity = "high" | "medium" | "low";

@@ -1,0 +1,6 @@
+Scope: end-to-end. Write each scenario as the real sequence a user's flow produces -
+a UI action that would trigger a backend call, followed by what that call returns, then
+the UI continuing from there (e.g. filling a login form and clicking Login, followed by
+the login request succeeding, followed by landing on the next screen and triggering the
+next request). Describe that sequence in the scenario text so the step planner downstream
+can turn it into alternating UI-then-API steps.

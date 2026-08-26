@@ -1,0 +1,1 @@
+happy path, alternative path, validation, boundary cases, empty states, loading states, error states, network failures, authentication/authorization, duplicate actions, refresh behavior, navigation behavior, accessibility, keyboard interaction, mobile viewport, desktop viewport, regression

@@ -4,6 +4,7 @@ import { getModelSettingsForJob } from "../../../lib/modelSettings.js";
 import { startTask } from "../../../lib/taskRegistry.js";
 import { runRequirementsAnalysis } from "../../../src/analysisPipeline.js";
 import { createJobWorkspace } from "../../../src/workspace/jobWorkspace.js";
+import { addJobToProject } from "../../../src/workspace/projectStore.js";
 import { DEFAULT_MODEL, DEFAULT_OLLAMA_HOST } from "../../../src/config.js";
 import type { RequirementSourceInputs } from "../../../src/types.js";
 
@@ -11,12 +12,15 @@ interface AnalysisBody {
   repo?: string;
   branch?: string;
   sources?: RequirementSourceInputs;
+  projectId?: string;
 }
 
 /** Starts Stage 1 of the staged workflow (Requirements tab -> Analyze): resolves the repo(s), merges every requirement source given, generates requirements, runs gap analysis. */
 export async function POST(req: NextRequest) {
+  // A token is only needed to clone a private GitHub repo - resolveRepository()
+  // works without one for public repo URLs and local filesystem paths, so a
+  // guest who pasted a repo URL directly (never signed in) can still analyze.
   const token = await getGithubAccessToken(req);
-  if (!token) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as AnalysisBody | null;
   if (!body?.repo) return NextResponse.json({ error: "repo is required" }, { status: 400 });
@@ -33,6 +37,14 @@ export async function POST(req: NextRequest) {
   // back immediately (not a placeholder) - simpler than jobRegistry.ts's
   // placeholder-id re-keying, since nothing else here needs one.
   const paths = createJobWorkspace();
+  if (body.projectId) {
+    try {
+      addJobToProject(body.projectId, paths.jobId);
+    } catch {
+      // Unknown/deleted project id - the run itself is still valid, just not
+      // grouped under a project; don't fail the analysis over it.
+    }
+  }
   const modelSettings = getModelSettingsForJob();
 
   const taskId = startTask("analysis", (onProgress, onLog) =>
@@ -40,7 +52,7 @@ export async function POST(req: NextRequest) {
       {
         repo: body.repo!,
         branch: body.branch,
-        githubToken: token,
+        githubToken: token ?? undefined,
         sources,
         provider: modelSettings.provider,
         model: process.env.TESTPILOT_MODEL ?? DEFAULT_MODEL,

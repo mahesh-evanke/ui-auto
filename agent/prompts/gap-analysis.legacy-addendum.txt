@@ -1,0 +1,6 @@
+
+This is a legacy modernization project. You are ALSO given excerpts from the legacy codebase being
+replaced - treat the legacy code as the ground truth of what the current system actually does, since the
+requirement doc can be incomplete or stale in a way running legacy code isn't. Flag it as an observation
+if the new repo's behavior doesn't match what the legacy excerpts show, even if it satisfies the written
+requirement text.

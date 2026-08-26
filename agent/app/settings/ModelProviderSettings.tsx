@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.js";
+import { Button } from "../../components/ui/button.js";
+import { Input } from "../../components/ui/input.js";
+import { Label } from "../../components/ui/label.js";
+import { Badge } from "../../components/ui/badge.js";
 
 interface Status {
   provider: "ollama" | "openai" | "openrouter";
@@ -105,10 +110,17 @@ export default function ModelProviderSettings() {
 
   if (!status) {
     return (
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Model provider</h3>
-        <p className="muted">Loading…</p>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <span className="material-symbols-outlined">smart_toy</span>
+            Model Provider
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="font-body-sm text-body-sm text-on-surface-variant">Loading…</p>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -122,29 +134,29 @@ export default function ModelProviderSettings() {
   function renderCloudProvider(provider: CloudProvider) {
     const connected = connectedFlag(provider);
     return (
-      <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <strong>{PROVIDER_LABEL[provider]}</strong>
-          {connected && <span className="badge pass">Connected</span>}
+      <div className="border-t border-outline-variant pt-md">
+        <div className="mb-sm flex items-center gap-sm">
+          <span className="font-body-md text-body-md font-medium text-on-surface">{PROVIDER_LABEL[provider]}</span>
+          {connected && <Badge variant="success">Connected</Badge>}
         </div>
 
         {connected ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <span className="muted">model: {connectedModel(provider)}</span>
-            <button className="btn secondary" disabled={busy !== null} onClick={() => disconnect(provider)}>
+          <div className="flex flex-wrap items-center gap-md">
+            <span className="font-body-sm text-body-sm text-on-surface-variant">model: {connectedModel(provider)}</span>
+            <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => disconnect(provider)}>
               {busy === provider ? "Disconnecting…" : "Disconnect"}
-            </button>
+            </Button>
           </div>
         ) : (
-          <div style={{ display: "grid", gap: 8, maxWidth: 440 }}>
-            <label className="muted" htmlFor={`${provider}-token`}>
+          <div className="grid max-w-md gap-sm">
+            <Label htmlFor={`${provider}-token`}>
               API key ({" "}
-              <a href={PROVIDER_KEY_URL[provider]} target="_blank" rel="noreferrer">
+              <a href={PROVIDER_KEY_URL[provider]} target="_blank" rel="noreferrer" className="text-primary normal-case">
                 get one
               </a>{" "}
               )
-            </label>
-            <input
+            </Label>
+            <Input
               id={`${provider}-token`}
               type="password"
               placeholder={PROVIDER_KEY_PLACEHOLDER[provider]}
@@ -152,10 +164,8 @@ export default function ModelProviderSettings() {
               onChange={(e) => setTokens((t) => ({ ...t, [provider]: e.target.value }))}
               autoComplete="off"
             />
-            <label className="muted" htmlFor={`${provider}-model`}>
-              Model (optional)
-            </label>
-            <input
+            <Label htmlFor={`${provider}-model`}>Model (optional)</Label>
+            <Input
               id={`${provider}-model`}
               type="text"
               placeholder={provider === "openai" ? "gpt-4o-mini" : "openai/gpt-4o-mini"}
@@ -163,9 +173,9 @@ export default function ModelProviderSettings() {
               onChange={(e) => setModels((m) => ({ ...m, [provider]: e.target.value }))}
             />
             <div>
-              <button className="btn" disabled={busy !== null} onClick={() => connect(provider)}>
+              <Button size="sm" disabled={busy !== null} onClick={() => connect(provider)}>
                 {busy === provider ? "Connecting…" : `Connect ${PROVIDER_LABEL[provider]}`}
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -174,47 +184,58 @@ export default function ModelProviderSettings() {
   }
 
   return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>Model provider</h3>
-      <p className="muted">Which LLM backend generates and reasons about tests. Local Ollama is the default and needs nothing connected.</p>
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <span className="material-symbols-outlined">smart_toy</span>
+          Model Provider
+        </CardTitle>
+        <CardDescription>
+          Which LLM backend generates and reasons about tests. Local Ollama is the default and needs nothing connected.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-md">
+        <div className="flex flex-wrap gap-sm">
+          <Button
+            size="sm"
+            variant={status.provider === "ollama" ? "default" : "outline"}
+            disabled={busy !== null}
+            onClick={() => setActiveProvider("ollama")}
+          >
+            Local Ollama
+          </Button>
+          <Button
+            size="sm"
+            variant={status.provider === "openai" ? "default" : "outline"}
+            disabled={busy !== null || !status.openaiConnected}
+            onClick={() => setActiveProvider("openai")}
+            title={status.openaiConnected ? undefined : "Connect OpenAI below first"}
+          >
+            OpenAI
+          </Button>
+          <Button
+            size="sm"
+            variant={status.provider === "openrouter" ? "default" : "outline"}
+            disabled={busy !== null || !status.openrouterConnected}
+            onClick={() => setActiveProvider("openrouter")}
+            title={status.openrouterConnected ? undefined : "Connect OpenRouter below first"}
+          >
+            OpenRouter
+          </Button>
+        </div>
 
-      <div style={{ display: "flex", gap: 8, margin: "12px 0", flexWrap: "wrap" }}>
-        <button className={status.provider === "ollama" ? "btn" : "btn secondary"} disabled={busy !== null} onClick={() => setActiveProvider("ollama")}>
-          Local Ollama
-        </button>
-        <button
-          className={status.provider === "openai" ? "btn" : "btn secondary"}
-          disabled={busy !== null || !status.openaiConnected}
-          onClick={() => setActiveProvider("openai")}
-          title={status.openaiConnected ? undefined : "Connect OpenAI below first"}
-        >
-          OpenAI
-        </button>
-        <button
-          className={status.provider === "openrouter" ? "btn" : "btn secondary"}
-          disabled={busy !== null || !status.openrouterConnected}
-          onClick={() => setActiveProvider("openrouter")}
-          title={status.openrouterConnected ? undefined : "Connect OpenRouter below first"}
-        >
-          OpenRouter
-        </button>
-      </div>
+        {error && <p className="font-body-sm text-body-sm text-error">{error}</p>}
 
-      {error && (
-        <p className="muted" style={{ color: "var(--bad)" }}>
-          {error}
+        {renderCloudProvider("openai")}
+        {renderCloudProvider("openrouter")}
+
+        <p className="font-body-sm text-body-sm text-on-surface-variant">
+          Keys are validated against the provider's real API before being saved, then stored locally in this
+          project&apos;s <code>agent-workspace/</code> folder (gitignored, file-permission restricted) - never sent
+          anywhere except that provider&apos;s own API. OpenRouter is a single key that can route to many models
+          (including free ones) across providers; OpenAI is OpenAI&apos;s models directly.
         </p>
-      )}
-
-      {renderCloudProvider("openai")}
-      {renderCloudProvider("openrouter")}
-
-      <p className="muted" style={{ marginTop: 16 }}>
-        Keys are validated against the provider's real API before being saved, then stored locally in this
-        project&apos;s <code>agent-workspace/</code> folder (gitignored, file-permission restricted) - never sent
-        anywhere except that provider&apos;s own API. OpenRouter is a single key that can route to many models
-        (including free ones) across providers; OpenAI is OpenAI&apos;s models directly.
-      </p>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

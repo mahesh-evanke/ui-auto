@@ -98,6 +98,19 @@ export async function runRequirementsAnalysis(
     throw new Error("No requirement source given - provide a document, at least one readable link, or notes.");
   }
 
+  // Same doc/links/notes idea, but describing the legacy system itself -
+  // kept separate from combinedText above since it feeds the gap-analysis
+  // prompt's legacy section, not requirement generation.
+  let legacyContextText = "";
+  if (opts.sources.isModernization) {
+    const { fetched: fetchedLegacyLinks, failed: unreadableLegacyLinks } = await fetchLinks(opts.sources.legacyLinks ?? []);
+    if (unreadableLegacyLinks.length > 0) emit(`${unreadableLegacyLinks.length} legacy link(s) could not be read`, "failed");
+    legacyContextText = combineRequirementSources(
+      { documentText: opts.sources.legacyDocumentText, notes: opts.sources.legacyNotes },
+      fetchedLegacyLinks
+    );
+  }
+
   emit("Analyzing requirements...", "active");
   const requirements = await generateRequirements(client, combinedText, analysis);
   emit(`Requirements identified: ${requirements.requirements.length}`);
@@ -114,6 +127,7 @@ export async function runRequirementsAnalysis(
       relevantFiles,
       isModernization: Boolean(opts.sources.isModernization),
       legacyExcerpts,
+      legacyContextText,
     });
     observations.push(...obs);
     emit(`${req.id}: ${obs.length} observation(s)`);

@@ -1,41 +1,15 @@
 import type { LlmClient } from "../llm/llmClient.js";
 import type { Observation, Requirement } from "../types.js";
 import type { RetrievedFile } from "../retrieval/codeSearch.js";
-
-const SYSTEM_PROMPT = `You are the Gap Analysis Agent inside an autonomous QA platform. You are given ONE
-requirement (with its acceptance criteria) and excerpts of the source files most likely to implement
-it, found by searching the target repository. Decide whether the requirement appears to be properly
-implemented.
-
-Rules:
-- Judge only from the excerpts given - if they don't show enough to tell, that itself is an observation
-  ("no code found implementing X" / "couldn't confirm Y from the available source").
-- Only report a real gap: something an acceptance criterion calls for that the excerpts contradict, don't
-  show, or show incompletely. Do not invent problems in code that looks fine - if everything checks out,
-  return an empty observations array. Passing nothing is a valid, common, correct result.
-- Each observation: title is a short one-line summary; description explains specifically what's missing
-  or wrong and (when possible) which file/acceptance criterion it relates to.
-- severity: "high" if the core behavior the requirement describes looks entirely missing or broken,
-  "medium" if it's partially there or an edge case is unhandled, "low" for a minor/cosmetic gap.
-- Respond with ONLY a JSON object of this exact shape, no prose:
-{
-  "observations": [
-    { "title": "string", "description": "string", "severity": "high" | "medium" | "low" }
-  ]
-}`;
-
-const LEGACY_ADDENDUM = `
-This is a legacy modernization project. You are ALSO given excerpts from the legacy codebase being
-replaced - treat the legacy code as the ground truth of what the current system actually does, since the
-requirement doc can be incomplete or stale in a way running legacy code isn't. Flag it as an observation
-if the new repo's behavior doesn't match what the legacy excerpts show, even if it satisfies the written
-requirement text.`;
+import { getPrompt } from "../promptStore.js";
 
 export interface GapAnalysisInput {
   requirement: Requirement;
   relevantFiles: RetrievedFile[];
   isModernization: boolean;
   legacyExcerpts: RetrievedFile[];
+  /** Free text describing the legacy system (doc/links/notes the user gave for it) - separate from the code excerpts above. */
+  legacyContextText?: string;
 }
 
 function renderExcerpts(files: RetrievedFile[], label: string): string {
@@ -52,7 +26,11 @@ function nextObservationId(): string {
 export async function analyzeRequirementGap(client: LlmClient, input: GapAnalysisInput): Promise<Observation[]> {
   const criteria = input.requirement.acceptanceCriteria.map((c) => `- ${c.description}`).join("\n");
   const legacySection = input.isModernization
-    ? `\n\nLEGACY CODEBASE excerpts (ground truth of current behavior):\n${renderExcerpts(input.legacyExcerpts, "legacy")}`
+    ? `\n\nLEGACY CODEBASE excerpts (ground truth of current behavior):\n${renderExcerpts(input.legacyExcerpts, "legacy")}${
+        input.legacyContextText?.trim()
+          ? `\n\nLEGACY SYSTEM context (doc/notes describing the legacy system, provided by the user):\n${input.legacyContextText.trim()}`
+          : ""
+      }`
     : "";
 
   const userPrompt = `Requirement ${input.requirement.id}: ${input.requirement.description}
@@ -65,8 +43,11 @@ ${renderExcerpts(input.relevantFiles, "target repository")}${legacySection}
 
 Produce the observations JSON now.`;
 
+  const systemPrompt = getPrompt("gap-analysis.system");
+  const legacyAddendum = input.isModernization ? getPrompt("gap-analysis.legacy-addendum") : "";
+
   const result = await client.chatJson<{ observations: { title: string; description: string; severity: Observation["severity"] }[] }>([
-    { role: "system", content: SYSTEM_PROMPT + (input.isModernization ? LEGACY_ADDENDUM : "") },
+    { role: "system", content: systemPrompt + legacyAddendum },
     { role: "user", content: userPrompt },
   ]);
 

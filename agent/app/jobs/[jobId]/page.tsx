@@ -2,6 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card.js";
+import { Button } from "../../../components/ui/button.js";
+import { Input } from "../../../components/ui/input.js";
+import { Label } from "../../../components/ui/label.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select.js";
+import { Switch } from "../../../components/ui/checkbox.js";
+import { Badge } from "../../../components/ui/badge.js";
+import { cn } from "../../../lib/utils.js";
 
 interface ProgressEvent {
   label: string;
@@ -94,8 +102,19 @@ const DEVICES = [
   "Surface Pro 7", "Surface Duo", "Galaxy Z Fold 5", "Asus Zenbook Fold",
   "Samsung Galaxy A51/71", "Nest Hub", "Nest Hub Max",
 ];
+// Radix Select reserves "" as its internal "no selection" sentinel, so the
+// "Desktop (full window)" / no-emulation option needs a real value here -
+// translated back to "" at the state boundary.
+const DESKTOP_DEVICE = "__desktop__";
 
-export function RunTestsPanel({ jobId }: { jobId: string }) {
+export function RunTestsPanel({
+  jobId,
+  onEventsChange,
+}: {
+  jobId: string;
+  /** When provided, the run's progress events are reported here instead of being rendered inline - lets a host page (e.g. the analysis wizard) show them in its own consolidated execution log rather than duplicating them inside this card. */
+  onEventsChange?: (events: ProgressEvent[], error: string | null) => void;
+}) {
   const [baseUrl, setBaseUrl] = useState("");
   // A browser window opens by default so the run can be watched; uncheck to run headless.
   const [headed, setHeaded] = useState(true);
@@ -110,6 +129,11 @@ export function RunTestsPanel({ jobId }: { jobId: string }) {
   const [runError, setRunError] = useState<string | null>(null);
 
   useEffect(() => {
+    onEventsChange?.(runEvents, runError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runEvents, runError]);
+
+  useEffect(() => {
     if (!runId) return;
     const es = new EventSource(`/api/jobs/${jobId}/run/${runId}/events`);
     es.addEventListener("progress", (e) => {
@@ -117,11 +141,13 @@ export function RunTestsPanel({ jobId }: { jobId: string }) {
     });
     es.addEventListener("done", (e) => {
       setRunResult(JSON.parse((e as MessageEvent).data));
+      setRunEvents((prev) => prev.map((ev) => (ev.status === "active" ? { ...ev, status: "done" } : ev)));
       setRunStatus("done");
       es.close();
     });
     es.addEventListener("failed", (e) => {
       setRunError(JSON.parse((e as MessageEvent).data));
+      setRunEvents((prev) => prev.map((ev) => (ev.status === "active" ? { ...ev, status: "failed" } : ev)));
       setRunStatus("failed");
       es.close();
     });
@@ -148,125 +174,158 @@ export function RunTestsPanel({ jobId }: { jobId: string }) {
     setRunId(data.runId);
   }
 
+  const STATUS_VARIANT = { passed: "success", failed: "destructive", skipped: "warning", unknown: "outline" } as const;
+
   return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>Run Tests</h3>
-      <p className="muted">
-        Optional, explicit step: point at an already-running instance of the app and execute the generated tests against it.
-        This installs test-runner dependencies in the target repo if missing, and is the only point where TestPilot runs anything.
-      </p>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <input
-          type="text"
-          placeholder="http://localhost:3000"
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          style={{ flex: 1, minWidth: 220 }}
-          disabled={runStatus === "running"}
-        />
-        <label className="muted" style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <input type="checkbox" checked={headed} onChange={(e) => setHeaded(e.target.checked)} disabled={runStatus === "running"} />
-          Headed
-        </label>
-        <label
-          className="muted"
-          style={{ display: "flex", alignItems: "center", gap: 4 }}
-          title="On failure, corrects the failing scenario(s) and re-runs automatically (bundled harness only)"
-        >
-          <input type="checkbox" checked={autoFix} onChange={(e) => setAutoFix(e.target.checked)} disabled={runStatus === "running"} />
-          Auto-fix failures
-        </label>
-        <select
-          value={browserName}
-          onChange={(e) => setBrowserName(e.target.value as typeof browserName)}
-          disabled={runStatus === "running"}
-          style={{ width: "auto" }}
-          title="firefox is not wired into hooks.ts yet and falls back to chromium"
-        >
-          <option value="chromium">Chromium</option>
-          <option value="chrome">Chrome</option>
-          <option value="edge">Edge</option>
-          <option value="firefox">Firefox (falls back to Chromium)</option>
-        </select>
-        <select
-          value={viewportDevice}
-          onChange={(e) => setViewportDevice(e.target.value)}
-          disabled={runStatus === "running"}
-          style={{ width: "auto" }}
-        >
-          {DEVICES.map((d) => (
-            <option key={d} value={d}>{d || "Desktop (full window)"}</option>
-          ))}
-        </select>
-        <button className="btn" disabled={runStatus === "running" || !baseUrl.trim()} onClick={handleRun}>
-          {runStatus === "running" ? "Running..." : "Run Tests"}
-        </button>
-      </div>
-
-      {runEvents.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          {runEvents.map((e, i) => (
-            <div className="checklist-item" key={i}>
-              <span className={`checklist-marker ${e.status}`}>{e.status === "done" ? "✓" : e.status === "failed" ? "✕" : "●"}</span>
-              <span>{linkifyUrl(e.label)}</span>
-            </div>
-          ))}
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <span className="material-symbols-outlined">play_circle</span>
+          Run Configuration
+        </CardTitle>
+        <CardDescription>
+          Optional, explicit step: point at an already-running instance of the app and execute the generated tests
+          against it. Installs test-runner dependencies in the target repo if missing - the only point where
+          TestPilot runs anything.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-md">
+        <div>
+          <Label className="mb-1 block" htmlFor="run-base-url">Target URL</Label>
+          <Input
+            id="run-base-url"
+            type="text"
+            placeholder="http://localhost:3000"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            disabled={runStatus === "running"}
+          />
         </div>
-      )}
 
-      {runStatus === "failed" && runError && (
-        <p style={{ color: "var(--bad)", marginTop: 12 }}>{runError}</p>
-      )}
+        <div>
+          <Label className="mb-1 block">Browser</Label>
+          <div className="flex flex-wrap gap-xs">
+            {(["chromium", "chrome", "edge", "firefox"] as const).map((b) => (
+              <Button
+                key={b}
+                type="button"
+                size="sm"
+                variant={browserName === b ? "default" : "outline"}
+                disabled={runStatus === "running"}
+                onClick={() => setBrowserName(b)}
+                title={b === "firefox" ? "Not wired into hooks.ts yet - falls back to Chromium" : undefined}
+              >
+                {b === "chromium" ? "Chromium" : b === "chrome" ? "Chrome" : b === "edge" ? "Edge" : "Firefox"}
+              </Button>
+            ))}
+          </div>
+        </div>
 
-      {runStatus === "done" && runResult && (
-        <div style={{ marginTop: 16 }}>
-          <p>
-            <span className="badge pass">{runResult.passed} passed</span>{" "}
-            {runResult.failed > 0 && <span className="badge fail" style={{ marginLeft: 8 }}>{runResult.failed} failed</span>}{" "}
-            {runResult.skipped > 0 && <span className="badge blocked" style={{ marginLeft: 8 }}>{runResult.skipped} skipped</span>}
-          </p>
+        <div>
+          <Label className="mb-1 block" htmlFor="run-device">Device Emulation</Label>
+          <Select
+            value={viewportDevice || DESKTOP_DEVICE}
+            onValueChange={(v) => setViewportDevice(v === DESKTOP_DEVICE ? "" : v)}
+            disabled={runStatus === "running"}
+          >
+            <SelectTrigger id="run-device">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DEVICES.map((d) => (
+                <SelectItem key={d || DESKTOP_DEVICE} value={d || DESKTOP_DEVICE}>
+                  {d || "Desktop (full window)"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-          {runResult.fixAttempts && runResult.fixAttempts.length > 0 && (
-            <div className="card" style={{ marginBottom: 16 }}>
-              <h4 style={{ marginTop: 0 }}>Auto-fix history</h4>
-              <p className="muted">
-                Failing scenarios were rewritten in the generated .feature file and re-run. Only scenarios that were
-                still failing at the start of each round were touched.
-              </p>
-              {runResult.fixAttempts.map((a) => (
-                <div key={a.attempt} className="checklist-item" style={{ alignItems: "flex-start" }}>
-                  <span className="checklist-marker done">✓</span>
-                  <span>
-                    Attempt {a.attempt}: corrected {a.correctedScenarioTitles.length} scenario(s)
-                    {a.unfixableScenarioTitles.length > 0 && `, could not diagnose ${a.unfixableScenarioTitles.length}`} →{" "}
-                    {a.result.passed} passed, {a.result.failed} failed, {a.result.skipped} skipped
-                  </span>
+        <div className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container p-sm">
+          <div>
+            <p className="font-body-sm text-body-sm text-on-surface">Headed</p>
+            <p className="font-body-sm text-body-sm text-on-surface-variant">Opens a visible browser window for the run.</p>
+          </div>
+          <Switch checked={headed} onCheckedChange={(v) => setHeaded(v === true)} disabled={runStatus === "running"} />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container p-sm">
+          <div>
+            <p className="font-body-sm text-body-sm text-on-surface">Auto-fix Selectors</p>
+            <p className="font-body-sm text-body-sm text-on-surface-variant">
+              On failure, corrects the failing scenario(s) and re-runs automatically (bundled harness only).
+            </p>
+          </div>
+          <Switch checked={autoFix} onCheckedChange={(v) => setAutoFix(v === true)} disabled={runStatus === "running"} />
+        </div>
+
+        <Button disabled={runStatus === "running" || !baseUrl.trim()} onClick={handleRun}>
+          {runStatus === "running" ? "Running..." : "Run Test Suite"}
+        </Button>
+
+        {!onEventsChange && runEvents.length > 0 && (
+          <div className="flex flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm font-code-sm text-code-sm">
+            {runEvents.map((e, i) => (
+              <div key={i} className="flex items-start gap-sm">
+                <span
+                  className={cn(
+                    e.status === "done" && "text-log-success",
+                    e.status === "failed" && "text-error",
+                    e.status === "active" && "text-primary"
+                  )}
+                >
+                  {e.status === "done" ? "✓" : e.status === "failed" ? "✕" : "●"}
+                </span>
+                <span className="text-on-surface-variant">{linkifyUrl(e.label)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!onEventsChange && runStatus === "failed" && runError && <p className="font-body-sm text-body-sm text-error">{runError}</p>}
+
+        {runStatus === "done" && runResult && (
+          <div className="flex flex-col gap-md">
+            <div className="flex flex-wrap gap-xs">
+              <Badge variant="success">{runResult.passed} passed</Badge>
+              {runResult.failed > 0 && <Badge variant="destructive">{runResult.failed} failed</Badge>}
+              {runResult.skipped > 0 && <Badge variant="warning">{runResult.skipped} skipped</Badge>}
+            </div>
+
+            {runResult.fixAttempts && runResult.fixAttempts.length > 0 && (
+              <div className="rounded-lg border border-outline-variant bg-surface-container p-sm">
+                <p className="font-body-md text-body-md font-medium text-on-surface">Auto-fix history</p>
+                <p className="mb-sm font-body-sm text-body-sm text-on-surface-variant">
+                  Failing scenarios were rewritten in the generated .feature file and re-run. Only scenarios that
+                  were still failing at the start of each round were touched.
+                </p>
+                <div className="flex flex-col gap-xs">
+                  {runResult.fixAttempts.map((a) => (
+                    <div key={a.attempt} className="flex items-start gap-sm font-body-sm text-body-sm">
+                      <span className="material-symbols-outlined text-[16px] text-log-success">check</span>
+                      <span className="text-on-surface-variant">
+                        Attempt {a.attempt}: corrected {a.correctedScenarioTitles.length} scenario(s)
+                        {a.unfixableScenarioTitles.length > 0 && `, could not diagnose ${a.unfixableScenarioTitles.length}`} →{" "}
+                        {a.result.passed} passed, {a.result.failed} failed, {a.result.skipped} skipped
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-xs">
+              {runResult.tests.map((t, i) => (
+                <div key={i} className="flex items-center justify-between rounded border border-outline-variant px-sm py-1.5 font-body-sm text-body-sm">
+                  <span className="text-on-surface">{t.title}</span>
+                  <Badge variant={STATUS_VARIANT[t.status]}>{t.status}</Badge>
                 </div>
               ))}
             </div>
-          )}
-
-          <table>
-            <thead>
-              <tr>
-                <th>Test</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runResult.tests.map((t, i) => (
-                <tr key={i}>
-                  <td>{t.title}</td>
-                  <td>
-                    <span className={`badge ${t.status === "passed" ? "pass" : t.status === "failed" ? "fail" : "blocked"}`}>{t.status}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -292,11 +351,13 @@ export default function JobPage() {
     });
     es.addEventListener("done", (e) => {
       setResult(JSON.parse((e as MessageEvent).data));
+      setEvents((prev) => prev.map((ev) => (ev.status === "active" ? { ...ev, status: "done" } : ev)));
       setStatus("done");
       es.close();
     });
     es.addEventListener("failed", (e) => {
       setFailError(JSON.parse((e as MessageEvent).data));
+      setEvents((prev) => prev.map((ev) => (ev.status === "active" ? { ...ev, status: "failed" } : ev)));
       setStatus("failed");
       es.close();
     });

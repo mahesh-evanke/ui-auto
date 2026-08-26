@@ -2,72 +2,164 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
- * "Cockpit HUD" theme for the new step-by-step workflow (app/analysis/new) -
- * deep navy + electric cyan + amber, distinct from generic shadcn zinc/slate
- * defaults, fitting the TestPilot name. Older pages (Settings, the original
- * jobs/* flow) keep using the flat --bg/--surface/etc tokens below untouched;
- * these HSL tokens are additive, not a replacement, so nothing there needs
- * to change for the new page to render correctly.
+/* Material Symbols Outlined - loaded via <link> in app/layout.tsx; this just
+   sets the default variation-settings axis (unfilled, regular weight) so a
+   bare <span className="material-symbols-outlined">name</span> renders
+   consistently without repeating inline styles everywhere. Call sites still
+   override via style={{fontVariationSettings}} for filled/active icons. */
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  font-size: 20px;
+  line-height: 1;
+  user-select: none;
+}
+
+/* A soft radial glow anchored top-center, used behind the sign-in card and
+   the app shell background - matches the reference's decorative treatment
+   without competing with content (very low opacity, blurred). */
+.glow-backdrop {
+  background-image: radial-gradient(ellipse 900px 500px at 50% -10%, rgb(192 193 255 / 0.08), transparent 60%);
+}
+
+/* Theme tokens, one CSS variable per Material-3-style semantic color used by
+ * tailwind.config.ts's color block (and read directly here for the handful of
+ * places - box-shadow glows, gradients - that need a raw value Tailwind's
+ * arbitrary-value syntax doesn't reach as cleanly). next-themes toggles the
+ * `light`/`dark` class on <html>; "system" just picks whichever of those two
+ * matches the OS preference, so only two blocks are needed here.
+ *
+ * "Fixed" roles (primary-fixed, on-secondary-fixed, etc.) are intentionally
+ * identical in both themes - that's the point of the M3 "fixed" role: a
+ * stable pair of tones designed to keep working (contrast-wise) regardless
+ * of which scheme is active, so continuity elements don't need their own
+ * light/dark variants.
  */
-:root {
-  --background: 222 47% 6%;
-  --foreground: 210 25% 94%;
-  --card: 222 42% 9%;
-  --card-foreground: 210 25% 94%;
-  --popover: 222 42% 9%;
-  --popover-foreground: 210 25% 94%;
-  --primary: 189 94% 55%;
-  --primary-foreground: 222 47% 6%;
-  --secondary: 222 30% 15%;
-  --secondary-foreground: 210 25% 94%;
-  --muted: 222 28% 13%;
-  --muted-foreground: 215 16% 63%;
-  --accent: 38 92% 55%;
-  --accent-foreground: 222 47% 6%;
-  --destructive: 0 78% 60%;
-  --destructive-foreground: 210 25% 97%;
-  --success: 152 60% 45%;
-  --success-foreground: 222 47% 6%;
-  --warning: 38 92% 55%;
-  --warning-foreground: 222 47% 6%;
-  --border: 222 25% 18%;
-  --input: 222 25% 18%;
-  --ring: 189 94% 55%;
-  --radius: 0.75rem;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+:root,
+.dark {
+  --on-primary-fixed: #07006c;
+  --on-primary-fixed-variant: #2f2ebe;
+  --primary-fixed: #e1e0ff;
+  --primary-fixed-dim: #c0c1ff;
+  --on-secondary-fixed: #0d1c2d;
+  --on-secondary-fixed-variant: #39485a;
+  --secondary-fixed: #d4e4fa;
+  --secondary-fixed-dim: #b9c8de;
+  --on-tertiary-fixed: #301400;
+  --on-tertiary-fixed-variant: #703700;
+  --tertiary-fixed: #ffdcc5;
+  --tertiary-fixed-dim: #ffb783;
+
+  --background: #0b1326;
+  --on-background: #dae2fd;
+  --surface: #0b1326;
+  --surface-dim: #0b1326;
+  --surface-bright: #31394d;
+  --surface-container-lowest: #060e20;
+  --surface-container-low: #131b2e;
+  --surface-container: #171f33;
+  --surface-container-high: #222a3d;
+  --surface-container-highest: #2d3449;
+  --surface-variant: #2d3449;
+  --surface-tint: #c0c1ff;
+  --on-surface: #dae2fd;
+  --on-surface-variant: #c7c4d7;
+  --outline: #908fa0;
+  --outline-variant: #464554;
+  --inverse-surface: #dae2fd;
+  --inverse-on-surface: #283044;
+  --inverse-primary: #494bd6;
+
+  --primary: #c0c1ff;
+  --on-primary: #1000a9;
+  --primary-container: #8083ff;
+  --on-primary-container: #0d0096;
+
+  --secondary: #b9c8de;
+  --on-secondary: #233143;
+  --secondary-container: #39485a;
+  --on-secondary-container: #a7b6cc;
+
+  --tertiary: #ffb783;
+  --on-tertiary: #4f2500;
+  --tertiary-container: #d97721;
+  --on-tertiary-container: #452000;
+
+  --error: #ffb4ab;
+  --on-error: #690005;
+  --error-container: #93000a;
+  --on-error-container: #ffdad6;
+
+  --log-success: #68d391;
+  --log-warning: #f6e05e;
 }
 
-/* Subtle signature touches for the new workflow page - a soft radial cyan
-   glow anchored top-center and a faint dot grid, kept low-contrast so they
-   read as texture, not decoration competing with content. */
-.hud-backdrop {
-  background-image:
-    radial-gradient(ellipse 900px 500px at 50% -10%, hsl(var(--primary) / 0.12), transparent 60%),
-    radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px);
-  background-size: auto, 24px 24px;
-  background-position: 0 0, 0 0;
-}
-.hud-glow {
-  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.4), 0 0 24px -4px hsl(var(--primary) / 0.35);
-}
-.hud-scanline {
-  background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.6), transparent);
-  background-size: 200% 100%;
-  animation: shimmer 2.5s linear infinite;
+.light {
+  --background: #f9f9fd;
+  --on-background: #1b1b23;
+  --surface: #f9f9fd;
+  --surface-dim: #d9d9e0;
+  --surface-bright: #f9f9fd;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f3f3f9;
+  --surface-container: #ededf5;
+  --surface-container-high: #e7e7f0;
+  --surface-container-highest: #e1e1eb;
+  --surface-variant: #e3e1ec;
+  --surface-tint: #494bd6;
+  --on-surface: #1b1b23;
+  --on-surface-variant: #46464f;
+  --outline: #767680;
+  --outline-variant: #c7c5d0;
+  --inverse-surface: #303036;
+  --inverse-on-surface: #f2f0f7;
+  --inverse-primary: #c0c1ff;
+
+  --primary: #494bd6;
+  --on-primary: #ffffff;
+  --primary-container: #e0e0ff;
+  --on-primary-container: #100095;
+
+  --secondary: #47576b;
+  --on-secondary: #ffffff;
+  --secondary-container: #d4e4fa;
+  --on-secondary-container: #0d2237;
+
+  --tertiary: #8a4a00;
+  --on-tertiary: #ffffff;
+  --tertiary-container: #ffdcc2;
+  --on-tertiary-container: #2c1500;
+
+  --error: #ba1a1a;
+  --on-error: #ffffff;
+  --error-container: #ffdad6;
+  --on-error-container: #410002;
+
+  --log-success: #1e7a45;
+  --log-warning: #8a5a00;
 }
 
 :root {
-  --bg: #0b0d10;
-  --surface: #14171c;
-  --surface-2: #1b1f26;
-  --border: #2a2f38;
-  --text: #e6e8eb;
-  --text-dim: #9aa1ab;
-  --accent: #4f8cff;
-  --good: #35c46b;
-  --bad: #f0553f;
-  --warn: #e8b339;
+  /* Legacy flat aliases - still used by app/jobs/*, app/analysis/[jobId]
+   * (pre-redesign pages kept working as fallback deep links). Defined as
+   * cross-references to the tokens above so those pages theme-swap too,
+   * without needing their own light/dark blocks.
+   */
+  --bg: var(--background);
+  /* Deliberately NOT named --surface: that name is already the M3 "surface"
+   * role above (== background), which Tailwind's `surface` utility reads.
+   * The legacy .card background is a different, lighter tone (== M3
+   * surface-container-low), so it gets its own name here to avoid silently
+   * overriding the real --surface token. */
+  --card-bg: var(--surface-container-low);
+  --surface-2: var(--surface-container);
+  --border: var(--outline-variant);
+  --text: var(--on-surface);
+  --text-dim: var(--on-surface-variant);
+  --accent: var(--primary);
+  --on-accent: var(--on-primary);
+  --good: var(--log-success);
+  --bad: var(--error);
+  --warn: var(--tertiary);
 }
 
 * { box-sizing: border-box; }
@@ -77,11 +169,17 @@ html, body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 a { color: var(--accent); }
 
+/* --- Legacy flat classes: still used by app/jobs/*, app/analysis/[jobId] ---
+ * (the pre-redesign pages, kept working as fallback deep links - not part of
+ * the primary shell-wrapped flow, so not worth re-skinning component-by-component).
+ * Colors above were updated to the same palette as the new design, so these
+ * pages read as visually consistent even though their markup wasn't touched.
+ */
 .container {
   max-width: 920px;
   margin: 0 auto;
@@ -101,7 +199,7 @@ a { color: var(--accent); }
 .topbar nav a:hover { color: var(--text); }
 
 .card {
-  background: var(--surface);
+  background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 20px;
@@ -113,7 +211,7 @@ a { color: var(--accent); }
   align-items: center;
   gap: 8px;
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   border-radius: 8px;
   padding: 10px 16px;
@@ -147,9 +245,9 @@ th { color: var(--text-dim); font-weight: 500; }
   font-size: 12px;
   font-weight: 600;
 }
-.badge.pass { background: rgba(53,196,107,0.15); color: var(--good); }
-.badge.fail { background: rgba(240,85,63,0.15); color: var(--bad); }
-.badge.blocked { background: rgba(232,179,57,0.15); color: var(--warn); }
+.badge.pass { background: rgba(104,211,145,0.15); color: var(--good); }
+.badge.fail { background: rgba(255,180,171,0.15); color: var(--bad); }
+.badge.blocked { background: rgba(255,183,131,0.15); color: var(--warn); }
 .badge.private { background: rgba(255,255,255,0.08); color: var(--text-dim); }
 
 .checklist-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 14px; }

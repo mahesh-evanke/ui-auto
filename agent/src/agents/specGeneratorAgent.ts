@@ -1,19 +1,6 @@
 import type { LlmClient } from "../llm/llmClient.js";
 import type { GeneratedScenarioSteps, GeneratedSpec, RepoAnalysis, RequirementSet } from "../types.js";
-
-const SYSTEM_PROMPT = `You are a Test Generation Agent. You generate a single Playwright end-to-end
-test spec file (TypeScript, using @playwright/test) that will verify an ALREADY-IMPLEMENTED
-feature. You do NOT implement, run, or fix application code, and you never open a browser
-yourself - you only write the test file's source code for someone else to run later.
-
-Rules:
-- Use "import { test, expect } from '@playwright/test';" at the top.
-- Use page.goto('/') or relative paths - the baseURL is configured externally, do not hardcode a host.
-- Prefer resilient locators: getByRole, getByLabel, getByText, getByTestId. Avoid brittle CSS selectors when a semantic one is plausible.
-- Write one test() per scenario, grouped with test.describe() per requirement, using the already-decided step list (as comments plus corresponding Playwright actions/assertions) provided below - do not invent different steps.
-- Include a comment mapping each test back to its requirement id and scenario id, e.g. "// REQ-001 / SC-1".
-- Base selectors on the provided relevant file excerpts (existing page objects/components/fixtures) when available - reuse an existing pattern rather than guessing a new one.
-- Output ONLY the raw TypeScript file content. No markdown fences, no prose before or after.`;
+import { getPrompt } from "../promptStore.js";
 
 export async function generatePlaywrightSpec(
   client: LlmClient,
@@ -44,7 +31,7 @@ Generate the full Playwright spec file now.`;
 
   const raw = await client.chat(
     [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: getPrompt("spec-generator.system") },
       { role: "user", content: userPrompt },
     ],
     { temperature: 0.15 }

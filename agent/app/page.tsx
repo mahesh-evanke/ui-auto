@@ -1,8 +1,9 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import { authOptions } from "../lib/auth.js";
 
-export default async function HomePage() {
-  const session = await getServerSession(authOptions);
-  redirect(session ? "/repositories" : "/signin");
+// The dashboard (repositories) is the single entry point for everyone -
+// signed in or not. Signed-out visitors see a "Sign in with GitHub" button
+// in the top bar plus the "Analyze by URL" option, instead of being routed
+// through a separate sign-in page.
+export default function HomePage() {
+  redirect("/repositories");
 }

@@ -1,0 +1,3 @@
+Scope: API only. Every scenario description must be about a backend request and its
+response - status codes, response fields, error responses. Do not describe screens,
+clicks, or anything about the UI; there is no browser interaction here.

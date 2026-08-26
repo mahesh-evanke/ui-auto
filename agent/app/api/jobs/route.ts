@@ -13,10 +13,8 @@ function isTestScope(v: unknown): v is TestScope {
 }
 
 export async function POST(req: NextRequest) {
+  // Optional, same rationale as /api/analysis - only needed for private-repo cloning.
   const token = await getGithubAccessToken(req);
-  if (!token) {
-    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-  }
 
   const body = (await req.json().catch(() => null)) as
     | { cloneUrl?: string; branch?: string; requirement?: string; outputFormat?: string; testScope?: string }
@@ -35,7 +33,7 @@ export async function POST(req: NextRequest) {
     model: process.env.TESTPILOT_MODEL ?? DEFAULT_MODEL,
     ollamaHost: process.env.OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST,
     referenceFrameworkPath: process.env.TESTPILOT_REFERENCE_FRAMEWORK_PATH ?? DEFAULT_REFERENCE_FRAMEWORK_PATH,
-    githubToken: token,
+    githubToken: token ?? undefined,
     provider: modelSettings.provider,
     openaiToken: modelSettings.openaiToken,
     openaiModel: modelSettings.openaiModel,

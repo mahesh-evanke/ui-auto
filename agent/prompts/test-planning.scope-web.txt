@@ -1,0 +1,3 @@
+Scope: UI only. Every scenario description must be about what happens on screen -
+what's visible, clickable, or navigable. Do not describe backend requests, status codes,
+or response bodies; there is no API testing here.

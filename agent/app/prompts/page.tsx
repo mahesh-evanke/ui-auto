@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Badge } from "../../components/ui/badge.js";
 import { Button } from "../../components/ui/button.js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.js";
@@ -15,10 +16,16 @@ interface PromptItem {
   isDefault: boolean;
 }
 
-export default function PromptsPage() {
+function PromptsPageInner() {
+  const searchParams = useSearchParams();
+  // Coming from a "Prompt firing" badge in an Execution Log (?id=<promptId>)
+  // takes priority over the plain first-item default, but only the first
+  // time the list loads - once the user clicks around, their own selection
+  // wins even if this component re-renders.
+  const requestedId = searchParams?.get("id") ?? null;
   const [prompts, setPrompts] = useState<PromptItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(requestedId);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -28,7 +35,7 @@ export default function PromptsPage() {
       .then((res) => res.json())
       .then((data) => {
         setPrompts(data.prompts);
-        setSelectedId((prev) => prev ?? data.prompts[0]?.id ?? null);
+        setSelectedId((prev) => prev ?? requestedId ?? data.prompts[0]?.id ?? null);
       })
       .catch((err) => setError(err.message ?? String(err)));
   }
@@ -178,5 +185,13 @@ export default function PromptsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function PromptsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <PromptsPageInner />
+    </Suspense>
   );
 }

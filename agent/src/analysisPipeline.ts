@@ -45,7 +45,8 @@ export async function runRequirementsAnalysis(
   onLog: (line: string) => void = () => {},
   existingJobId?: string
 ): Promise<{ paths: JobPaths; result: AnalysisResult; resolvedRepo: ResolvedRepo }> {
-  const emit = (label: string, status: ProgressEvent["status"] = "done") => onProgress({ label, status });
+  const emit = (label: string, status: ProgressEvent["status"] = "done", promptId?: string) =>
+    onProgress({ label, status, promptId });
 
   const client = createLlmClient({
     provider: opts.provider ?? "ollama",
@@ -111,7 +112,7 @@ export async function runRequirementsAnalysis(
     );
   }
 
-  emit("Analyzing requirements...", "active");
+  emit("Sending prompt to Requirement Agent...", "active", "requirement-agent.system");
   const requirements = await generateRequirements(client, combinedText, analysis);
   emit(`Requirements identified: ${requirements.requirements.length}`);
 
@@ -122,6 +123,7 @@ export async function runRequirementsAnalysis(
     const legacyExcerpts = legacyAnalysis
       ? retrieveRelevantFiles(legacyAnalysis.rootDir, legacyAnalysis.candidateFiles, req.description, 5)
       : [];
+    emit(`Sending prompt to Gap Analysis Agent (${req.id})...`, "active", "gap-analysis.system");
     const obs = await analyzeRequirementGap(client, {
       requirement: req,
       relevantFiles,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteProject, getProject, renameProject } from "../../../../src/workspace/projectStore.js";
+import { deleteProject, getProject, updateProject } from "../../../../src/workspace/projectStore.js";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -10,15 +10,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
-/** Renames a project. */
+interface UpdateProjectBody {
+  name?: string;
+  owner?: string;
+  repo?: string;
+  cloneUrl?: string;
+  defaultBranch?: string;
+}
+
+/** Renames a project and/or repoints it at a different repo/branch - whichever fields are given. */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = (await req.json().catch(() => null)) as { name?: string } | null;
-  if (typeof body?.name !== "string") {
-    return NextResponse.json({ error: "name is required" }, { status: 400 });
+  const body = (await req.json().catch(() => null)) as UpdateProjectBody | null;
+  if (!body || Object.keys(body).length === 0) {
+    return NextResponse.json({ error: "At least one field to update is required" }, { status: 400 });
   }
   try {
-    return NextResponse.json(renameProject(id, body.name));
+    return NextResponse.json(updateProject(id, body));
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
   }

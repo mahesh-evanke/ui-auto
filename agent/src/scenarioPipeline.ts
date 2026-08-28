@@ -80,7 +80,8 @@ export async function buildManualScenarios(
   opts: LlmSettings & { notes?: string; testScope?: TestScope },
   onProgress: (event: ProgressEvent) => void
 ): Promise<{ paths: JobPaths; testPlan: TestPlan }> {
-  const emit = (label: string, status: ProgressEvent["status"] = "done") => onProgress({ label, status });
+  const emit = (label: string, status: ProgressEvent["status"] = "done", promptId?: string) =>
+    onProgress({ label, status, promptId });
   const paths = getJobPaths(jobId);
   const analysisResult = loadAnalysisResult(jobId);
   const inputs = loadAnalysisInputs(jobId);
@@ -97,7 +98,7 @@ export async function buildManualScenarios(
     requirements: analysisResult.requirements.requirements.map((r) => ({ ...r, description: r.description + notesSuffix })),
   };
 
-  emit("Building manual test scenarios...", "active");
+  emit("Sending prompt to Test Planning Agent...", "active", "test-planning.template");
   const testPlan = await buildTestPlan(
     client,
     requirementsWithNotes,
@@ -133,7 +134,8 @@ export async function generateAutomationFromScenarios(
   opts: LlmSettings & { outputFormat?: OutputFormat; testScope?: TestScope; referenceFrameworkPath?: string },
   onProgress: (event: ProgressEvent) => void
 ): Promise<{ paths: JobPaths; artifacts: GeneratedArtifact[]; report: TestGenerationReport }> {
-  const emit = (label: string, status: ProgressEvent["status"] = "done") => onProgress({ label, status });
+  const emit = (label: string, status: ProgressEvent["status"] = "done", promptId?: string) =>
+    onProgress({ label, status, promptId });
   const startedAt = new Date().toISOString();
   const paths = getJobPaths(jobId);
   const analysisResult = loadAnalysisResult(jobId);
@@ -224,7 +226,7 @@ export async function generateAutomationFromScenarios(
 
     const newUiSteps = usableScenarioSteps.flatMap((s) => s.steps).filter((s) => !s.reused);
     if (newUiSteps.length > 0) {
-      emit("Generating new step definitions...", "active");
+      emit("Sending prompt to Step Definition Generator Agent...", "active", "step-definition-generator.system");
       const content = await generateStepDefinitions(client, newUiSteps);
       const fileName = `${featureSlug}.steps.ts`;
       const relPath = `cucumber/step-definitions/${fileName}`;
@@ -236,7 +238,7 @@ export async function generateAutomationFromScenarios(
   }
 
   if (wantSpec) {
-    emit("Generating Playwright spec...", "active");
+    emit("Sending prompt to Spec Generator Agent...", "active", "spec-generator.system");
     const excerpts = testPlan.items
       .flatMap((item) => {
         const req = analysisResult.requirements.requirements.find((r) => r.id === item.requirementId);

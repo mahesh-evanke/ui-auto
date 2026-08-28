@@ -274,23 +274,37 @@ export function AppShell({
           })}
         </nav>
 
-        {projects && projects.length > 0 && (
-          <>
-            <div className="my-xs border-t border-outline-variant" />
-            <div className="flex flex-1 flex-col gap-xs overflow-y-auto px-sm pb-sm">
-              <p className="px-sm font-label-caps text-label-caps text-on-surface-variant">Projects</p>
-              {projects.map((p) => (
-                <ProjectRow
-                  key={p.id}
-                  project={p}
-                  active={p.id === activeProjectId}
-                  onRenamed={handleRenamed}
-                  onDeleted={handleDeleted}
-                />
-              ))}
-            </div>
-          </>
-        )}
+        <div className="my-xs border-t border-outline-variant" />
+        <div className="flex flex-1 flex-col gap-xs overflow-y-auto px-sm pb-sm">
+          <div className="flex items-center justify-between px-sm">
+            <p className="font-label-caps text-label-caps text-on-surface-variant">Projects</p>
+            <Link
+              href="/analysis/new"
+              title="Add project"
+              aria-label="Add project"
+              className="flex h-5 w-5 items-center justify-center rounded text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface no-underline"
+            >
+              <span className="material-symbols-outlined text-[16px]">add</span>
+            </Link>
+          </div>
+          {!projects ? (
+            <p className="px-sm font-body-sm text-body-sm text-on-surface-variant">Loading...</p>
+          ) : projects.length === 0 ? (
+            <p className="px-sm font-body-sm text-body-sm text-on-surface-variant">
+              No projects yet - pick a repository to create one.
+            </p>
+          ) : (
+            projects.map((p) => (
+              <ProjectRow
+                key={p.id}
+                project={p}
+                active={p.id === activeProjectId}
+                onRenamed={handleRenamed}
+                onDeleted={handleDeleted}
+              />
+            ))
+          )}
+        </div>
       </aside>
 
       <main className="ml-sidebar_width mt-topbar_height min-h-[calc(100vh-56px)] p-lg">{children}</main>

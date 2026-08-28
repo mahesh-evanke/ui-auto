@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../components/ui/button.js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card.js";
@@ -9,10 +9,12 @@ import { Textarea } from "../../../components/ui/textarea.js";
 import { Label } from "../../../components/ui/label.js";
 import { Badge } from "../../../components/ui/badge.js";
 import { Switch } from "../../../components/ui/checkbox.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs.js";
 import { Stepper, type StepDef } from "../../../components/ui/stepper.js";
 import { TaskProgress, type ProgressEvent } from "../../../components/task-progress.js";
 import { RunTestsPanel } from "../../jobs/[jobId]/page.js";
+import { deriveRepoLabel, useGithubBranches } from "../../../lib/githubRepo.js";
 
 // --- Shared shapes -----------------------------------------------------
 
@@ -59,6 +61,12 @@ interface GeneratedArtifact {
   relativePath: string;
 }
 
+interface CoverageRow {
+  requirementId: string;
+  scenarioId: string;
+  artifactFileName: string;
+}
+
 interface TestGenerationReport {
   scenarioCount: number;
   reusedStepsCount: number;
@@ -66,6 +74,7 @@ interface TestGenerationReport {
   requirementsCoveredCount: number;
   requirementsTotalCount: number;
   artifacts: GeneratedArtifact[];
+  coverage: CoverageRow[];
   gaps: string[];
 }
 
@@ -130,7 +139,14 @@ function useTask<T>(onDone: (result: T) => void) {
     setError(null);
   }
 
-  return { status, events, error, start, reset: () => setStatus("idle") };
+  function reset() {
+    setTaskId(null);
+    setStatus("idle");
+    setEvents([]);
+    setError(null);
+  }
+
+  return { status, events, error, start, reset };
 }
 
 interface LogGroup {
@@ -217,33 +233,108 @@ function Wizard() {
   const params = useSearchParams();
   const projectId = params.get("projectId");
 
-  // The wizard is always reached with a projectId now (every repo entry
-  // point creates a Project first) - the owner/repo/cloneUrl/defaultBranch
+  // The wizard is reached either with a projectId (every repo entry point
+  // that already knows its repo creates a Project first) or completely
+  // blank (the sidebar's "+" next to Projects) - in the blank case the
+  // Repository section below is empty and editable, and Save/Analyze
+  // create the Project on first use. owner/repo/cloneUrl/defaultBranch
   // query params are kept only as a fallback for any old bookmarked link
   // from before Projects existed.
   const [project, setProject] = useState<Project | null>(null);
   const [projectLoading, setProjectLoading] = useState(Boolean(projectId));
   const [projectError, setProjectError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!projectId) return;
-    setProjectLoading(true);
-    setProjectError(null);
-    fetch(`/api/projects/${encodeURIComponent(projectId)}`)
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-        setProject(data);
-      })
-      .catch((err) => setProjectError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setProjectLoading(false));
-  }, [projectId]);
+  // Tracks a projectId this component itself just created (via Save or
+  // Analyze on a blank draft) and is about to push into the URL - the
+  // project-switch effect further down uses this to tell "we made this
+  // project, state is already correct" apart from "the user navigated to a
+  // different project", which needs a state reset. Without this, creating a
+  // project from a blank draft would look identical to switching projects
+  // and wipe out whatever the user just typed (documents, notes, etc.)
+  // moments before Analyze's request even finishes.
+  const createdProjectIdRef = useRef<string | null>(null);
+  const prevProjectIdRef = useRef<string | null>(projectId);
 
   const owner = project?.owner ?? params.get("owner") ?? "";
   const repo = project?.repo ?? params.get("repo") ?? "";
   const cloneUrl = project?.cloneUrl ?? params.get("cloneUrl") ?? "";
   const defaultBranch = project?.defaultBranch ?? params.get("defaultBranch") ?? "main";
-  const projectName = project?.name ?? (owner ? `${owner}/${repo}` : repo);
+  const projectName = project?.name || (owner ? `${owner}/${repo}` : repo) || "New Project";
+
+  // Editable Repository section - separate draft state from the resolved
+  // owner/repo/cloneUrl/defaultBranch above, so typing doesn't affect
+  // anything (the Analyze call, the header) until Save actually commits it.
+  const [repoUrlDraft, setRepoUrlDraft] = useState(cloneUrl);
+  const [repoBranchDraft, setRepoBranchDraft] = useState(defaultBranch);
+  const [savingRepo, setSavingRepo] = useState(false);
+  const [repoSaveStatus, setRepoSaveStatus] = useState<string | null>(null);
+  const { branches: repoBranches, defaultBranch: repoDefaultBranch, loading: loadingRepoBranches } = useGithubBranches(repoUrlDraft);
+
+  useEffect(() => {
+    setRepoUrlDraft(cloneUrl);
+    setRepoBranchDraft(defaultBranch);
+  }, [cloneUrl, defaultBranch]);
+
+  useEffect(() => {
+    if (repoDefaultBranch && repoUrlDraft !== cloneUrl) setRepoBranchDraft((prev) => prev || repoDefaultBranch);
+  }, [repoDefaultBranch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * No projectId yet (reached via the sidebar's "+" with a blank wizard) -
+   * saving the Repository section is what creates the Project, exactly like
+   * RepoUrlForm's "Continue with this repository" does. The URL is updated
+   * (replace, not push) so every subsequent action - Analyze, a page
+   * refresh - has a real project to work against.
+   */
+  async function createProjectFromDraft(cloneUrlValue: string, branchValue: string): Promise<Project> {
+    const { owner: newOwner, repo: newRepo } = deriveRepoLabel(cloneUrlValue);
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner: newOwner, repo: newRepo, cloneUrl: cloneUrlValue, defaultBranch: branchValue || "main" }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+    createdProjectIdRef.current = data.id;
+    router.replace(`/analysis/new?projectId=${encodeURIComponent(data.id)}`, { scroll: false });
+    return data as Project;
+  }
+
+  async function handleSaveRepo() {
+    const trimmedUrl = repoUrlDraft.trim();
+    if (!trimmedUrl) {
+      setRepoSaveStatus("Enter a repository URL.");
+      return;
+    }
+    setSavingRepo(true);
+    setRepoSaveStatus(null);
+    try {
+      if (!projectId) {
+        const created = await createProjectFromDraft(trimmedUrl, repoBranchDraft.trim());
+        setProject(created);
+      } else {
+        const { owner: newOwner, repo: newRepo } = deriveRepoLabel(trimmedUrl);
+        const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            owner: newOwner,
+            repo: newRepo,
+            cloneUrl: trimmedUrl,
+            defaultBranch: repoBranchDraft.trim() || "main",
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+        setProject(data);
+      }
+      setRepoSaveStatus("Saved.");
+    } catch (err) {
+      setRepoSaveStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingRepo(false);
+    }
+  }
 
   const [step, setStep] = useState(1);
 
@@ -277,6 +368,68 @@ function Wizard() {
   const [runEvents, setRunEvents] = useState<ProgressEvent[]>([]);
   const [runError, setRunError] = useState<string | null>(null);
 
+  // Loads the project for the current projectId, and resets every piece of
+  // wizard state on a genuine project switch (a different existing project
+  // via the sidebar, or back to the blank "+" draft) - but NOT when this
+  // projectId is one this component itself just created via Save/Analyze
+  // (see createdProjectIdRef above), so that flow keeps whatever the user
+  // already typed instead of wiping it out mid-Analyze.
+  useEffect(() => {
+    if (createdProjectIdRef.current === projectId) {
+      createdProjectIdRef.current = null;
+      prevProjectIdRef.current = projectId;
+      return;
+    }
+
+    if (prevProjectIdRef.current !== projectId) {
+      prevProjectIdRef.current = projectId;
+      setStep(1);
+      setDocumentText("");
+      setDocumentFileName(null);
+      setLinksText("");
+      setNotes("");
+      setIsModernization(false);
+      setLegacyRepo("");
+      setLegacyBranch("");
+      setLegacyDocumentText("");
+      setLegacyDocumentFileName(null);
+      setLegacyLinksText("");
+      setLegacyNotes("");
+      setSourceError(null);
+      setJobId(null);
+      setAnalysisResult(null);
+      analysisTask.reset();
+      setManualNotes("");
+      setTestPlan(null);
+      manualTask.reset();
+      setOutputFormat("gherkin");
+      setReport(null);
+      automationTask.reset();
+      setRunEvents([]);
+      setRunError(null);
+      setRepoSaveStatus(null);
+    }
+
+    if (!projectId) {
+      // Blank draft (the sidebar's "+") - no project to load.
+      setProject(null);
+      setProjectLoading(false);
+      setProjectError(null);
+      return;
+    }
+    setProjectLoading(true);
+    setProjectError(null);
+    fetch(`/api/projects/${encodeURIComponent(projectId)}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+        setProject(data);
+      })
+      .catch((err) => setProjectError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setProjectLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
   async function handleDocumentUpload(file: File) {
     const text = await file.text();
     setDocumentText(text);
@@ -299,6 +452,32 @@ function Wizard() {
       setSourceError("Legacy modernization is on - provide the legacy repository.");
       return;
     }
+
+    // Reached with no project yet (the sidebar's "+"): the Repository
+    // section's draft is the repo, and Analyze is a single action that
+    // creates the Project and starts analysis together - no separate Save
+    // click required first.
+    let activeProjectId = projectId;
+    let activeCloneUrl = cloneUrl;
+    let activeBranch = defaultBranch;
+    if (!activeProjectId) {
+      const trimmedUrl = repoUrlDraft.trim();
+      if (!trimmedUrl) {
+        setSourceError("Provide a Git repository URL in the Repository section before analyzing.");
+        return;
+      }
+      setSourceError(null);
+      try {
+        const created = await createProjectFromDraft(trimmedUrl, repoBranchDraft.trim());
+        setProject(created);
+        activeProjectId = created.id;
+        activeCloneUrl = created.cloneUrl;
+        activeBranch = created.defaultBranch;
+      } catch (err) {
+        setSourceError(err instanceof Error ? err.message : String(err));
+        return;
+      }
+    }
     setSourceError(null);
 
     const legacyLinks = legacyLinksText.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -319,7 +498,9 @@ function Wizard() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
-        jobId ? { sources } : { repo: cloneUrl, branch: defaultBranch, sources, projectId: projectId ?? undefined }
+        jobId
+          ? { sources }
+          : { repo: activeCloneUrl, branch: activeBranch, sources, projectId: activeProjectId ?? undefined }
       ),
     });
     const data = await res.json();
@@ -361,14 +542,12 @@ function Wizard() {
     );
   }
 
-  if (projectError || !repo || !cloneUrl) {
+  if (projectError) {
     return (
       <div className="mx-auto max-w-lg py-24 text-center">
         <Card>
           <CardContent className="pt-lg">
-            <p className="mb-md font-body-md text-body-md text-on-surface-variant">
-              {projectError ?? "No repository selected."}
-            </p>
+            <p className="mb-md font-body-md text-body-md text-on-surface-variant">{projectError}</p>
             <Button onClick={() => router.push("/repositories")}>Choose a repository</Button>
           </CardContent>
         </Card>
@@ -382,6 +561,11 @@ function Wizard() {
   const scenarioCount = testPlan?.items.reduce((n, i) => n + i.scenarios.length, 0) ?? 0;
   const coveragePct = report ? Math.round((report.requirementsCoveredCount / Math.max(report.requirementsTotalCount, 1)) * 100) : 0;
   const stepReusePct = report ? Math.round((report.reusedStepsCount / Math.max(report.reusedStepsCount + report.newStepsCount, 1)) * 100) : 0;
+  // Coverage rows only carry a scenarioId - look the actual scenario text
+  // back up in the test plan so the Requirements Coverage dropdown can show
+  // what each covering scenario actually says, not just a count.
+  const scenarioById = new Map<string, TestScenario>();
+  testPlan?.items.forEach((item) => item.scenarios.forEach((s) => scenarioById.set(s.id, s)));
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -405,34 +589,6 @@ function Wizard() {
         <div className="flex animate-fade-in flex-col gap-lg">
         <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
           <div className="flex flex-col gap-lg">
-            <CollapsibleCard
-              icon="folder"
-              title="Repository"
-              description={`${owner ? `${owner}/${repo}` : repo} · ${defaultBranch}`}
-            >
-              <div className="flex flex-col gap-xs font-body-sm text-body-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-on-surface-variant">Repository</span>
-                  <span className="text-on-surface">{owner ? `${owner}/${repo}` : repo}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-on-surface-variant">Clone URL</span>
-                  <span className="truncate font-code-sm text-code-sm text-on-surface" title={cloneUrl}>{cloneUrl}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-on-surface-variant">Branch</span>
-                  <span className="text-on-surface">{defaultBranch}</span>
-                </div>
-              </div>
-              <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Set when this project was created. To point it at a different repository,{" "}
-                <button type="button" onClick={() => router.push("/repositories")} className="text-primary underline underline-offset-2">
-                  start a new project
-                </button>
-                .
-              </p>
-            </CollapsibleCard>
-
             <CollapsibleCard
               icon="inbox"
               title="Requirement Intake"
@@ -543,6 +699,63 @@ function Wizard() {
               <Button size="lg" disabled={analyzing} onClick={handleAnalyze} className="w-full sm:w-auto">
                 {analyzing ? "Analyzing..." : jobId ? "Re-analyze" : "Analyze"}
               </Button>
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="folder"
+              title="Repository"
+              description={cloneUrl ? `${owner ? `${owner}/${repo}` : repo} · ${defaultBranch}` : "No repository set yet"}
+              defaultOpen={!cloneUrl}
+            >
+              <div>
+                <Label className="mb-1 block" htmlFor="repo-url-draft">Git Repository URL</Label>
+                <Input
+                  id="repo-url-draft"
+                  value={repoUrlDraft}
+                  onChange={(e) => setRepoUrlDraft(e.target.value)}
+                  disabled={savingRepo || analyzing || Boolean(jobId)}
+                  placeholder="https://github.com/org/repo.git or a local path"
+                />
+              </div>
+              <div>
+                <Label className="mb-1 block" htmlFor="repo-branch-draft">Branch</Label>
+                {repoBranches && repoBranches.length > 0 ? (
+                  <Select value={repoBranchDraft} onValueChange={setRepoBranchDraft} disabled={savingRepo || analyzing || Boolean(jobId)}>
+                    <SelectTrigger id="repo-branch-draft">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {repoBranches.map((b) => (
+                        <SelectItem key={b} value={b}>{b}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="repo-branch-draft"
+                    value={repoBranchDraft}
+                    onChange={(e) => setRepoBranchDraft(e.target.value)}
+                    disabled={savingRepo || analyzing || Boolean(jobId)}
+                    placeholder={loadingRepoBranches ? "Loading branches..." : "main"}
+                  />
+                )}
+              </div>
+              {Boolean(jobId) && (
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  Locked - analysis has already started for this project. Start a new project to analyze a different repository.
+                </p>
+              )}
+              <div className="flex items-center gap-sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={savingRepo || analyzing || Boolean(jobId) || (repoUrlDraft.trim() === cloneUrl && repoBranchDraft.trim() === defaultBranch)}
+                  onClick={handleSaveRepo}
+                >
+                  {savingRepo ? "Saving..." : "Save"}
+                </Button>
+                {repoSaveStatus && <p className="font-body-sm text-body-sm text-on-surface-variant">{repoSaveStatus}</p>}
+              </div>
             </CollapsibleCard>
           </div>
 
@@ -882,6 +1095,67 @@ function Wizard() {
                           <p className="font-headline-md text-headline-md text-on-surface">{coveragePct}%</p>
                         </div>
                       </div>
+
+                      {analysisResult && analysisResult.requirements.requirements.length > 0 && (
+                        <div>
+                          <h4 className="mb-1 font-body-md text-body-md font-semibold text-on-surface">Requirements Coverage</h4>
+                          <p className="mb-sm font-body-sm text-body-sm text-on-surface-variant">
+                            Every requirement from Step 1, mapped against the {report.scenarioCount} generated scenario(s) -
+                            open one to see exactly which scenario(s) cover it.
+                          </p>
+                          <div className="flex flex-col gap-xs">
+                            {analysisResult.requirements.requirements.map((r) => {
+                              const coverageRows = report.coverage.filter((c) => c.requirementId === r.id);
+                              const scenarioIds = Array.from(new Set(coverageRows.map((c) => c.scenarioId)));
+                              const covered = scenarioIds.length > 0;
+                              return (
+                                <CollapsibleItem
+                                  key={r.id}
+                                  summary={
+                                    <div className="flex items-start justify-between gap-sm">
+                                      <p className="min-w-0 font-body-sm text-body-sm text-on-surface">
+                                        <span className="font-semibold text-primary">{r.id}</span> — {r.description}
+                                      </p>
+                                      <Badge variant={covered ? "success" : "destructive"} className="shrink-0">
+                                        {covered ? `${scenarioIds.length} scenario${scenarioIds.length === 1 ? "" : "s"} covered` : "Not covered"}
+                                      </Badge>
+                                    </div>
+                                  }
+                                >
+                                  {covered ? (
+                                    <ul className="flex flex-col gap-xs">
+                                      {scenarioIds.map((sid) => {
+                                        const scenario = scenarioById.get(sid);
+                                        const artifacts = Array.from(
+                                          new Set(coverageRows.filter((c) => c.scenarioId === sid).map((c) => c.artifactFileName))
+                                        );
+                                        return (
+                                          <li
+                                            key={sid}
+                                            className="flex flex-col gap-1 rounded-lg border border-outline-variant bg-surface-container-lowest p-sm"
+                                          >
+                                            <div className="flex items-start gap-sm font-code-sm text-code-sm text-on-surface">
+                                              {scenario && <Badge variant="secondary" className="shrink-0">{scenario.category}</Badge>}
+                                              <span>{scenario ? scenario.description : sid}</span>
+                                            </div>
+                                            {artifacts.length > 0 && (
+                                              <p className="font-body-sm text-body-sm text-on-surface-variant">{artifacts.join(", ")}</p>
+                                            )}
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  ) : (
+                                    <p className="font-body-sm text-body-sm text-on-surface-variant">
+                                      No generated scenario references this requirement.
+                                    </p>
+                                  )}
+                                </CollapsibleItem>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       <div>
                         <h4 className="mb-1 font-body-md text-body-md font-semibold text-on-surface">Generated artifacts</h4>

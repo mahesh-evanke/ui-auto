@@ -89,10 +89,40 @@ export function addJobToProject(projectId: string, jobId: string): void {
 }
 
 export function renameProject(id: string, name: string): Project {
+  return updateProject(id, { name });
+}
+
+/**
+ * Repointing a project at a different repo/branch (via the wizard's
+ * Repository section) only updates this record - it does NOT re-clone or
+ * touch any existing job under agent-workspace/. The next Analyze run
+ * resolves the new repo fresh; prior jobs still reflect whatever repo they
+ * were actually run against.
+ */
+export function updateProject(
+  id: string,
+  patch: Partial<Pick<Project, "name" | "owner" | "repo" | "cloneUrl" | "defaultBranch">>
+): Project {
   const project = getProject(id);
-  const trimmed = name.trim();
-  if (!trimmed) throw new Error("Project name cannot be empty");
-  project.name = trimmed;
+  if (patch.name !== undefined) {
+    const trimmed = patch.name.trim();
+    if (!trimmed) throw new Error("Project name cannot be empty");
+    project.name = trimmed;
+  }
+  if (patch.owner !== undefined) project.owner = patch.owner;
+  if (patch.repo !== undefined) {
+    const trimmed = patch.repo.trim();
+    if (!trimmed) throw new Error("Project repo cannot be empty");
+    project.repo = trimmed;
+  }
+  if (patch.cloneUrl !== undefined) {
+    const trimmed = patch.cloneUrl.trim();
+    if (!trimmed) throw new Error("Project cloneUrl cannot be empty");
+    project.cloneUrl = trimmed;
+  }
+  if (patch.defaultBranch !== undefined) {
+    project.defaultBranch = patch.defaultBranch.trim() || "main";
+  }
   fs.writeFileSync(projectFilePath(id), JSON.stringify(project, null, 2), "utf-8");
   return project;
 }

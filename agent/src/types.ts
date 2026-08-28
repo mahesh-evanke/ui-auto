@@ -47,6 +47,8 @@ export type ProgressStatus = "done" | "active" | "failed";
 export interface ProgressEvent {
   label: string;
   status: ProgressStatus;
+  /** Set only on the event announcing an LLM call is about to fire - the id of the prompt (from promptStore.ts's PROMPT_DEFS) being sent, so the UI can show/link to exactly which prompt is in flight. */
+  promptId?: string;
 }
 
 export interface PackageJsonInfo {
